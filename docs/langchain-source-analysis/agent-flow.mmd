@@ -1,0 +1,20 @@
+flowchart TD
+    Start([用户调用已编译 Agent]) --> State["Agent 状态\nmessages + context"]
+    State --> BeforeAgent{"是否有 before_agent\n中间件？"}
+    BeforeAgent --> BeforeModel{"是否有 before_model\n中间件？"}
+    BeforeModel --> ModelNode["模型节点 model\n构造 ModelRequest"]
+    ModelNode --> WrapModel["wrap_model_call 调用栈\n重试 / 缓存 / 路由 / 修改请求"]
+    WrapModel --> ChatModel["Chat 模型调用\nBaseChatModel.invoke / stream"]
+    ChatModel --> AIMessage["模型返回\nAIMessage"]
+    AIMessage --> AfterModel{"是否有 after_model\n中间件？"}
+    AfterModel --> HasTools{"模型是否发起\ntool calls？"}
+    HasTools -- 否 --> Structured{"是否需要\n结构化输出？"}
+    Structured -- 否 --> AfterAgent{"是否有 after_agent\n中间件？"}
+    Structured -- 是 --> StructuredTool["结构化输出工具"]
+    StructuredTool --> AfterAgent
+    HasTools -- 是 --> ToolNode["工具节点 tools"]
+    ToolNode --> WrapTool["wrap_tool_call 调用栈"]
+    WrapTool --> BaseTool["工具执行\nBaseTool.run / invoke"]
+    BaseTool --> ToolMessage["工具结果\nToolMessage"]
+    ToolMessage --> ModelNode
+    AfterAgent --> End([结束并返回响应])

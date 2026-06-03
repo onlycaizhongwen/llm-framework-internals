@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LangChain 源码架构分析</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+  </script>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --ink: #1f2937;
+      --muted: #5f6b7a;
+      --line: #d9dee7;
+      --accent: #0f766e;
+      --accent-2: #365cc7;
+      --soft: #eef7f5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.72;
+    }
+    header {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    .wrap {
+      width: min(1180px, calc(100% - 36px));
+      margin: 0 auto;
+    }
+    .hero { padding: 34px 0 22px; }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+    h2 { margin: 0 0 14px; font-size: 24px; line-height: 1.25; }
+    h3 { margin: 22px 0 10px; font-size: 18px; }
+    p { margin: 8px 0; }
+    .subtitle { max-width: 900px; margin: 0; color: var(--muted); }
+    nav {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 12px 0 18px;
+    }
+    nav a {
+      flex: 0 0 auto;
+      color: var(--ink);
+      text-decoration: none;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    main { padding: 24px 0 56px; }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 22px;
+      margin: 0 0 18px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: #f0f3f7; }
+    code {
+      background: #eef1f6;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+    .note {
+      background: var(--soft);
+      border-left: 4px solid var(--accent);
+      padding: 12px 14px;
+      border-radius: 6px;
+      margin: 12px 0;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .branch {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fff;
+    }
+    .badge {
+      display: inline-block;
+      color: #fff;
+      background: var(--accent-2);
+      border-radius: 5px;
+      padding: 2px 7px;
+      font-size: 12px;
+      margin-right: 6px;
+    }
+    .diagram {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow-x: auto;
+      padding: 12px;
+      background: #fff;
+      margin-top: 12px;
+    }
+    .mermaid { min-width: 760px; }
+    footer { color: var(--muted); padding: 10px 0 40px; font-size: 13px; }
+    @media (max-width: 760px) {
+      .grid { grid-template-columns: 1fr; }
+      section { padding: 16px; }
+      .wrap { width: min(100% - 24px, 1180px); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap hero">
+      <h1>LangChain 源码架构分析</h1>
+      <p class="subtitle">这份 HTML 是主阅读版：先看总架构，再看源码分支，最后看 Agent 主流程和 RAG 流程。图中保留英文类名和函数名，方便你回到源码定位。</p>
+    </div>
+    <nav class="wrap" aria-label="目录">
+      <a href="#overview">总架构</a>
+      <a href="#branches">源码分支</a>
+      <a href="#agent">Agent 主流程</a>
+      <a href="#rag">RAG 流程</a>
+      <a href="#route">阅读路线</a>
+      <a href="#evidence">源码证据</a>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section id="overview">
+      <h2>1. 总体架构</h2>
+      <p>LangChain 当前 Python 仓库是一个多包 monorepo。它不是把所有能力塞进一个包，而是分成“核心协议、当前主包、经典兼容包、供应商集成、文本切分、标准测试”几条分支。</p>
+      <div class="note"><strong>怎么读这张图：</strong>从左上角“应用开发者”开始看。应用代码通常进入 <code>libs/langchain_v1</code>，再分成两条主线：<code>create_agent</code> 构建智能体图，<code>init_chat_model</code> 初始化模型。底部的 <code>langchain-core</code> 是所有分支共同依赖的协议层。</div>
+      <table>
+        <thead><tr><th>层级</th><th>目录</th><th>包名</th><th>中文说明</th></tr></thead>
+        <tbody>
+          <tr><td>当前主包</td><td><code>libs/langchain_v1</code></td><td><code>langchain</code></td><td>面向当前用户的入口，提供 Agent、模型初始化、工具节点等高层能力。</td></tr>
+          <tr><td>核心协议</td><td><code>libs/core</code></td><td><code>langchain-core</code></td><td>定义模型、消息、工具、检索器、向量库、Runnable 等基础接口。</td></tr>
+          <tr><td>经典兼容</td><td><code>libs/langchain</code></td><td><code>langchain-classic</code></td><td>旧 chains、memory、classic agents 等兼容代码，读旧教程时会遇到。</td></tr>
+          <tr><td>供应商集成</td><td><code>libs/partners/*</code></td><td><code>langchain-openai</code> 等</td><td>把 OpenAI、Anthropic、Qdrant 等外部 SDK 适配到 core 接口。</td></tr>
+          <tr><td>文本切分</td><td><code>libs/text-splitters</code></td><td><code>langchain-text-splitters</code></td><td>把原始文本切成 Document chunks，是 RAG 的前处理部分。</td></tr>
+          <tr><td>标准测试</td><td><code>libs/standard-tests</code></td><td><code>langchain-tests</code></td><td>给集成包提供统一测试基类，用来约束 provider 实现质量。</td></tr>
+        </tbody>
+      </table>
+      <div class="diagram">
+        <pre class="mermaid">flowchart TB
+    User["应用开发者\nApplication"] --> LC["当前主包：langchain\nlibs/langchain_v1"]
+    LC --> Agents["Agent 入口：create_agent\n预构建智能体图"]
+    LC --> InitModel["模型入口：init_chat_model\n供应商模型工厂"]
+    LC --> Core["核心协议：langchain-core\n抽象接口和运行时基础"]
+    Agents --> LangGraph["LangGraph StateGraph\n智能体编排运行时"]
+    Agents --> Middleware["AgentMiddleware\n前置 / 后置 / 包装钩子"]
+    Agents --> ToolNode["ToolNode\n客户端工具执行节点"]
+    InitModel --> Partners["供应商集成包\nlibs/partners/*"]
+    Partners --> ProviderSDK["外部 Provider SDK\nOpenAI / Anthropic / Qdrant 等"]
+    Core --> Runnable["统一执行协议 Runnable\ninvoke / batch / stream / compose"]
+    Core --> Models["模型抽象\nBaseLanguageModel / BaseChatModel"]
+    Core --> Messages["消息抽象\nBaseMessage / chunks"]
+    Core --> Tools["工具抽象\nBaseTool / BaseToolkit"]
+    Core --> Retrieval["检索抽象\nBaseRetriever / VectorStore / Embeddings"]
+    Core --> Docs["文档抽象\nDocument / text splitters"]
+    Classic["经典兼容包：langchain-classic\nlibs/langchain"] --> Core
+    Classic --> Legacy["旧式能力\nchains / memory / classic agents / indexing"]
+    TextSplitters["文本切分包\nlangchain-text-splitters"] --> Core
+    StandardTests["标准测试包\nlangchain-tests"] --> Core
+    StandardTests --> Partners</pre>
+      </div>
+    </section>
+
+    <section id="branches">
+      <h2>2. 源码分支说明</h2>
+      <p>如果你只想分析当前版本主流程，优先看 <code>libs/langchain_v1</code> 和 <code>libs/core</code>。如果你看到旧式 Chain、Memory、Classic Agent，再去 <code>libs/langchain</code>。</p>
+      <div class="grid">
+        <div class="branch"><h3><span class="badge">core</span><code>libs/core</code></h3><p>这是“接口层”。LangChain 的模型、工具、检索器、向量库都先在这里定义统一协议，再由不同实现接入。</p></div>
+        <div class="branch"><h3><span class="badge">main</span><code>libs/langchain_v1</code></h3><p>这是当前主包。<code>create_agent</code> 在这里把模型、工具、中间件编译成 LangGraph 图。</p></div>
+        <div class="branch"><h3><span class="badge">classic</span><code>libs/langchain</code></h3><p>这是旧 API 兼容区。它还很重要，但不是当前主流程的第一入口。</p></div>
+        <div class="branch"><h3><span class="badge">partners</span><code>libs/partners</code></h3><p>这是供应商适配区。例如 OpenAI 包把 OpenAI SDK 的请求响应转换成 LangChain 的 <code>BaseChatModel</code>、<code>Embeddings</code> 等接口。</p></div>
+        <div class="branch"><h3><span class="badge">split</span><code>libs/text-splitters</code></h3><p>这是文本切块工具。RAG 场景里，原始文本通常先在这里切成 Document，再进入向量化和检索。</p></div>
+        <div class="branch"><h3><span class="badge">tests</span><code>libs/standard-tests</code></h3><p>这是集成包测试基座。它保证不同供应商实现同一套 LangChain 行为契约。</p></div>
+      </div>
+    </section>
+
+    <section id="agent">
+      <h2>3. Agent 主流程</h2>
+      <p><code>create_agent</code> 不是普通函数链，而是图构建器。它把模型调用、工具调用和 middleware hook 编译成 LangGraph 的节点和边。</p>
+      <div class="note"><strong>流程说明：</strong>用户调用 agent 后，状态里带着历史消息和上下文。模型节点先调用 ChatModel；如果模型返回工具调用，流程进入 tools 节点执行工具，再把工具结果作为 <code>ToolMessage</code> 喂回模型。这个循环持续到模型不再请求工具，或结构化输出/中间件把流程导向结束。</div>
+      <div class="diagram">
+        <pre class="mermaid">flowchart TD
+    Start([用户调用已编译 Agent]) --> State["Agent 状态\nmessages + context"]
+    State --> BeforeAgent{"是否有 before_agent\n中间件？"}
+    BeforeAgent --> BeforeModel{"是否有 before_model\n中间件？"}
+    BeforeModel --> ModelNode["模型节点 model\n构造 ModelRequest"]
+    ModelNode --> WrapModel["wrap_model_call 调用栈\n重试 / 缓存 / 路由 / 修改请求"]
+    WrapModel --> ChatModel["Chat 模型调用\nBaseChatModel.invoke / stream"]
+    ChatModel --> AIMessage["模型返回\nAIMessage"]
+    AIMessage --> AfterModel{"是否有 after_model\n中间件？"}
+    AfterModel --> HasTools{"模型是否发起\ntool calls？"}
+    HasTools -- 否 --> Structured{"是否需要\n结构化输出？"}
+    Structured -- 否 --> AfterAgent{"是否有 after_agent\n中间件？"}
+    Structured -- 是 --> StructuredTool["结构化输出工具"]
+    StructuredTool --> AfterAgent
+    HasTools -- 是 --> ToolNode["工具节点 tools"]
+    ToolNode --> WrapTool["wrap_tool_call 调用栈"]
+    WrapTool --> BaseTool["工具执行\nBaseTool.run / invoke"]
+    BaseTool --> ToolMessage["工具结果\nToolMessage"]
+    ToolMessage --> ModelNode
+    AfterAgent --> End([结束并返回响应])</pre>
+      </div>
+    </section>
+
+    <section id="rag">
+      <h2>4. RAG / 检索增强流程</h2>
+      <p>RAG 不是单独巨型模块，而是多个 core 协议的组合：Document、TextSplitter、Embeddings、VectorStore、Retriever、Prompt/Model。</p>
+      <div class="note"><strong>流程说明：</strong>左侧是建库过程：原始文本先切成 Document chunks，再向量化并写入向量库。右侧是查询过程：用户问题被向量化后做相似度检索，相关文档再和问题一起组装成提示词，交给 ChatModel 生成答案。</div>
+      <div class="diagram">
+        <pre class="mermaid">flowchart LR
+    Raw["原始文本 / 文件"] --> Splitter["文本切分器 TextSplitter\nsplit_text / create_documents"]
+    Splitter --> Documents["文档块 Document chunks\npage_content + metadata"]
+    Documents --> EmbedDocs["文档向量化\nEmbeddings.embed_documents"]
+    EmbedDocs --> Store["写入向量库\nVectorStore.add_texts / add_documents"]
+    Store --> Retriever["检索器\nVectorStoreRetriever / BaseRetriever"]
+    Query["用户问题"] --> EmbedQuery["问题向量化\nEmbeddings.embed_query"]
+    EmbedQuery --> Search["相似度检索\nVectorStore.similarity_search"]
+    Retriever --> Search
+    Search --> RelevantDocs["相关文档"]
+    RelevantDocs --> Prompt["组装提示词 / 消息\nPrompt / messages"]
+    Prompt --> ChatModel["生成模型\nBaseChatModel"]
+    ChatModel --> Answer["最终回答"]</pre>
+      </div>
+    </section>
+
+    <section id="route">
+      <h2>5. 推荐阅读路线</h2>
+      <ol>
+        <li><code>libs/core/langchain_core/runnables/base.py</code>：先理解统一执行协议。</li>
+        <li><code>libs/core/langchain_core/language_models/chat_models.py</code>：理解 ChatModel 的输入输出和流式调用。</li>
+        <li><code>libs/langchain_v1/langchain/chat_models/base.py</code>：理解 <code>init_chat_model</code> 如何选择供应商模型。</li>
+        <li><code>libs/langchain_v1/langchain/agents/factory.py</code>：理解 <code>create_agent</code> 如何编译 LangGraph。</li>
+        <li><code>libs/langchain_v1/langchain/agents/middleware/types.py</code>：理解中间件扩展点。</li>
+        <li><code>libs/core/langchain_core/tools/base.py</code>：理解工具如何进入 Agent 循环。</li>
+        <li><code>libs/core/langchain_core/retrievers.py</code> 与 <code>vectorstores/base.py</code>：理解 RAG 抽象。</li>
+      </ol>
+    </section>
+
+    <section id="evidence">
+      <h2>6. 关键源码证据</h2>
+      <ul>
+        <li><code>libs/core/README.md:21</code>：说明 LangChain Core 包含生态基础抽象。</li>
+        <li><code>libs/core/langchain_core/runnables/base.py:125</code>：定义 <code>Runnable</code>。</li>
+        <li><code>libs/langchain_v1/pyproject.toml:6</code>：当前主包名为 <code>langchain</code>。</li>
+        <li><code>libs/langchain_v1/pyproject.toml:28</code>：当前主包依赖 <code>langgraph</code>。</li>
+        <li><code>libs/langchain_v1/langchain/agents/factory.py:697</code>：定义 <code>create_agent</code>。</li>
+        <li><code>libs/langchain_v1/langchain/agents/factory.py:1671</code>：最终编译 graph。</li>
+        <li><code>libs/langchain/pyproject.toml:6</code>：classic 分支发布为 <code>langchain-classic</code>。</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    产物目录：<code>docs/langchain-source-analysis/</code>。Markdown 版见 <code>index.md</code>。
+  </footer>
+</body>
+</html>

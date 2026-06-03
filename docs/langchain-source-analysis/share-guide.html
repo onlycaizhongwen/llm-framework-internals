@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LangChain 源码分享讲解稿</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: #1f2937;
+      background: #f7f8fa;
+      line-height: 1.75;
+    }
+    main { width: min(1040px, calc(100% - 32px)); margin: 0 auto; padding: 32px 0 56px; }
+    section { background: #fff; border: 1px solid #d9dee7; border-radius: 8px; padding: 22px; margin-bottom: 16px; }
+    h1 { font-size: 36px; line-height: 1.18; margin: 0 0 12px; letter-spacing: 0; }
+    h2 { font-size: 24px; margin: 0 0 12px; }
+    h3 { font-size: 18px; margin: 20px 0 8px; }
+    p { margin: 8px 0; }
+    code { background: #eef1f6; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    pre { overflow-x: auto; background: #172033; color: #f8fafc; border-radius: 8px; padding: 12px; line-height: 1.5; }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    blockquote { margin: 12px 0; padding: 12px 14px; border-left: 4px solid #0f766e; background: #eef7f5; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+    th, td { border: 1px solid #d9dee7; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #f0f3f7; }
+    li { margin: 5px 0; }
+    .note { background: #f8fafc; border: 1px solid #d9dee7; border-radius: 8px; padding: 12px; }
+  </style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>LangChain 源码分享讲解稿</h1>
+    <p>讲解顺序建议：先讲全局，再讲设计思想，再讲主流程，最后讲源码入口。不要一开始堆类名，先让听的人拿到地图。</p>
+  </section>
+
+  <section>
+    <h2>1. 一句话定位</h2>
+    <p>LangChain 现在不是一个单体包，而是一个多包 monorepo。它的核心思路是：用 <code>langchain-core</code> 定义通用协议，再用 <code>langchain</code> 主包组织 Agent、模型初始化和应用入口，最后通过 <code>libs/partners</code> 接入各个模型、向量库和工具供应商。</p>
+    <blockquote>我们看 LangChain 源码时，不要把它当成一个包看，而要当成一个分层生态看。<code>langchain-core</code> 负责定义统一协议，<code>langchain</code> 主包负责把这些协议组织成 Agent 和模型入口，<code>partners</code> 负责接入外部供应商。</blockquote>
+  </section>
+
+  <section>
+    <h2>2. 目录分工</h2>
+    <table>
+      <thead><tr><th>目录</th><th>包名</th><th>讲解口径</th></tr></thead>
+      <tbody>
+        <tr><td><code>libs/core</code></td><td><code>langchain-core</code></td><td>底层协议层，定义 Runnable、模型、工具、检索器、向量库、嵌入等接口。</td></tr>
+        <tr><td><code>libs/langchain_v1</code></td><td><code>langchain</code></td><td>当前主包，提供 Agent、模型初始化和应用入口。</td></tr>
+        <tr><td><code>libs/langchain</code></td><td><code>langchain-classic</code></td><td>classic 兼容分支，主要是旧 chains、memory、classic agents。</td></tr>
+        <tr><td><code>libs/partners</code></td><td><code>langchain-openai</code> 等</td><td>供应商集成，比如 OpenAI、Anthropic、Qdrant。</td></tr>
+        <tr><td><code>libs/text-splitters</code></td><td><code>langchain-text-splitters</code></td><td>文本切分，常用于 RAG 前处理。</td></tr>
+        <tr><td><code>libs/standard-tests</code></td><td><code>langchain-tests</code></td><td>集成包标准测试，用来约束供应商实现质量。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. 核心设计思想</h2>
+    <h3>3.1 统一执行协议：Runnable</h3>
+    <p>LangChain 很核心的一个设计是：不管是模型、工具、检索器，还是组合链路，都尽量变成“可调用、可批量、可流式、可组合”的运行单元。</p>
+    <p>源码证据：<code>libs/core/langchain_core/runnables/base.py:125</code></p>
+    <pre><code>class Runnable(ABC, Generic[Input, Output]):
+    """A unit of work that can be invoked, batched, streamed, transformed and composed.</code></pre>
+    <p class="note">讲解口径：<code>Runnable</code> 是 LangChain 的统一执行协议。它让 prompt、model、tool、retriever 这些不同组件可以用同一种方式组合。</p>
+
+    <h3>3.2 面向接口编程：core 定义协议，partners 做实现</h3>
+    <p>LangChain 不把供应商逻辑写死在主包里，而是在 core 里定义接口，在 partners 里做具体适配。</p>
+    <pre><code>class BaseChatModel(BaseLanguageModel[AIMessage], ABC):
+    r"""Base class for chat models.</code></pre>
+    <pre><code>class BaseChatOpenAI(BaseChatModel):
+    """Base wrapper around OpenAI large language models for chat.</code></pre>
+    <pre><code>class ChatOpenAI(BaseChatOpenAI):
+    r"""Interface to OpenAI chat model APIs.</code></pre>
+    <p class="note">讲解口径：<code>BaseChatModel</code> 是模型协议，<code>ChatOpenAI</code> 是 OpenAI 对协议的实现。换供应商时，上层尽量面对统一接口。</p>
+
+    <h3>3.3 组合优于继承：复杂流程由小组件拼出来</h3>
+    <p>RAG 不是一个单独的大类，而是多个协议组合出的流程。</p>
+    <pre><code>TextSplitter -> Document -> Embeddings -> VectorStore -> Retriever -> ChatModel</code></pre>
+    <p class="note">讲解口径：LangChain 不给每种场景都写巨型模块，而是定义一组可以拼接的零件。</p>
+
+    <h3>3.4 图编排范式：Agent 是 StateGraph</h3>
+    <p>当前版本的 Agent 主流程不是简单 chain，而是通过 LangGraph 编译成 <code>StateGraph</code>。</p>
+    <pre><code>def create_agent(
+    model: str | BaseChatModel,
+    tools: Sequence[BaseTool | Callable[..., Any] | dict[str, Any]] | None = None,</code></pre>
+    <pre><code>graph = StateGraph(
+    state_schema=resolved_state_schema,
+    input_schema=input_schema,
+    output_schema=output_schema,</code></pre>
+    <pre><code>graph.add_node("model", RunnableCallable(model_node, amodel_node, trace=False))
+graph.add_node("tools", tool_node)
+return graph.compile(</code></pre>
+    <p class="note">讲解口径：<code>create_agent</code> 的本质是图构建器。模型需要工具时进入 tools 节点，工具结果再回到 model 节点。</p>
+
+    <h3>3.5 中间件范式：用 hook 扩展主流程</h3>
+    <p>Agent 的增强能力通过 <code>AgentMiddleware</code> 集中表达，比如重试、缓存、模型兜底、工具拦截。</p>
+    <pre><code>class AgentMiddleware(Generic[StateT, ContextT, ResponseT]):
+    """Base middleware class for an agent.</code></pre>
+    <pre><code>def before_model(self, state: StateT, runtime: Runtime[ContextT]) -> dict[str, Any] | None:</code></pre>
+    <pre><code>def wrap_model_call(
+    self,
+    request: ModelRequest[ContextT],
+    handler: Callable[[ModelRequest[ContextT]], ModelResponse[ResponseT]],</code></pre>
+
+    <h3>3.6 适配器范式：供应商包翻译外部 SDK</h3>
+    <pre><code>OpenAI SDK / API
+        ↓
+langchain_openai.ChatOpenAI
+        ↓
+BaseChatModel
+        ↓
+LangChain Agent / Runnable / 应用代码</code></pre>
+    <p class="note">讲解口径：<code>partners</code> 是适配层，负责屏蔽供应商 SDK 差异，让上层仍然面对统一接口。</p>
+  </section>
+
+  <section>
+    <h2>4. 两条主流程</h2>
+    <h3>Agent 流程</h3>
+    <p>用户调用 <code>create_agent</code> 后，LangChain 会把模型、工具和中间件编译成 LangGraph 的图。模型先回答，如果需要工具，就进入 tools 节点执行工具，再把工具结果喂回模型，直到模型不再调用工具。</p>
+    <h3>RAG 流程</h3>
+    <p>原始文本先通过 <code>TextSplitter</code> 切成 <code>Document</code>，再用 <code>Embeddings</code> 向量化并写入 <code>VectorStore</code>。用户提问时，问题也会被向量化，然后通过相似度搜索取回相关文档，再交给模型生成答案。</p>
+  </section>
+
+  <section>
+    <h2>5. 推荐源码阅读路线</h2>
+    <ol>
+      <li><code>libs/core/langchain_core/runnables/base.py</code></li>
+      <li><code>libs/core/langchain_core/language_models/chat_models.py</code></li>
+      <li><code>libs/langchain_v1/langchain/chat_models/base.py</code></li>
+      <li><code>libs/langchain_v1/langchain/agents/factory.py</code></li>
+      <li><code>libs/langchain_v1/langchain/agents/middleware/types.py</code></li>
+      <li><code>libs/core/langchain_core/tools/base.py</code></li>
+      <li><code>libs/core/langchain_core/retrievers.py</code></li>
+      <li><code>libs/core/langchain_core/vectorstores/base.py</code></li>
+      <li><code>libs/partners/openai/langchain_openai/</code></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>6. 适合口头分享的版本</h2>
+    <blockquote>LangChain 当前源码可以按三层理解。第一层是 <code>langchain-core</code>，它定义模型、消息、工具、检索器、向量库和 Runnable 这些通用协议。第二层是当前主包 <code>langchain</code>，源码在 <code>libs/langchain_v1</code>，它负责把这些协议组织成用户能直接使用的模型入口和 Agent 入口。第三层是 <code>libs/partners</code>，负责把 OpenAI、Anthropic、Qdrant 等外部服务适配成 LangChain 的统一接口。</blockquote>
+    <blockquote>它的核心设计思想有几个：统一执行协议、面向接口编程、组合优于继承、图编排、中间件扩展、供应商适配。理解这些之后，再看 <code>create_agent</code>、<code>BaseChatModel</code>、<code>ChatOpenAI</code>，主线就会清楚很多。</blockquote>
+  </section>
+</main>
+</body>
+</html>

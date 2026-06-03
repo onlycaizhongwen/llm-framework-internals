@@ -1,0 +1,26 @@
+flowchart TB
+    User["应用开发者\nApplication"] --> LC["当前主包：langchain\nlibs/langchain_v1"]
+    LC --> Agents["Agent 入口：create_agent\n预构建智能体图"]
+    LC --> InitModel["模型入口：init_chat_model\n供应商模型工厂"]
+    LC --> Core["核心协议：langchain-core\n抽象接口和运行时基础"]
+
+    Agents --> LangGraph["LangGraph StateGraph\n智能体编排运行时"]
+    Agents --> Middleware["AgentMiddleware\n前置 / 后置 / 包装钩子"]
+    Agents --> ToolNode["ToolNode\n客户端工具执行节点"]
+
+    InitModel --> Partners["供应商集成包\nlibs/partners/*"]
+    Partners --> ProviderSDK["外部 Provider SDK\nOpenAI / Anthropic / Qdrant 等"]
+
+    Core --> Runnable["统一执行协议 Runnable\ninvoke / batch / stream / compose"]
+    Core --> Models["模型抽象\nBaseLanguageModel / BaseChatModel"]
+    Core --> Messages["消息抽象\nBaseMessage / chunks"]
+    Core --> Tools["工具抽象\nBaseTool / BaseToolkit"]
+    Core --> Retrieval["检索抽象\nBaseRetriever / VectorStore / Embeddings"]
+    Core --> Docs["文档抽象\nDocument / text splitters"]
+
+    Classic["经典兼容包：langchain-classic\nlibs/langchain"] --> Core
+    Classic --> Legacy["旧式能力\nchains / memory / classic agents / indexing"]
+
+    TextSplitters["文本切分包\nlangchain-text-splitters"] --> Core
+    StandardTests["标准测试包\nlangchain-tests"] --> Core
+    StandardTests --> Partners

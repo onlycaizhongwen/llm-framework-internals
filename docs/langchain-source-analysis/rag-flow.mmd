@@ -1,0 +1,14 @@
+flowchart LR
+    Raw["原始文本 / 文件"] --> Splitter["文本切分器 TextSplitter\nsplit_text / create_documents"]
+    Splitter --> Documents["文档块 Document chunks\npage_content + metadata"]
+    Documents --> EmbedDocs["文档向量化\nEmbeddings.embed_documents"]
+    EmbedDocs --> Store["写入向量库\nVectorStore.add_texts / add_documents"]
+    Store --> Retriever["检索器\nVectorStoreRetriever / BaseRetriever"]
+
+    Query["用户问题"] --> EmbedQuery["问题向量化\nEmbeddings.embed_query"]
+    EmbedQuery --> Search["相似度检索\nVectorStore.similarity_search"]
+    Retriever --> Search
+    Search --> RelevantDocs["相关文档"]
+    RelevantDocs --> Prompt["组装提示词 / 消息\nPrompt / messages"]
+    Prompt --> ChatModel["生成模型\nBaseChatModel"]
+    ChatModel --> Answer["最终回答"]

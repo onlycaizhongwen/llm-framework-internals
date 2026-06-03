@@ -1,0 +1,22 @@
+# Local runtime state
+.ai/
+.omx/
+
+# Upstream source checkouts used for analysis
+langchain-src/
+langchain/
+
+# Python / tooling cache
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
