@@ -5,3 +5,9 @@
 - 摘要：基于 `langchain-src` 当前快照整理 LangChain 源码总架构、模块分支、核心流程，并产出 Markdown、HTML、架构图、流程图。
 - 过程文件：`.codex/plans/main/langchain-source-analysis/process.md`
 - 恢复提示：如需继续深入，读取 `process.md` 顶部恢复胶囊，按 provider、agent middleware、classic 迁移或 RAG 细节扩展专题文档。
+
+## LangChain 上游源码入口
+- 状态：已完成
+- 摘要：以 Git submodule 方式把 `langchain-ai/langchain` 固定到 `sources/langchain`，让 GitHub 仓库同时具备分析文档和可追溯源码入口。
+- 过程文件：无，短任务直接闭环。
+- 恢复提示：后续新增框架时沿用 `sources/{framework}` submodule + `docs/{framework}-source-analysis/` 文档目录的结构。

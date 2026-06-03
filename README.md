@@ -6,7 +6,15 @@
 
 ### LangChain
 
-目录：`docs/langchain-source-analysis/`
+分析文档：`docs/langchain-source-analysis/`
+
+源码入口：`sources/langchain/`
+
+当前固定源码提交：
+
+```text
+eb2dabb8b7102fbedb33016dcf10fe475efde88e
+```
 
 - `index.html`：LangChain 源码架构分析主阅读页
 - `index.md`：Markdown 版分析底稿
@@ -18,13 +26,27 @@
 
 ## 仓库约定
 
-- 本仓库保存分析文档，不直接提交上游框架源码。
-- 上游源码可在本地克隆到 `*-src/` 目录，例如 `langchain-src/`，这些目录会被 `.gitignore` 排除。
+- 本仓库优先保存分析文档，并通过 `sources/` 下的 Git submodule 固定上游源码版本。
+- 每个源码入口都应记录对应的 upstream commit，方便复现分析结论和对比版本差异。
+- 本地临时源码快照仍可克隆到 `*-src/` 目录，例如 `langchain-src/`，这些目录会被 `.gitignore` 排除。
 - 每个框架建议单独建立一个 `docs/{framework}-source-analysis/` 目录。
 - HTML 用于快速阅读和分享，Markdown 用于维护和二次整理，Mermaid 用于架构图和流程图。
+
+## 克隆方式
+
+如果需要连同源码入口一起拉取：
+
+```bash
+git clone --recurse-submodules https://github.com/onlycaizhongwen/llm-framework-internals.git
+```
+
+如果已经普通克隆，可以在仓库根目录执行：
+
+```bash
+git submodule update --init --recursive
+```
 
 ## 后续计划
 
 - 继续补充 LangChain 的专题分析：Agent middleware、provider adapter、RAG 细节、classic 迁移关系。
 - 增加更多开源 LLM 框架的源码分析，例如 LlamaIndex、Haystack、LangGraph、vLLM 等。
-

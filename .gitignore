@@ -2,9 +2,9 @@
 .ai/
 .omx/
 
-# Upstream source checkouts used for analysis
-langchain-src/
-langchain/
+# Local upstream source checkouts used for analysis
+/langchain-src/
+/langchain/
 
 # Python / tooling cache
 __pycache__/
@@ -19,4 +19,3 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
-
