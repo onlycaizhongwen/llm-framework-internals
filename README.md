@@ -24,6 +24,18 @@ eb2dabb8b7102fbedb33016dcf10fe475efde88e
 - `share-guide.html`：面向分享的讲解稿 HTML
 - `share-guide.md`：面向分享的讲解稿 Markdown
 
+### LangGraph
+
+源码入口：`sources/langgraph/`
+
+当前固定源码提交：
+
+```text
+d57a74f950b87bfb9cb51240cc8dccf34b5edfaa
+```
+
+分析文档：待补充，建议后续建立 `docs/langgraph-source-analysis/`。
+
 ## 仓库约定
 
 - 本仓库优先保存分析文档，并通过 `sources/` 下的 Git submodule 固定上游源码版本。

@@ -11,3 +11,9 @@
 - 摘要：以 Git submodule 方式把 `langchain-ai/langchain` 固定到 `sources/langchain`，让 GitHub 仓库同时具备分析文档和可追溯源码入口。
 - 过程文件：无，短任务直接闭环。
 - 恢复提示：后续新增框架时沿用 `sources/{framework}` submodule + `docs/{framework}-source-analysis/` 文档目录的结构。
+
+## LangGraph 上游源码入口
+- 状态：已完成
+- 摘要：以 Git submodule 方式把 `langchain-ai/langgraph` 固定到 `sources/langgraph`，作为后续 LangGraph 源码分析的源码入口。
+- 过程文件：无，短任务直接闭环。
+- 恢复提示：下一步可基于 `sources/langgraph` 建立 `docs/langgraph-source-analysis/`，先整理架构、分支、核心流程、架构图和流程图。
