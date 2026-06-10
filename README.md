@@ -26,6 +26,8 @@ eb2dabb8b7102fbedb33016dcf10fe475efde88e
 
 ### LangGraph
 
+分析文档：`docs/langgraph-source-analysis/`
+
 源码入口：`sources/langgraph/`
 
 当前固定源码提交：
@@ -34,7 +36,13 @@ eb2dabb8b7102fbedb33016dcf10fe475efde88e
 d57a74f950b87bfb9cb51240cc8dccf34b5edfaa
 ```
 
-分析文档：待补充，建议后续建立 `docs/langgraph-source-analysis/`。
+- `index.html`：LangGraph 源码架构分析主阅读页
+- `index.md`：Markdown 版分析底稿
+- `architecture.mmd`：总架构图
+- `execution-flow.mmd`：Pregel 执行流程图
+- `agent-flow.mmd`：prebuilt Agent 流程图
+- `share-guide.html`：面向分享的讲解稿 HTML
+- `share-guide.md`：面向分享的讲解稿 Markdown
 
 ## 仓库约定
 

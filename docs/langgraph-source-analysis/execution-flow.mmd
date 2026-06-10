@@ -1,0 +1,17 @@
+flowchart TD
+    Start([invoke / stream]) --> Compiled["CompiledStateGraph"]
+    Compiled --> PregelStream["Pregel.stream()"]
+    PregelStream --> Loop["SyncPregelLoop"]
+    Loop --> Tick{"loop.tick()"}
+    Tick -->|has runnable tasks| Plan["Plan\nselect actors from changed channels"]
+    Plan --> Runner["PregelRunner.tick()"]
+    Runner --> Exec["Execute selected nodes\nparallel where possible"]
+    Exec --> Writes["Collect writes\nstate/channel updates"]
+    Writes --> Update["after_tick()\napply writes to channels"]
+    Update --> Checkpoint{"checkpointer?"}
+    Checkpoint -->|yes| Save["save checkpoint\nchannel_values + versions_seen"]
+    Checkpoint -->|no| Emit["emit stream chunks"]
+    Save --> Emit
+    Emit --> Tick
+    Tick -->|no task / END| Output["final values / streamed chunks"]
+    Output --> End([return])

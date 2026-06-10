@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LangGraph 源码分享讲解稿</title>
+  <style>
+    :root {
+      --bg: #fbfbfd;
+      --ink: #1f2937;
+      --muted: #667085;
+      --line: #d9dee8;
+      --panel: #ffffff;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --code-bg: #101828;
+      --code-ink: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+    }
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+      padding: 38px 24px 26px;
+    }
+    .wrap {
+      max-width: 1060px;
+      margin: 0 auto;
+    }
+    main {
+      max-width: 1060px;
+      margin: 0 auto;
+      padding: 26px 24px 64px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(30px, 4vw, 46px);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 34px 0 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      font-size: 25px;
+    }
+    h3 {
+      margin: 24px 0 8px;
+      font-size: 19px;
+    }
+    .lead {
+      max-width: 840px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+    .talk {
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+      padding: 14px 16px;
+      margin: 16px 0;
+      border-radius: 0 8px 8px 0;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      margin: 16px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      margin: 16px 0;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 11px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f3f6fb; }
+    tr:last-child td { border-bottom: 0; }
+    code {
+      font-family: Consolas, "JetBrains Mono", monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow: auto;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      border-radius: 8px;
+      padding: 15px;
+    }
+    pre code { color: inherit; }
+    .timeline {
+      display: grid;
+      gap: 10px;
+      margin: 16px 0;
+    }
+    .item {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 13px 15px;
+    }
+    .item strong { color: var(--accent); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (max-width: 720px) {
+      header { padding: 28px 18px 22px; }
+      main { padding: 20px 18px 48px; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>LangGraph 源码分享讲解稿</h1>
+      <p class="lead">适合对外分享的讲法：先定位，再架构，再主流程，最后用源码片段证明设计思想。</p>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>开场定位</h2>
+      <div class="talk">看 LangGraph 源码时，不要先把它理解成一个 Agent 框架，而要理解成一个状态图运行时。它让我们用节点和边描述流程，用 state 描述上下文，用 checkpoint 保存每一步状态。Agent、工具调用、人类介入、恢复执行，都只是这个图运行时上的不同模式。</div>
+    </section>
+
+    <section>
+      <h2>目录怎么讲</h2>
+      <table>
+        <thead><tr><th>目录</th><th>分享口径</th></tr></thead>
+        <tbody>
+          <tr><td><code>graph</code></td><td>面向用户的建图 API，核心是 <code>StateGraph</code>。</td></tr>
+          <tr><td><code>pregel</code></td><td>真正执行引擎，按 Pregel/BSP step 模型运行。</td></tr>
+          <tr><td><code>channels</code></td><td>状态传播和合并规则。</td></tr>
+          <tr><td><code>checkpoint</code></td><td>checkpoint 抽象，支撑恢复、回放、中断继续。</td></tr>
+          <tr><td><code>prebuilt</code></td><td>预构建 Agent 和工具节点。</td></tr>
+          <tr><td><code>cli / sdk</code></td><td>服务化和远程调用工具链。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>主流程一句话</h2>
+      <pre><code>StateGraph 声明图
+  -> add_node / add_edge / add_conditional_edges
+  -> compile()
+  -> CompiledStateGraph
+  -> Pregel.stream() / invoke()
+  -> loop.tick() 按 step 推进
+  -> runner.tick() 执行节点
+  -> channel 更新 + checkpoint 保存</code></pre>
+      <div class="talk">LangGraph 的源码脉络很像一个小型编译执行系统。StateGraph 是声明阶段，compile 是编译阶段，Pregel 是运行时。</div>
+    </section>
+
+    <section>
+      <h2>代码证据</h2>
+      <h3>1. 状态图范式</h3>
+      <p><code>libs/langgraph/langgraph/graph/state.py:130</code></p>
+      <pre><code>class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
+    """A graph whose nodes communicate by reading and writing to a shared state.
+
+    The signature of each node is `State -> Partial&lt;State&gt;`.
+    """</code></pre>
+      <div class="talk">节点之间不是直接互相调用，而是通过共享 state 协作。</div>
+
+      <h3>2. Builder 和 Runtime 分离</h3>
+      <p><code>libs/langgraph/langgraph/graph/state.py:1164</code></p>
+      <pre><code>def compile(...) -&gt; CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
+    """Compiles the `StateGraph` into a `CompiledStateGraph` object.
+
+    The compiled graph implements the `Runnable` interface and can be invoked,
+    streamed, batched, and run asynchronously.
+    """</code></pre>
+      <div class="talk">compile 是关键分界线：compile 之前是声明图，compile 之后才是可运行对象。</div>
+
+      <h3>3. Pregel 回合制执行</h3>
+      <p><code>libs/langgraph/langgraph/pregel/main.py:2979</code></p>
+      <pre><code>while loop.tick():
+    for _ in runner.tick(...):
+        yield from _output(...)
+    loop.after_tick()</code></pre>
+      <div class="talk">每一轮先选出要运行的节点，再执行它们，最后统一更新 channel。</div>
+
+      <h3>4. Checkpoint 是版本化状态快照</h3>
+      <p><code>libs/checkpoint/langgraph/checkpoint/base/__init__.py:92</code></p>
+      <pre><code>class Checkpoint(TypedDict):
+    """State snapshot at a given point in time."""
+
+    channel_values: dict[str, Any]
+    channel_versions: ChannelVersions
+    versions_seen: dict[str, ChannelVersions]</code></pre>
+      <div class="talk">checkpoint 保存 channel 值、版本、节点看过哪些版本，所以能恢复、回放和中断继续。</div>
+
+      <h3>5. Prebuilt Agent 只是图模板</h3>
+      <p><code>libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py:862</code></p>
+      <pre><code>workflow = StateGraph(...)
+workflow.add_node("agent", RunnableCallable(call_model, acall_model))
+workflow.add_node("tools", tool_node)
+workflow.add_conditional_edges("agent", should_continue, path_map=agent_paths)
+workflow.add_edge("tools", entrypoint)
+return workflow.compile(...)</code></pre>
+      <div class="talk">create_react_agent 也是创建 StateGraph、添加节点和边、最后 compile。Agent 是图运行时上的一个模板。</div>
+    </section>
+
+    <section>
+      <h2>15 分钟分享节奏</h2>
+      <div class="timeline">
+        <div class="item"><strong>2 分钟：</strong>定位 LangGraph，说明它和 LangChain 的区别。</div>
+        <div class="item"><strong>3 分钟：</strong>看 monorepo 目录，讲 graph、pregel、checkpoint、prebuilt。</div>
+        <div class="item"><strong>4 分钟：</strong>讲主流程，从 StateGraph 到 Pregel.stream。</div>
+        <div class="item"><strong>4 分钟：</strong>讲 checkpoint 和 human-in-the-loop 为什么能成立。</div>
+        <div class="item"><strong>2 分钟：</strong>讲 prebuilt agent，说明 Agent 只是图模板。</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>最后收束</h2>
+      <div class="talk">LangGraph 的源码不复杂，关键是抓住分层。graph 是声明图，pregel 是执行图，checkpoint 是保存图状态，prebuilt 是用图搭好的 Agent 模板。理解这条线，再看中断、恢复、流式、人类介入，就都能落回同一个模型：状态图的版本化执行。</div>
+      <p>完整分析页：<a href="index.html">index.html</a></p>
+    </section>
+  </main>
+</body>
+</html>

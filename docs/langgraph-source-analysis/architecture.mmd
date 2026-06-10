@@ -1,0 +1,21 @@
+flowchart TB
+    User["Application / Developer"] --> API["Graph API / Functional API"]
+    API --> StateGraph["StateGraph builder\nlanggraph.graph.state"]
+    API --> Func["Functional API\nlanggraph.func"]
+    StateGraph --> Compile["compile()\nvalidate + attach nodes/edges"]
+    Compile --> Compiled["CompiledStateGraph\nRunnable interface"]
+    Compiled --> Pregel["Pregel runtime\nBulk Synchronous Parallel"]
+    Pregel --> Nodes["PregelNode actors\nread channels / write channels"]
+    Pregel --> Channels["Channels\nLastValue / Topic / Aggregate / Ephemeral"]
+    Pregel --> Loop["PregelLoop + PregelRunner\nplan / execute / update"]
+    Loop --> Stream["Streaming\nvalues / updates / messages / custom / debug"]
+    Loop --> Checkpoint["Checkpoint saver\nthread_id + channel snapshots"]
+    Checkpoint --> Memory["In-memory / Postgres / SQLite checkpointers"]
+    Pregel --> Interrupt["Interrupt / Command\nhuman-in-the-loop + control flow"]
+    Prebuilt["langgraph-prebuilt"] --> React["create_react_agent"]
+    React --> StateGraph
+    Prebuilt --> ToolNode["ToolNode"]
+    ToolNode --> Nodes
+    CLI["CLI"] --> Server["LangGraph Server / deployment workflows"]
+    SDKPY["sdk-py"] --> Server
+    SDKJS["sdk-js"] --> Server

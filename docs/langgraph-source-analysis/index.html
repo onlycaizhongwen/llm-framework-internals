@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LangGraph 源码架构分析</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --ink: #20242c;
+      --muted: #5b6472;
+      --line: #dfe4ec;
+      --accent: #0f766e;
+      --accent-2: #8b5cf6;
+      --code-bg: #111827;
+      --code-ink: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+    }
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+      padding: 40px 24px 28px;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 28px 24px 64px;
+    }
+    .hero {
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(30px, 4vw, 48px);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 34px 0 12px;
+      padding-top: 10px;
+      font-size: 26px;
+      border-top: 1px solid var(--line);
+    }
+    h3 {
+      margin: 24px 0 8px;
+      font-size: 20px;
+    }
+    p { margin: 10px 0; }
+    .lead {
+      max-width: 900px;
+      color: var(--muted);
+      font-size: 18px;
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .badge {
+      border: 1px solid var(--line);
+      background: #f9fafb;
+      border-radius: 999px;
+      padding: 5px 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 18px 0;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 14px;
+      margin: 18px 0;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 16px 0;
+    }
+    th, td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #eef7f6;
+      color: #134e4a;
+      font-weight: 700;
+    }
+    tr:last-child td { border-bottom: 0; }
+    code {
+      font-family: Consolas, "JetBrains Mono", monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow: auto;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 14px 0;
+    }
+    pre code { color: inherit; }
+    .quote {
+      border-left: 4px solid var(--accent);
+      background: #ecfdf5;
+      padding: 12px 16px;
+      margin: 16px 0;
+      color: #134e4a;
+    }
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+    }
+    .step {
+      background: #f3f4f6;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+    a { color: var(--accent-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul { padding-left: 22px; }
+    @media (max-width: 720px) {
+      header { padding: 28px 18px 22px; }
+      main { padding: 20px 18px 48px; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>LangGraph 源码架构分析</h1>
+      <p class="lead">先架构，后脉络：把 LangGraph 看成“状态图编译 + Pregel 执行时 + checkpoint 持久化”的低层编排框架。</p>
+      <div class="badge-row">
+        <span class="badge">源码：sources/langgraph</span>
+        <span class="badge">提交：d57a74f950b87bfb9cb51240cc8dccf34b5edfaa</span>
+        <span class="badge">分享优先 HTML</span>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>总体结论</h2>
+      <p>LangGraph 不是 LangChain 那种模型、工具、检索和供应商集成组件库，而是一个图执行运行时。用户用 <code>StateGraph</code> 描述节点、边和状态更新规则，<code>compile()</code> 把图编译成可执行对象，底层由 <code>Pregel</code> 按 step 驱动节点执行，并通过 checkpoint 支持恢复、中断、回放和长期状态。</p>
+      <div class="quote">分享时可以这样讲：LangGraph 的核心不是“写一个 Agent 类”，而是“把 Agent 或工作流建模成状态图”。</div>
+    </section>
+
+    <section>
+      <h2>最高层分层</h2>
+      <table>
+        <thead>
+          <tr><th>层级</th><th>源码目录</th><th>主要职责</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>图构建层</td><td><code>libs/langgraph/langgraph/graph</code></td><td>定义状态 schema、节点、边和条件边，核心是 <code>StateGraph</code>。</td></tr>
+          <tr><td>执行运行时</td><td><code>libs/langgraph/langgraph/pregel</code></td><td>按 Pregel/BSP step 模型执行图，处理任务调度、流式输出、重试和缓存。</td></tr>
+          <tr><td>状态通道层</td><td><code>libs/langgraph/langgraph/channels</code></td><td>表达 state key 如何接收和合并更新。</td></tr>
+          <tr><td>持久化层</td><td><code>libs/checkpoint</code></td><td>定义 checkpoint 数据结构和 saver 接口。</td></tr>
+          <tr><td>存储实现层</td><td><code>checkpoint-postgres</code> / <code>checkpoint-sqlite</code></td><td>提供 Postgres、SQLite 等 checkpoint 后端。</td></tr>
+          <tr><td>预构建能力</td><td><code>libs/prebuilt</code></td><td>提供 <code>create_react_agent</code>、<code>ToolNode</code> 等常用模板。</td></tr>
+          <tr><td>工具链/服务层</td><td><code>libs/cli</code>、<code>sdk-py</code>、<code>sdk-js</code></td><td>面向 LangGraph Server/API 的命令行和 SDK。</td></tr>
+        </tbody>
+      </table>
+      <p>架构图文件：<a href="architecture.mmd">architecture.mmd</a></p>
+    </section>
+
+    <section>
+      <h2>源码主脉络</h2>
+      <div class="flow">
+        <span class="step">StateGraph 声明图</span>
+        <span class="step">add_node / add_edge</span>
+        <span class="step">compile()</span>
+        <span class="step">CompiledStateGraph</span>
+        <span class="step">Pregel.stream / invoke</span>
+        <span class="step">loop.tick</span>
+        <span class="step">runner.tick</span>
+        <span class="step">channel 更新</span>
+        <span class="step">checkpoint 保存</span>
+      </div>
+      <p>执行流程图文件：<a href="execution-flow.mmd">execution-flow.mmd</a></p>
+    </section>
+
+    <section>
+      <h2>核心源码证据</h2>
+      <h3>1. StateGraph 是建图 API</h3>
+      <p>源码位置：<code>libs/langgraph/langgraph/graph/state.py:130</code></p>
+      <pre><code>class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
+    """A graph whose nodes communicate by reading and writing to a shared state.
+
+    The signature of each node is `State -> Partial&lt;State&gt;`.
+    """</code></pre>
+      <p>含义：节点不直接互相调用，而是读写共享 state。复杂流程被拆成节点、边和状态更新。</p>
+
+      <h3>2. compile 是声明和执行的分界线</h3>
+      <p>源码位置：<code>libs/langgraph/langgraph/graph/state.py:1164</code></p>
+      <pre><code>def compile(...) -&gt; CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
+    """Compiles the `StateGraph` into a `CompiledStateGraph` object.
+
+    The compiled graph implements the `Runnable` interface and can be invoked,
+    streamed, batched, and run asynchronously.
+    """</code></pre>
+      <p>含义：<code>StateGraph</code> 是 builder，compile 后才得到可运行对象。</p>
+
+      <h3>3. Pregel 是执行运行时</h3>
+      <p>源码位置：<code>libs/langgraph/langgraph/pregel/main.py:449</code></p>
+      <pre><code>class Pregel(...):
+    """Pregel manages the runtime behavior for LangGraph applications.
+
+    Pregel combines actors and channels into a single application.
+    Actors read data from channels and write data to channels.
+    """</code></pre>
+      <p>含义：运行时把节点看成 actor，把状态传播看成 channel 更新。</p>
+
+      <h3>4. step 循环驱动执行</h3>
+      <p>源码位置：<code>libs/langgraph/langgraph/pregel/main.py:2979</code></p>
+      <pre><code>while loop.tick():
+    for _ in runner.tick(...):
+        yield from _output(...)
+    loop.after_tick()</code></pre>
+      <p>含义：执行像“回合制”。每一轮选择节点、执行节点、统一应用状态更新。</p>
+
+      <h3>5. Checkpoint 保存版本化状态</h3>
+      <p>源码位置：<code>libs/checkpoint/langgraph/checkpoint/base/__init__.py:92</code></p>
+      <pre><code>class Checkpoint(TypedDict):
+    """State snapshot at a given point in time."""
+
+    channel_values: dict[str, Any]
+    channel_versions: ChannelVersions
+    versions_seen: dict[str, ChannelVersions]</code></pre>
+      <p>含义：checkpoint 保存 channel 值、channel 版本、节点看过的版本，因此可以恢复、回放和中断继续。</p>
+
+      <h3>6. Prebuilt Agent 只是 StateGraph 模板</h3>
+      <p>源码位置：<code>libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py:862</code></p>
+      <pre><code>workflow = StateGraph(...)
+workflow.add_node("agent", RunnableCallable(call_model, acall_model))
+workflow.add_node("tools", tool_node)
+workflow.add_conditional_edges("agent", should_continue, path_map=agent_paths)
+workflow.add_edge("tools", entrypoint)
+return workflow.compile(...)</code></pre>
+      <p>含义：<code>create_react_agent</code> 没有特殊运行时，它也是用 StateGraph 拼出 agent/tool 循环。</p>
+    </section>
+
+    <section>
+      <h2>设计思想</h2>
+      <div class="grid">
+        <div class="card"><strong>状态图范式</strong>用 state、node、edge 表达复杂流程，而不是把逻辑塞进一个大循环。</div>
+        <div class="card"><strong>编译器/运行时分离</strong>compile 前声明图，compile 后统一执行、流式、批处理和异步。</div>
+        <div class="card"><strong>Channel 状态传播</strong>channel 决定状态 key 怎么接收、合并和传播更新。</div>
+        <div class="card"><strong>Pregel/BSP step</strong>按回合推进，避免并发节点看到半成品状态。</div>
+        <div class="card"><strong>Checkpoint 持久化</strong>状态快照和版本关系支撑恢复、回放和人类介入。</div>
+        <div class="card"><strong>Prebuilt 组合</strong>Agent 是图模板，核心边界仍是 StateGraph + Pregel。</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>分享收束</h2>
+      <p>LangGraph 的源码主线其实很清楚：上层用 <code>StateGraph</code> 声明状态图，中间 compile 成可运行图，底层 Pregel 按 step 调度节点，checkpoint 把每一步状态固化下来。Agent 只是这个运行框架上的一种图。</p>
+      <p>分享讲解稿：<a href="share-guide.html">share-guide.html</a> / <a href="share-guide.md">share-guide.md</a></p>
+    </section>
+  </main>
+</body>
+</html>

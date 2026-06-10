@@ -1,0 +1,16 @@
+flowchart TD
+    Start([create_react_agent]) --> Workflow["StateGraph(state_schema)"]
+    Workflow --> Agent["agent node\ncall model"]
+    Workflow --> Tools["tools node\nToolNode"]
+    Agent --> Continue{"should_continue"}
+    Continue -->|tool calls| Tools
+    Continue -->|no tool calls| Structured{"response_format?"}
+    Structured -->|yes| StructuredNode["generate_structured_response"]
+    Structured -->|no| End([END])
+    StructuredNode --> End
+    Tools --> Direct{"return_direct tool?"}
+    Direct -->|yes| End
+    Direct -->|no| Agent
+    Workflow --> Hooks["optional pre_model_hook / post_model_hook"]
+    Hooks --> Agent
+    Workflow --> Compile["workflow.compile(checkpointer, store, interrupts)"]
