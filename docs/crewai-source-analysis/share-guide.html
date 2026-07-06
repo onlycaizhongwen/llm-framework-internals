@@ -21,8 +21,9 @@
     code { font-family:Consolas,"JetBrains Mono",monospace; font-size:.92em; }
     pre { overflow:auto; background:#101828; color:#e5e7eb; border-radius:8px; padding:15px; }
     .diagram { background:#fff; border:1px solid #d9dee8; border-radius:8px; padding:18px; margin:16px 0; overflow-x:auto; }
-    .diagram pre { background:#fff; color:#1f2937; }
+    .diagram pre, .diagram .mermaid { background:#fff; color:#1f2937; }
     .mermaid { min-width:760px; text-align:center; }
+    .mermaid svg { background:#fff; }
     .caption { color:#667085; font-size:14px; margin-top:-6px; }
     .timeline { display:grid; gap:10px; margin:16px 0; }
     .item strong { color:#2563eb; }
@@ -198,7 +199,21 @@ def router(condition=None, *, emit=None): ...</code></pre>
   </main>
   <script type="module">
     import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      securityLevel: "loose",
+      themeVariables: {
+        background: "#ffffff",
+        mainBkg: "#f8f5ff",
+        secondaryColor: "#eef7f6",
+        tertiaryColor: "#f8fafc",
+        primaryBorderColor: "#b7a8e8",
+        secondaryBorderColor: "#9ac7c1",
+        lineColor: "#667085",
+        textColor: "#1f2937"
+      }
+    });
   </script>
 </body>
 </html>
