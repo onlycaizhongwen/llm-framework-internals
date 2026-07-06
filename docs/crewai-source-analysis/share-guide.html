@@ -23,6 +23,7 @@
     .diagram { background:#fff; border:1px solid #d9dee8; border-radius:8px; padding:18px; margin:16px 0; overflow-x:auto; }
     .diagram pre { background:#fff; color:#1f2937; }
     .mermaid { min-width:760px; text-align:center; }
+    .caption { color:#667085; font-size:14px; margin-top:-6px; }
     .timeline { display:grid; gap:10px; margin:16px 0; }
     .item strong { color:#2563eb; }
     a { color:#2563eb; text-decoration:none; }
@@ -82,80 +83,83 @@
       <div class="diagram">
         <pre class="mermaid">
 flowchart TB
-    User["Application / Developer"] --> Crews["Crews API<br/>Crew / Agent / Task"]
-    User --> Flows["Flows API<br/>Flow + @start/@listen/@router"]
-    Crews --> Crew["Crew<br/>process orchestration"]
-    Crew --> Process["Process<br/>sequential / hierarchical"]
-    Crew --> Task["Task<br/>execution unit"]
-    Task --> Agent["Agent<br/>role / goal / backstory"]
-    Agent --> Executor["AgentExecutor / CrewAgentExecutor<br/>ReAct loop"]
-    Executor --> LLM["LLM<br/>provider routing + call"]
-    Executor --> Tools["BaseTool / CrewStructuredTool"]
-    Crew --> Memory["memory / knowledge / cache"]
-    Crew --> Events["CrewAIEventsBus<br/>observability + hooks"]
-    Flows --> FlowRuntime["Flow runtime<br/>state + method graph"]
-    FlowRuntime --> Decorators["DSL decorators<br/>@start / @listen / @router"]
-    FlowRuntime --> FlowState["Flow state<br/>BaseModel / dict"]
-    FlowRuntime --> FlowPersistence["checkpoint / @persist / restore"]
+    User["调用方<br/>应用代码 / 开发者"] --> Crews["Crews API<br/>多 Agent 协作入口"]
+    User --> Flows["Flows API<br/>事件驱动工作流入口"]
+    Crews --> Crew["Crew 编排器<br/>决定任务怎样执行"]
+    Crew --> Process["Process 执行模式<br/>顺序 / 层级"]
+    Crew --> Task["Task 任务单元<br/>描述目标、上下文和输出"]
+    Task --> Agent["Agent 角色执行者<br/>角色 / 目标 / 背景"]
+    Agent --> Executor["AgentExecutor<br/>推理-工具循环"]
+    Executor --> LLM["LLM 调用层<br/>模型路由和请求"]
+    Executor --> Tools["Tools 工具层<br/>标准化外部能力"]
+    Crew --> Memory["记忆 / 知识 / 缓存<br/>补充上下文"]
+    Crew --> Events["事件总线<br/>观测 / 回调 / 钩子"]
+    Flows --> FlowRuntime["Flow 运行时<br/>状态和方法图"]
+    FlowRuntime --> Decorators["DSL 装饰器<br/>@start / @listen / @router"]
+    FlowRuntime --> FlowState["Flow 状态<br/>BaseModel / dict"]
+    FlowRuntime --> FlowPersistence["持久化检查点<br/>恢复流程状态"]
     FlowRuntime --> Events
-    Tools --> ToolPackages["crewai-tools<br/>RAG and integrations"]
-    LLM --> Providers["native providers / LiteLLM"]
-    CLI["CLI"] --> Crews
+    Tools --> ToolPackages["crewai-tools<br/>RAG 和集成工具"]
+    LLM --> Providers["模型 Provider<br/>原生适配 / LiteLLM"]
+    CLI["CLI 命令行"] --> Crews
     CLI --> Flows
-    Core["crewai-core"] --> CLI
-    Files["crewai-files"] --> Task
+    Core["crewai-core<br/>公共基础能力"] --> CLI
+    Files["crewai-files<br/>文件输入处理"] --> Task
         </pre>
       </div>
+      <p class="caption">读图方式：上半部分是 Crews 主线，强调“谁来做任务”；下半部分是 Flows 主线，强调“流程怎样流转”；LLM、Tools、Memory、Events 是两条主线复用的横切能力。</p>
       <h3>Crew 执行流程图</h3>
       <div class="diagram">
         <pre class="mermaid">
 flowchart TD
-    Start([Crew.kickoff]) --> Prepare["prepare_kickoff<br/>inputs + files"]
-    Prepare --> Process{"process"}
-    Process -->|sequential| Seq["_run_sequential_process"]
-    Process -->|hierarchical| Manager["_create_manager_agent"]
-    Manager --> Hier["_run_hierarchical_process"]
+    Start([启动 Crew.kickoff]) --> Prepare["准备输入<br/>inputs + files"]
+    Prepare --> Process{"选择执行模式"}
+    Process -->|顺序执行| Seq["顺序流程<br/>_run_sequential_process"]
+    Process -->|层级执行| Manager["创建管理者 Agent<br/>_create_manager_agent"]
+    Manager --> Hier["层级流程<br/>_run_hierarchical_process"]
     Seq --> Execute["_execute_tasks"]
     Hier --> Execute
-    Execute --> Loop{"for each task"}
-    Loop --> Context["build task context"]
-    Context --> Async{"async_execution?"}
-    Async -->|yes| Future["Task.execute_async"]
-    Async -->|no| Sync["Task.execute_sync"]
-    Future --> TaskCore["Task._execute_core"]
+    Execute --> Loop{"遍历每个 Task"}
+    Loop --> Context["构造任务上下文"]
+    Context --> Async{"是否异步执行?"}
+    Async -->|是| Future["异步执行<br/>Task.execute_async"]
+    Async -->|否| Sync["同步执行<br/>Task.execute_sync"]
+    Future --> TaskCore["Task 核心执行<br/>Task._execute_core"]
     Sync --> TaskCore
-    TaskCore --> Agent["Agent.execute_task"]
-    Agent --> Prompt["prepare prompt<br/>knowledge + tools"]
-    Prompt --> Executor["agent_executor.invoke"]
-    Executor --> LLM["LLM.call + tool loop"]
-    LLM --> Output["TaskOutput"]
-    Output --> Next{"more tasks?"}
-    Next -->|yes| Loop
-    Next -->|no| CrewOutput["CrewOutput"]
-    CrewOutput --> End([return])
+    TaskCore --> Agent["委派给 Agent<br/>Agent.execute_task"]
+    Agent --> Prompt["准备提示词<br/>知识 + 工具 + 上下文"]
+    Prompt --> Executor["调用执行器<br/>agent_executor.invoke"]
+    Executor --> LLM["模型调用 + 工具循环<br/>LLM.call"]
+    LLM --> Output["生成任务结果<br/>TaskOutput"]
+    Output --> Next{"还有任务?"}
+    Next -->|是| Loop
+    Next -->|否| CrewOutput["聚合 CrewOutput"]
+    CrewOutput --> End([返回最终结果])
         </pre>
       </div>
+      <p class="caption">读图方式：Crew 是任务编排器，真正执行会逐层下沉到 Task、Agent、Executor、LLM 和 Tools；顺序/层级只是任务调度策略不同。</p>
       <h3>Flow 事件流程图</h3>
       <div class="diagram">
         <pre class="mermaid">
 flowchart TD
-    Start([Flow.kickoff]) --> Async["kickoff_async"]
-    Async --> State["initialize / restore state"]
-    State --> EmitStart["emit FlowStartedEvent"]
-    EmitStart --> Starts["find @start methods"]
-    Starts --> ExecStart["_execute_start_method"]
-    ExecStart --> Method["_execute_method"]
-    Method --> Router{"router result?"}
-    Router -->|yes| RouteTrigger["emit route label trigger"]
-    Router -->|no| MethodTrigger["emit method-name trigger"]
-    RouteTrigger --> Listeners["_execute_listeners"]
+    Start([启动 Flow.kickoff]) --> Async["进入异步运行<br/>kickoff_async"]
+    Async --> State["初始化或恢复状态"]
+    State --> EmitStart["发送流程开始事件"]
+    EmitStart --> Starts["查找 @start 入口方法"]
+    Starts --> ExecStart["执行入口方法<br/>_execute_start_method"]
+    ExecStart --> Method["执行业务方法<br/>_execute_method"]
+    Method --> Router{"是否有路由结果?"}
+    Router -->|有| RouteTrigger["发出路由标签触发器"]
+    Router -->|没有| MethodTrigger["发出方法名触发器"]
+    RouteTrigger --> Listeners["执行监听器<br/>_execute_listeners"]
     MethodTrigger --> Listeners
-    Listeners --> More{"downstream listeners?"}
-    More -->|yes| Method
-    More -->|no| EmitEnd["emit FlowFinishedEvent"]
-    EmitEnd --> End([return final output])
+    Listeners --> More{"还有下游监听器?"}
+    More -->|有| Method
+    More -->|没有| EmitEnd["发送流程结束事件"]
+    EmitEnd --> End([返回最终输出])
         </pre>
       </div>
+      <p class="caption">读图方式：Flow 把普通 Python 方法组织成事件链，@start 提供入口，@listen 负责继续执行，@router 决定下一段路径。</p>
     </section>
     <section>
       <h2>核心代码证据</h2>

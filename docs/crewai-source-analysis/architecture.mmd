@@ -1,23 +1,23 @@
 flowchart TB
-    User["Application / Developer"] --> Crews["Crews API\nCrew / Agent / Task"]
-    User --> Flows["Flows API\nFlow + @start/@listen/@router"]
-    Crews --> Crew["Crew\nprocess orchestration"]
-    Crew --> Process["Process\nsequential / hierarchical"]
-    Crew --> Task["Task\nexecution unit"]
-    Task --> Agent["Agent\nrole / goal / backstory"]
-    Agent --> Executor["AgentExecutor / CrewAgentExecutor\nReAct loop"]
-    Executor --> LLM["LLM\nprovider routing + call"]
-    Executor --> Tools["BaseTool / CrewStructuredTool"]
-    Crew --> Memory["memory / knowledge / cache"]
-    Crew --> Events["CrewAIEventsBus\nobservability + hooks"]
-    Flows --> FlowRuntime["Flow runtime\nstate + method graph"]
-    FlowRuntime --> Decorators["DSL decorators\n@start / @listen / @router"]
-    FlowRuntime --> FlowState["Flow state\nBaseModel / dict"]
-    FlowRuntime --> FlowPersistence["checkpoint / @persist / restore"]
+    User["调用方\n应用代码 / 开发者"] --> Crews["Crews API\n多 Agent 协作入口"]
+    User --> Flows["Flows API\n事件驱动工作流入口"]
+    Crews --> Crew["Crew 编排器\n决定任务怎样执行"]
+    Crew --> Process["Process 执行模式\n顺序 / 层级"]
+    Crew --> Task["Task 任务单元\n描述目标、上下文和输出"]
+    Task --> Agent["Agent 角色执行者\n角色 / 目标 / 背景"]
+    Agent --> Executor["AgentExecutor\n推理-工具循环"]
+    Executor --> LLM["LLM 调用层\n模型路由和请求"]
+    Executor --> Tools["Tools 工具层\n标准化外部能力"]
+    Crew --> Memory["记忆 / 知识 / 缓存\n补充上下文"]
+    Crew --> Events["事件总线\n观测 / 回调 / 钩子"]
+    Flows --> FlowRuntime["Flow 运行时\n状态和方法图"]
+    FlowRuntime --> Decorators["DSL 装饰器\n@start / @listen / @router"]
+    FlowRuntime --> FlowState["Flow 状态\nBaseModel / dict"]
+    FlowRuntime --> FlowPersistence["持久化检查点\n恢复流程状态"]
     FlowRuntime --> Events
-    Tools --> ToolPackages["crewai-tools\nRAG and integrations"]
-    LLM --> Providers["native providers / LiteLLM"]
-    CLI["CLI"] --> Crews
+    Tools --> ToolPackages["crewai-tools\nRAG 和集成工具"]
+    LLM --> Providers["模型 Provider\n原生适配 / LiteLLM"]
+    CLI["CLI 命令行"] --> Crews
     CLI --> Flows
-    Core["crewai-core"] --> CLI
-    Files["crewai-files"] --> Task
+    Core["crewai-core\n公共基础能力"] --> CLI
+    Files["crewai-files\n文件输入处理"] --> Task

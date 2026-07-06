@@ -1,16 +1,16 @@
 flowchart TD
-    Start([Flow.kickoff]) --> Async["kickoff_async"]
-    Async --> State["initialize / restore state"]
-    State --> EmitStart["emit FlowStartedEvent"]
-    EmitStart --> Starts["find @start methods"]
-    Starts --> ExecStart["_execute_start_method"]
-    ExecStart --> Method["_execute_method"]
-    Method --> Router{"router result?"}
-    Router -->|yes| RouteTrigger["emit route label trigger"]
-    Router -->|no| MethodTrigger["emit method-name trigger"]
-    RouteTrigger --> Listeners["_execute_listeners"]
+    Start([启动 Flow.kickoff]) --> Async["进入异步运行\nkickoff_async"]
+    Async --> State["初始化或恢复状态"]
+    State --> EmitStart["发送流程开始事件"]
+    EmitStart --> Starts["查找 @start 入口方法"]
+    Starts --> ExecStart["执行入口方法\n_execute_start_method"]
+    ExecStart --> Method["执行业务方法\n_execute_method"]
+    Method --> Router{"是否有路由结果?"}
+    Router -->|有| RouteTrigger["发出路由标签触发器"]
+    Router -->|没有| MethodTrigger["发出方法名触发器"]
+    RouteTrigger --> Listeners["执行监听器\n_execute_listeners"]
     MethodTrigger --> Listeners
-    Listeners --> More{"downstream listeners?"}
-    More -->|yes| Method
-    More -->|no| EmitEnd["emit FlowFinishedEvent"]
-    EmitEnd --> End([return final output])
+    Listeners --> More{"还有下游监听器?"}
+    More -->|有| Method
+    More -->|没有| EmitEnd["发送流程结束事件"]
+    EmitEnd --> End([返回最终输出])

@@ -1,24 +1,24 @@
 flowchart TD
-    Start([Crew.kickoff]) --> Prepare["prepare_kickoff\ninputs + files"]
-    Prepare --> Process{"process"}
-    Process -->|sequential| Seq["_run_sequential_process"]
-    Process -->|hierarchical| Manager["_create_manager_agent"]
-    Manager --> Hier["_run_hierarchical_process"]
+    Start([启动 Crew.kickoff]) --> Prepare["准备输入\ninputs + files"]
+    Prepare --> Process{"选择执行模式"}
+    Process -->|顺序执行| Seq["顺序流程\n_run_sequential_process"]
+    Process -->|层级执行| Manager["创建管理者 Agent\n_create_manager_agent"]
+    Manager --> Hier["层级流程\n_run_hierarchical_process"]
     Seq --> Execute["_execute_tasks"]
     Hier --> Execute
-    Execute --> Loop{"for each task"}
-    Loop --> Context["build task context"]
-    Context --> Async{"async_execution?"}
-    Async -->|yes| Future["Task.execute_async"]
-    Async -->|no| Sync["Task.execute_sync"]
-    Future --> TaskCore["Task._execute_core"]
+    Execute --> Loop{"遍历每个 Task"}
+    Loop --> Context["构造任务上下文"]
+    Context --> Async{"是否异步执行?"}
+    Async -->|是| Future["异步执行\nTask.execute_async"]
+    Async -->|否| Sync["同步执行\nTask.execute_sync"]
+    Future --> TaskCore["Task 核心执行\nTask._execute_core"]
     Sync --> TaskCore
-    TaskCore --> Agent["Agent.execute_task"]
-    Agent --> Prompt["prepare prompt\nknowledge + tools"]
-    Prompt --> Executor["agent_executor.invoke"]
-    Executor --> LLM["LLM.call + tool loop"]
-    LLM --> Output["TaskOutput"]
-    Output --> Next{"more tasks?"}
-    Next -->|yes| Loop
-    Next -->|no| CrewOutput["CrewOutput"]
-    CrewOutput --> End([return])
+    TaskCore --> Agent["委派给 Agent\nAgent.execute_task"]
+    Agent --> Prompt["准备提示词\n知识 + 工具 + 上下文"]
+    Prompt --> Executor["调用执行器\nagent_executor.invoke"]
+    Executor --> LLM["模型调用 + 工具循环\nLLM.call"]
+    LLM --> Output["生成任务结果\nTaskOutput"]
+    Output --> Next{"还有任务?"}
+    Next -->|是| Loop
+    Next -->|否| CrewOutput["聚合 CrewOutput"]
+    CrewOutput --> End([返回最终结果])
