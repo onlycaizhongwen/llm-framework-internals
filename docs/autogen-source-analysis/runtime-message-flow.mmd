@@ -1,0 +1,13 @@
+flowchart TD
+    Caller["调用方 / Team / Agent"] --> Send["send_message<br/>点对点 RPC"]
+    Caller --> Publish["publish_message<br/>topic 广播"]
+    Send --> SendEnvelope["SendMessageEnvelope"]
+    Publish --> PublishEnvelope["PublishMessageEnvelope"]
+    SendEnvelope --> Queue["SingleThreadedAgentRuntime<br/>asyncio queue"]
+    PublishEnvelope --> Queue
+    Queue --> Next["_process_next"]
+    Next --> ProcessSend["_process_send<br/>定位 recipient agent"]
+    Next --> ProcessPublish["_process_publish<br/>查 subscriptions"]
+    ProcessSend --> Handler["RoutedAgent.on_message<br/>@rpc / @message_handler"]
+    ProcessPublish --> Handler
+    Handler --> Response["响应 / 新事件 / 新消息"]

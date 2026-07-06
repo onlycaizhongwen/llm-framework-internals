@@ -3,29 +3,29 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AutoGen 源码架构分析</title>
+  <title>AutoGen 源码架构精读</title>
   <style>
-    :root { --bg:#f7f8fb; --panel:#fff; --ink:#20242c; --muted:#5b6472; --line:#dfe4ec; --accent:#0f766e; --accent2:#7c3aed; --code:#111827; --codeink:#e5e7eb; }
+    :root { --bg:#f7f8fb; --panel:#fff; --ink:#20242c; --muted:#5b6472; --line:#dfe4ec; --accent:#0f766e; --accent2:#6d28d9; --soft:#eef7f6; --code:#111827; --codeink:#e5e7eb; }
     * { box-sizing:border-box; }
     body { margin:0; font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif; background:var(--bg); color:var(--ink); line-height:1.72; }
     header { background:#fff; border-bottom:1px solid var(--line); padding:40px 24px 28px; }
-    main,.hero { max-width:1120px; margin:0 auto; }
+    main,.hero { max-width:1160px; margin:0 auto; }
     main { padding:28px 24px 64px; }
     h1 { margin:0 0 12px; font-size:clamp(30px,4vw,48px); line-height:1.18; letter-spacing:0; }
-    h2 { margin:34px 0 12px; padding-top:10px; border-top:1px solid var(--line); font-size:26px; }
+    h2 { margin:36px 0 12px; padding-top:12px; border-top:1px solid var(--line); font-size:26px; }
     h3 { margin:24px 0 8px; font-size:20px; }
     p { margin:10px 0; }
-    .lead { max-width:900px; color:var(--muted); font-size:18px; }
+    .lead { max-width:940px; color:var(--muted); font-size:18px; }
     .badge-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
     .badge { border:1px solid var(--line); background:#f9fafb; border-radius:999px; padding:5px 12px; font-size:13px; color:var(--muted); }
     .panel,.card { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
     .panel { padding:20px; margin:18px 0; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin:18px 0; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin:18px 0; }
     .card { padding:16px; }
     .card strong { display:block; color:var(--accent); margin-bottom:6px; }
     table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); margin:16px 0; }
     th,td { padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:top; text-align:left; }
-    th { background:#eef7f6; color:#134e4a; }
+    th { background:var(--soft); color:#134e4a; }
     tr:last-child td { border-bottom:0; }
     code { font-family:Consolas,"JetBrains Mono",monospace; font-size:.92em; }
     pre { overflow:auto; background:var(--code); color:var(--codeink); border-radius:8px; padding:16px; }
@@ -37,7 +37,8 @@
     .diagram pre, .diagram .mermaid { background:#fff; color:var(--ink); }
     .mermaid { min-width:760px; text-align:center; }
     .mermaid svg { background:#fff; }
-    .caption { color:var(--muted); font-size:14px; margin-top:-6px; }
+    .caption,.evidence { color:var(--muted); font-size:14px; }
+    .evidence { margin:6px 0 12px; }
     a { color:var(--accent2); text-decoration:none; }
     a:hover { text-decoration:underline; }
     @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:20px 18px 48px;} table{display:block; overflow-x:auto;} }
@@ -46,8 +47,8 @@
 <body>
   <header>
     <div class="hero">
-      <h1>AutoGen 源码架构分析</h1>
-      <p class="lead">参考 LangChain 分析方式：先讲架构，再讲源码主线。AutoGen 的核心是 Core 消息运行时、AgentChat 高层 API、Extensions 生态适配和 Studio 可视化工具。</p>
+      <h1>AutoGen 源码架构精读</h1>
+      <p class="lead">这版不只讲“有哪些模块”，而是沿着 AutoGen 的真实源码路径拆：Runtime 如何投递消息，AssistantAgent 如何做模型和工具循环，GroupChat 如何映射到底层 Core Runtime。</p>
       <div class="badge-row">
         <span class="badge">源码：sources/autogen</span>
         <span class="badge">提交：027ecf0a379bcc1d09956d46d12d44a3ad9cee14</span>
@@ -58,30 +59,26 @@
   <main>
     <section class="panel">
       <h2>总体结论</h2>
-      <p>AutoGen 的源码主线不是单个 Agent 循环，而是一个分层的多 Agent 应用框架：<strong>Core</strong> 提供消息运行时和底层协议，<strong>AgentChat</strong> 提供 AssistantAgent 与 Team，<strong>Extensions</strong> 接入模型和工具，<strong>Studio</strong> 提供可视化原型入口。</p>
-      <div class="quote">分享时可以这样讲：AutoGen 更像“多 Agent 消息运行时”，而不是单纯的聊天机器人封装。</div>
+      <p>AutoGen 的核心不是单个聊天机器人封装，而是一个 <strong>消息驱动的多 Agent 运行时</strong>。底层 Core 定义 AgentRuntime、消息投递、topic、handler、模型和工具抽象；上层 AgentChat 把这些能力包装成 AssistantAgent、Team 和 GroupChat；Extensions 再接入 OpenAI、MCP、代码执行等生态。</p>
+      <div class="quote">分享时可以这样定调：AutoGen 更像“多 Agent actor runtime + Chat Team API”，而不是单纯的 prompt 编排库。</div>
     </section>
 
     <section>
-      <h2>最高层分层</h2>
+      <h2>最高层架构</h2>
       <table>
-        <thead><tr><th>层级</th><th>目录/文件</th><th>主要职责</th></tr></thead>
+        <thead><tr><th>层级</th><th>源码位置</th><th>精读重点</th></tr></thead>
         <tbody>
-          <tr><td>Workspace</td><td><code>python/pyproject.toml</code>、<code>python/packages/*</code></td><td>Python uv workspace，统一管理多个包。</td></tr>
-          <tr><td>Core API</td><td><code>packages/autogen-core/src/autogen_core</code></td><td>AgentRuntime、RoutedAgent、消息、模型抽象、工具抽象、状态、trace。</td></tr>
-          <tr><td>AgentChat API</td><td><code>packages/autogen-agentchat/src/autogen_agentchat</code></td><td>AssistantAgent、BaseChatAgent、Teams、GroupChat、消息和终止条件。</td></tr>
-          <tr><td>Extensions API</td><td><code>packages/autogen-ext/src/autogen_ext</code></td><td>模型 client、MCP、代码执行、RAG、外部集成。</td></tr>
-          <tr><td>Studio</td><td><code>packages/autogen-studio</code></td><td>Web UI / no-code 原型工具。</td></tr>
-          <tr><td>Bench / Samples</td><td><code>packages/agbench</code>、<code>python/samples</code></td><td>评测和示例。</td></tr>
+          <tr><td>Core</td><td><code>python/packages/autogen-core/src/autogen_core</code></td><td><code>AgentRuntime</code>、<code>SingleThreadedAgentRuntime</code>、<code>RoutedAgent</code>、模型和工具协议。</td></tr>
+          <tr><td>AgentChat</td><td><code>python/packages/autogen-agentchat/src/autogen_agentchat</code></td><td><code>BaseChatAgent.run_stream</code>、<code>AssistantAgent.on_messages_stream</code>、<code>BaseGroupChat</code>、各类 Team manager。</td></tr>
+          <tr><td>Extensions</td><td><code>python/packages/autogen-ext/src/autogen_ext</code></td><td>OpenAI client、MCP Workbench、代码执行、外部模型和工具适配。</td></tr>
+          <tr><td>Studio / Bench</td><td><code>python/packages/autogen-studio</code>、<code>python/packages/agbench</code></td><td>可视化原型入口和评测工具，不是运行时主干。</td></tr>
         </tbody>
       </table>
       <h3>架构图</h3>
-      <div class="diagram">
-        <pre class="mermaid">
+      <div class="diagram"><pre class="mermaid">
 flowchart TB
-    User["调用方<br/>应用代码 / Studio / CLI"] --> AgentChat["AgentChat API<br/>AssistantAgent / Teams"]
-    User --> Core["Core API<br/>消息、Agent、Runtime"]
-    User --> Studio["AutoGen Studio<br/>可视化构建和运行"]
+    User["调用方<br/>应用代码 / Studio / CLI"] --> AgentChat["AgentChat<br/>AssistantAgent / Teams"]
+    User --> Core["Core<br/>Message / Agent / Runtime"]
     AgentChat --> BaseChatAgent["BaseChatAgent<br/>run / run_stream"]
     BaseChatAgent --> Assistant["AssistantAgent<br/>模型调用 + 工具循环"]
     AgentChat --> Teams["Teams<br/>RoundRobin / Selector / Swarm"]
@@ -92,172 +89,185 @@ flowchart TB
     Core --> Routed["RoutedAgent<br/>@message_handler / @event / @rpc"]
     Core --> ModelClient["ChatCompletionClient<br/>模型抽象"]
     Core --> Tool["BaseTool / Workbench<br/>工具抽象"]
-    Core --> State["State / Memory / Context<br/>状态和上下文"]
-    Core --> Trace["Tracing / Events<br/>观测和日志"]
     Assistant --> ModelClient
     Assistant --> Tool
-    Assistant --> State
     Manager --> ModelClient
-    Ext["autogen-ext<br/>模型、MCP、代码执行、RAG"] --> ModelClient
+    Ext["autogen-ext<br/>OpenAI / MCP / Code Exec"] --> ModelClient
     Ext --> Tool
-    Ext --> CodeExec["Code Executors<br/>Docker / Local"]
-    Ext --> MCP["MCP Workbench<br/>外部工具协议"]
-    Studio --> AgentChat
-    Bench["agbench<br/>评测工具"] --> AgentChat
-        </pre>
-      </div>
-      <p class="caption">读图方式：左侧是用户入口，中间是 AgentChat 和 Core 两条主线，右侧是 Extensions 把模型和工具接进来。</p>
+    Studio["AutoGen Studio"] --> AgentChat
+      </pre></div>
+      <p class="caption">读图方式：AgentChat 是易用入口，Core 是运行时底座，Extensions 是 provider 和工具生态适配。</p>
       <p>Mermaid 源文件：<a href="architecture.mmd">architecture.mmd</a></p>
     </section>
 
     <section>
-      <h2>Core Runtime 主线</h2>
+      <h2>源码精读一：Runtime 消息投递</h2>
       <div class="flow">
-        <span class="step">AgentRuntime</span><span class="step">send_message</span><span class="step">publish_message</span><span class="step">SingleThreadedAgentRuntime</span><span class="step">RoutedAgent</span><span class="step">@message_handler</span>
+        <span class="step">send_message / publish_message</span><span class="step">Envelope</span><span class="step">asyncio queue</span><span class="step">_process_next</span><span class="step">_process_send / _process_publish</span><span class="step">RoutedAgent handler</span>
       </div>
-      <p>Core 层把 Agent 看成消息处理单元，既支持 RPC 式点对点，也支持 topic 广播。AgentChat 的团队协作最终也会映射到这个 runtime。</p>
-      <h3>源码证据</h3>
-      <p><code>autogen_core/_agent_runtime.py:21</code>、<code>autogen_core/_single_threaded_agent_runtime.py:149</code></p>
+      <p>Core Runtime 把 Agent 当成消息处理单元。<code>send_message</code> 是点对点请求响应，<code>publish_message</code> 是 topic 广播；二者都会进入 <code>SingleThreadedAgentRuntime</code> 的队列，再由 <code>_process_next</code> 分派到具体处理函数。</p>
+      <p class="evidence">证据：<code>_agent_runtime.py:21-50</code> 定义协议；<code>_single_threaded_agent_runtime.py:332</code> 实现 send；<code>:387</code> 实现 publish；<code>:466</code>、<code>:557</code>、<code>:671</code> 处理队列消息。</p>
       <pre><code>class AgentRuntime(Protocol):
     async def send_message(...)
     async def publish_message(...)
 
 class SingleThreadedAgentRuntime(AgentRuntime):
-    """A single-threaded agent runtime that processes all messages using a single asyncio queue."""</code></pre>
-      <p><code>autogen_core/_routed_agent.py:415</code></p>
+    """...processes all messages using a single asyncio queue."""</code></pre>
+      <h3>运行时消息流图</h3>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    Caller["调用方 / Team / Agent"] --> Send["send_message<br/>点对点 RPC"]
+    Caller --> Publish["publish_message<br/>topic 广播"]
+    Send --> SendEnvelope["SendMessageEnvelope"]
+    Publish --> PublishEnvelope["PublishMessageEnvelope"]
+    SendEnvelope --> Queue["SingleThreadedAgentRuntime<br/>asyncio queue"]
+    PublishEnvelope --> Queue
+    Queue --> Next["_process_next"]
+    Next --> ProcessSend["_process_send<br/>定位 recipient agent"]
+    Next --> ProcessPublish["_process_publish<br/>查 subscriptions"]
+    ProcessSend --> Handler["RoutedAgent.on_message<br/>@rpc / @message_handler"]
+    ProcessPublish --> Handler
+    Handler --> Response["响应 / 新事件 / 新消息"]
+      </pre></div>
+      <p>Mermaid 源文件：<a href="runtime-message-flow.mmd">runtime-message-flow.mmd</a></p>
+      <p>设计含义：AutoGen 的底座更接近 actor/event runtime。AgentChat 里的 GroupChat 并不是自己写一个 while 循环挨个调用 Agent，而是把参与者、manager、topic 注册到 runtime，让消息驱动协作。</p>
+    </section>
+
+    <section>
+      <h2>源码精读二：RoutedAgent 处理器范式</h2>
+      <p><code>RoutedAgent</code> 通过装饰器把消息类型映射到 handler。<code>@event</code> 表达“收到事件后处理，不要求响应”，<code>@rpc</code> 表达“请求响应”，<code>@message_handler</code> 是更通用的声明式入口。</p>
+      <p class="evidence">证据：<code>_routed_agent.py:85</code> 定义 <code>message_handler</code>；<code>:205</code> 定义 <code>event</code>；<code>:325</code> 定义 <code>rpc</code>；<code>:415</code> 定义 <code>RoutedAgent</code>。</p>
       <pre><code>class RoutedAgent(BaseAgent):
-    """A base class for agents that route messages to handlers based on the type of the message."""</code></pre>
+    """...route messages to handlers based on the type of the message."""</code></pre>
+      <p>设计含义：这是一种“声明式路由 + 类型驱动 handler”的范式。调用方不用知道具体函数名，只要消息类型和订阅关系正确，runtime 就能把消息送到对应 Agent。</p>
     </section>
 
     <section>
-      <h2>AgentChat 主流程</h2>
-      <h3>AssistantAgent 执行流程图</h3>
-      <div class="diagram">
-        <pre class="mermaid">
+      <h2>源码精读三：AssistantAgent 工具循环</h2>
+      <p><code>BaseChatAgent</code> 统一 <code>run</code> 和 <code>run_stream</code>，<code>AssistantAgent</code> 真正负责把用户消息、memory、model_context、tools、handoff 和模型调用串起来。精读时不要停在 <code>AssistantAgent</code> 类名，要顺着 <code>on_messages_stream</code> 继续看。</p>
+      <p class="evidence">证据：<code>_base_chat_agent.py:111</code> 是 <code>run</code>；<code>:155</code> 是 <code>run_stream</code>；<code>_assistant_agent.py:901</code> 是 <code>on_messages_stream</code>；<code>:1056</code> 调 LLM；<code>:1118</code> 处理模型结果；<code>:1196</code> 执行工具；<code>:1409</code> 反思工具结果。</p>
+      <div class="diagram"><pre class="mermaid">
 flowchart TD
-    Start([用户调用 agent.run / run_stream]) --> Normalize["转换任务输入<br/>str -> TextMessage"]
-    Normalize --> OnMessages["BaseChatAgent.on_messages<br/>或 on_messages_stream"]
-    OnMessages --> Assistant["AssistantAgent.on_messages_stream"]
-    Assistant --> Context["更新模型上下文<br/>system / memory / messages"]
-    Context --> ModelCall["调用 ChatCompletionClient.create<br/>或 create_stream"]
-    ModelCall --> ToolCalls{"模型是否返回工具调用?"}
-    ToolCalls -->|否| FinalText["生成最终 TextMessage<br/>或 StructuredMessage"]
-    ToolCalls -->|是| ExecuteTools["执行工具 / Workbench<br/>可并发执行"]
-    ExecuteTools --> ToolResult["生成 ToolCallExecutionEvent<br/>和工具结果"]
-    ToolResult --> Reflect{"是否反思工具结果?"}
-    Reflect -->|是| ModelCall
-    Reflect -->|否| Summary["生成 ToolCallSummaryMessage"]
-    FinalText --> Response["Response"]
+    Start([agent.run / run_stream]) --> Normalize["BaseChatAgent<br/>任务转 TextMessage"]
+    Normalize --> Stream["AssistantAgent.on_messages_stream"]
+    Stream --> Memory["更新 memory<br/>写入 model_context"]
+    Memory --> CallLLM["_call_llm<br/>ChatCompletionClient.create"]
+    CallLLM --> ModelResult["_process_model_result"]
+    ModelResult --> ToolCall{"模型返回工具调用?"}
+    ToolCall -->|否| Final["TextMessage / StructuredMessage"]
+    ToolCall -->|是| Execute["_execute_tool_calls<br/>Workbench / Tool"]
+    Execute --> AddResult["FunctionExecutionResultMessage<br/>写回 model_context"]
+    AddResult --> Reflect{"reflect_on_tool_use?"}
+    Reflect -->|是| ReflectFlow["_reflect_on_tool_use_flow<br/>再调一次模型"]
+    Reflect -->|否| Summary["ToolCallSummaryMessage"]
+    ReflectFlow --> Final
+    Final --> Response["Response"]
     Summary --> Response
-    Response --> TaskResult["TaskResult<br/>汇总输出消息"]
-    TaskResult --> End([返回调用方])
-        </pre>
-      </div>
-      <p class="caption">读图方式：BaseChatAgent 统一 run/run_stream，AssistantAgent 负责模型调用、工具执行和最终 Response。</p>
+    Response --> TaskResult["TaskResult"]
+      </pre></div>
       <p>Mermaid 源文件：<a href="agent-flow.mmd">agent-flow.mmd</a></p>
-      <h3>源码证据</h3>
-      <p><code>agents/_base_chat_agent.py:17</code>、<code>agents/_base_chat_agent.py:111</code>、<code>agents/_assistant_agent.py:90</code></p>
-      <pre><code>class BaseChatAgent(ChatAgent, ABC, ComponentBase[BaseModel]):
-    """Base class for a chat agent."""
-
-class AssistantAgent(BaseChatAgent, Component[AssistantAgentConfig]):
+      <pre><code>class AssistantAgent(BaseChatAgent, Component[AssistantAgentConfig]):
     """An agent that provides assistance with tool use."""</code></pre>
+      <table>
+        <thead><tr><th>步骤</th><th>源码位置</th><th>要点</th></tr></thead>
+        <tbody>
+          <tr><td>构造阶段</td><td><code>_assistant_agent.py:827-851</code></td><td>装配 workbench/tools、model_context、<code>reflect_on_tool_use</code>、<code>max_tool_iterations</code>。</td></tr>
+          <tr><td>上下文阶段</td><td><code>:940-1004</code></td><td>memory 更新、消息写入 model_context，然后处理模型结果。</td></tr>
+          <tr><td>模型阶段</td><td><code>:1056-1118</code></td><td>从 model_context 取消息，收集 tools 和 handoff tools，调用 <code>ChatCompletionClient</code>。</td></tr>
+          <tr><td>工具阶段</td><td><code>:1149-1240</code></td><td>按 <code>max_tool_iterations</code> 循环，执行工具并把结果写回上下文。</td></tr>
+          <tr><td>收束阶段</td><td><code>:1302</code>、<code>:1409</code>、<code>:1507</code></td><td>如果反思则再次模型推理；否则汇总工具调用结果。</td></tr>
+        </tbody>
+      </table>
+      <p>设计含义：AssistantAgent 是“组合器”，不是 provider。模型由 <code>ChatCompletionClient</code> 抽象，工具由 <code>Workbench</code> 和 <code>BaseTool</code> 抽象，Agent 只编排上下文和控制循环。</p>
     </section>
 
     <section>
-      <h2>GroupChat 主流程</h2>
-      <h3>团队编排流程图</h3>
-      <div class="diagram">
-        <pre class="mermaid">
+      <h2>源码精读四：GroupChat 如何落到 Core Runtime</h2>
+      <p><code>BaseGroupChat</code> 的关键注释说明它负责把 AgentChat API 映射到 Core Runtime。初始化时注册 participant container、group chat manager 和 topic subscriptions；运行时发布 <code>GroupChatStart</code>，随后 manager 选择 speaker，participant 响应，再回到 manager 判断终止。</p>
+      <p class="evidence">证据：<code>_base_group_chat.py:40</code> 定义 <code>BaseGroupChat</code>；<code>:191-241</code> 注册参与者、manager 和订阅；<code>:351</code> 是 <code>run_stream</code>；<code>:535</code> 发布 <code>GroupChatStart</code>；<code>:550</code> 处理 <code>GroupChatTermination</code>。</p>
+      <div class="diagram"><pre class="mermaid">
 flowchart TD
-    Start([team.run / run_stream]) --> Init{"是否已初始化?"}
-    Init -->|否| Register["注册参与者容器<br/>ChatAgentContainer"]
-    Register --> Manager["注册 GroupChatManager"]
-    Manager --> Subs["添加 topic subscriptions<br/>群组、参与者、输出 topic"]
-    Init -->|是| StartMsg
-    Subs --> StartMsg["发布 GroupChatStart"]
-    StartMsg --> Runtime["SingleThreadedAgentRuntime.start<br/>处理消息队列"]
-    Runtime --> Select["Manager.select_speaker<br/>选择下一位发言者"]
-    Select --> Mode{"团队类型"}
-    Mode -->|RoundRobin| RR["按顺序轮转"]
-    Mode -->|Selector| Sel["模型或 selector_func 选择"]
-    Mode -->|Swarm| Swarm["根据 handoff 交接"]
-    RR --> AgentTopic["向参与者 topic 发消息"]
-    Sel --> AgentTopic
-    Swarm --> AgentTopic
-    AgentTopic --> Participant["参与者 Agent/Team 响应"]
-    Participant --> Publish["发布到 group topic<br/>共享上下文"]
-    Publish --> Term{"终止条件或 max_turns?"}
-    Term -->|未满足| Select
-    Term -->|满足| Stop["GroupChatTermination"]
-    Stop --> Result["TaskResult<br/>消息 + stop_reason"]
-        </pre>
-      </div>
-      <p class="caption">读图方式：Team 并不是自己直接循环调用每个 Agent，而是把参与者和 manager 注册到 Core runtime，通过 topic 驱动群聊。</p>
+    Run["Team.run_stream"] --> Init["_init(runtime)"]
+    Init --> Participants["注册 ChatAgentContainer<br/>每个 participant 一个 topic"]
+    Participants --> Manager["注册 GroupChatManager"]
+    Manager --> Subs["添加 group / participant / output subscriptions"]
+    Subs --> Start["publish GroupChatStart"]
+    Start --> ManagerStart["manager.handle_start"]
+    ManagerStart --> Select["select_speaker"]
+    Select --> AgentTopic["向 speaker topic 发布请求"]
+    AgentTopic --> Container["ChatAgentContainer<br/>调用真实 ChatAgent"]
+    Container --> AgentResponse["发布 GroupChatAgentResponse"]
+    AgentResponse --> ManagerResponse["manager.handle_agent_response"]
+    ManagerResponse --> Term{"termination / max_turns?"}
+    Term -->|否| Select
+    Term -->|是| Stop["GroupChatTermination<br/>TaskResult"]
+      </pre></div>
       <p>Mermaid 源文件：<a href="groupchat-flow.mmd">groupchat-flow.mmd</a></p>
-      <h3>源码证据</h3>
-      <p><code>teams/_group_chat/_base_group_chat.py:40</code>、<code>teams/_group_chat/_round_robin_group_chat.py:16</code>、<code>teams/_group_chat/_selector_group_chat.py:50</code></p>
       <pre><code>class BaseGroupChat(Team, ABC, ComponentBase[BaseModel]):
-    """The base class for group chat teams."""
-
-class RoundRobinGroupChatManager(BaseGroupChatManager):
-    """A group chat manager that selects the next speaker in a round-robin fashion."""</code></pre>
+    """The base class for group chat teams."""</code></pre>
+      <table>
+        <thead><tr><th>GroupChat 类型</th><th>源码证据</th><th>选择 speaker 的方式</th></tr></thead>
+        <tbody>
+          <tr><td>RoundRobin</td><td><code>_round_robin_group_chat.py:72</code></td><td>按参与者顺序轮流发言，最容易解释和调试。</td></tr>
+          <tr><td>Selector</td><td><code>_selector_group_chat.py:50-52</code>、<code>:152</code></td><td>用模型或自定义 selector 选择下一位发言者，更灵活但可控性弱一些。</td></tr>
+          <tr><td>Swarm</td><td><code>_swarm_group_chat.py:82</code></td><td>偏 handoff 交接，适合由当前 Agent 决定交棒给谁。</td></tr>
+        </tbody>
+      </table>
+      <p>设计含义：GroupChat 是“Team API 到消息运行时的适配层”。这解释了为什么 AutoGen 的多 Agent 协作看起来像群聊，但底层实际是 topic、manager、container 和 runtime 的组合。</p>
     </section>
 
     <section>
-      <h2>核心设计思想</h2>
+      <h2>源码精读五：Model / Tool / Workbench 抽象边界</h2>
+      <p>AutoGen 把外部能力压到 Core 协议和 Ext 实现里：Core 定义 <code>ChatCompletionClient</code>、<code>BaseTool</code>、<code>Workbench</code>，Ext 再实现 OpenAI、MCP 等具体适配。这样 AgentChat 不直接绑定 provider。</p>
+      <p class="evidence">证据：<code>models/_model_client.py:209-242</code> 定义 <code>ChatCompletionClient.create/create_stream</code>；<code>tools/_base.py:96-179</code> 定义 <code>BaseTool.schema/run/run_json</code>；<code>tools/_workbench.py:78</code> 定义 <code>Workbench</code>；<code>autogen_ext/models/openai/_openai_client.py:1179</code> 实现 OpenAI client；<code>autogen_ext/tools/mcp/_workbench.py:47</code> 实现 MCP Workbench。</p>
+      <pre><code>class ChatCompletionClient(ComponentBase[BaseModel], ABC):
+    async def create(...)
+    def create_stream(...)
+
+class BaseTool(ABC, Tool, Generic[ArgsT, ReturnT], ComponentBase[BaseModel]):
+    async def run(...)</code></pre>
+      <p>设计含义：这是典型的 Ports and Adapters。Core 是端口，Ext 是适配器，AgentChat 依赖抽象而不是依赖 OpenAI/MCP 具体实现。</p>
+    </section>
+
+    <section>
+      <h2>核心设计思想和范式</h2>
       <div class="grid">
-        <div class="card"><strong>运行时优先</strong>先有消息、topic、runtime、handler，再有聊天 Agent。</div>
-        <div class="card"><strong>分层 API</strong>Core 给框架开发者，AgentChat 给应用开发者，Extensions 接生态，Studio 做可视化。</div>
-        <div class="card"><strong>消息驱动</strong><code>send_message</code> 处理点对点，<code>publish_message</code> 处理 topic 广播。</div>
-        <div class="card"><strong>状态和流式输出</strong>Agent 是 stateful，<code>run_stream</code> 输出中间事件和最终结果。</div>
-        <div class="card"><strong>可插拔生态</strong>模型、工具、MCP、代码执行都通过抽象接口接入。</div>
-        <div class="card"><strong>声明式组件</strong>Component + Pydantic config 支持序列化、Studio 和配置化加载。</div>
+        <div class="card"><strong>运行时优先</strong>先设计消息、topic、queue、handler，再包装聊天 Agent。证据集中在 <code>AgentRuntime</code> 和 <code>SingleThreadedAgentRuntime</code>。</div>
+        <div class="card"><strong>Actor / Event 模型</strong>Agent 是消息处理单元，<code>send_message</code> 和 <code>publish_message</code> 分别对应 RPC 和事件广播。</div>
+        <div class="card"><strong>声明式消息路由</strong><code>@message_handler</code>、<code>@event</code>、<code>@rpc</code> 把消息类型和处理函数绑定，降低调用方耦合。</div>
+        <div class="card"><strong>Template Method</strong><code>BaseChatAgent.run_stream</code> 固定外部运行协议，子类实现 <code>on_messages_stream</code>。</div>
+        <div class="card"><strong>Strategy</strong>RoundRobin、Selector、Swarm 都是在替换 speaker selection 策略。</div>
+        <div class="card"><strong>Ports and Adapters</strong>模型、工具、MCP、代码执行通过抽象接口接入，Ext 负责具体 provider。</div>
       </div>
     </section>
 
     <section>
       <h2>应用场景和 LangGraph 对比</h2>
-      <h3>AutoGen 更适合的应用场景</h3>
+      <h3>AutoGen 更适合的场景</h3>
       <div class="grid">
         <div class="card"><strong>多 Agent 研究协作</strong>把检索、阅读、总结、审查拆成多个 AssistantAgent，用 RoundRobin 或 SelectorGroupChat 组织对话。</div>
-        <div class="card"><strong>团队式聊天原型</strong>需要快速演示“多个专家一起讨论问题”时，AgentChat 的 Team API 比直接写底层图更快。</div>
+        <div class="card"><strong>团队式聊天原型</strong>需要快速演示“多个专家一起讨论问题”时，Team API 比直接写底层图更快。</div>
         <div class="card"><strong>人机协同流程</strong>UserProxyAgent、终止条件、流式事件适合做 human-in-the-loop 的聊天型应用。</div>
-        <div class="card"><strong>工具和代码执行任务</strong>AssistantAgent + Workbench + Code Executor 适合网页浏览、代码执行、文件处理等工具密集型任务。</div>
-        <div class="card"><strong>可视化原型和演示</strong>AutoGen Studio 适合把 Agent、Team、模型配置先可视化跑起来，再沉淀为代码。</div>
-        <div class="card"><strong>存量 AutoGen 系统维护</strong>AutoGen 已进入 maintenance mode，新项目需谨慎；但存量系统仍需要理解 Runtime、Team 和 Extension 边界。</div>
+        <div class="card"><strong>工具和代码执行任务</strong>AssistantAgent + Workbench + Code Executor 适合网页浏览、代码执行、文件处理等工具密集任务。</div>
+        <div class="card"><strong>可视化原型和演示</strong>Studio 适合先把 Agent、Team、模型配置跑起来，再沉淀成代码。</div>
+        <div class="card"><strong>存量系统维护</strong>项目进入 maintenance mode 后，新项目要谨慎，但存量 AutoGen 系统仍需要读懂 Runtime、Team 和 Ext 边界。</div>
       </div>
       <div class="quote">选型口径：如果目标是“多个聊天 Agent 通过消息协作”，AutoGen 表达直接；如果目标是“可恢复、可审计、可精确控制的状态流”，LangGraph 更合适。</div>
-
-      <h3>AutoGen vs LangGraph</h3>
       <table>
-        <thead><tr><th>维度</th><th>AutoGen</th><th>LangGraph</th><th>选型判断</th></tr></thead>
+        <thead><tr><th>维度</th><th>AutoGen</th><th>LangGraph</th><th>判断</th></tr></thead>
         <tbody>
           <tr><td>核心模型</td><td>AgentRuntime + Message + Team，偏 actor/message runtime。</td><td>StateGraph + Node + Edge + Checkpoint，偏状态机运行时。</td><td>对话协作优先 AutoGen；状态流控制优先 LangGraph。</td></tr>
           <tr><td>多 Agent 表达</td><td>RoundRobin、Selector、Swarm 等 Team 模式内建。</td><td>多 Agent 通常建模为节点、子图、条件边和共享状态。</td><td>想快速组织“谁发言”用 AutoGen；想明确“状态如何变”用 LangGraph。</td></tr>
           <tr><td>流程可控性</td><td>通过 manager、termination、topic 控制，语义偏群聊。</td><td>通过显式边、条件路由、interrupt、checkpoint 控制。</td><td>复杂分支、暂停恢复、审计回放更偏 LangGraph。</td></tr>
-          <tr><td>状态管理</td><td>Agent 自身有状态，Team/Manager 可保存状态，但不是以全局 StateGraph 为中心。</td><td>全局状态是第一等概念，节点读写状态，checkpoint 可持久化。</td><td>业务状态强约束时选 LangGraph。</td></tr>
-          <tr><td>工具生态</td><td>通过 autogen-ext 接模型、MCP、代码执行、GraphRAG。</td><td>通常复用 LangChain 工具生态，并在图节点中组合。</td><td>工具密集聊天原型 AutoGen 顺手；工程化组合 LangGraph 更稳。</td></tr>
-          <tr><td>项目状态</td><td>官方 README 标记 maintenance mode，适合学习和存量维护。</td><td>LangGraph 仍是活跃 Agent Runtime 方向。</td><td>新项目优先评估 LangGraph 或 Microsoft Agent Framework。</td></tr>
+          <tr><td>状态管理</td><td>Agent 自身有状态，Team/Manager 可保存状态，但全局状态不是第一入口。</td><td>全局状态是第一等概念，节点读写状态，checkpoint 可持久化。</td><td>业务状态强约束时选 LangGraph。</td></tr>
+          <tr><td>项目建议</td><td>适合学习 runtime 设计、原型、存量维护。</td><td>更适合新项目里的复杂 Agent Runtime。</td><td>新项目优先评估 LangGraph 或 Microsoft Agent Framework。</td></tr>
         </tbody>
       </table>
-
-      <h3>和其他框架的简要对比</h3>
-      <table>
-        <thead><tr><th>框架</th><th>一句话定位</th><th>更适合</th></tr></thead>
-        <tbody>
-          <tr><td>AutoGen</td><td>多 Agent 消息运行时 + Chat Team</td><td>学习多 Agent runtime、维护存量 AutoGen、做团队式聊天原型。</td></tr>
-          <tr><td>LangChain</td><td>LLM 应用组件库和 Runnable 生态</td><td>RAG、工具调用、模型/向量库/加载器集成。</td></tr>
-          <tr><td>LangGraph</td><td>状态图 Agent Runtime</td><td>复杂分支、循环、checkpoint、可恢复执行。</td></tr>
-          <tr><td>CrewAI</td><td>角色化 Agent 团队和任务编排</td><td>产品化多角色协作、研究报告、销售/运营自动化。</td></tr>
-        </tbody>
-      </table>
-      <div class="quote">一句话对比：AutoGen 更像“多 Agent 消息运行时”，LangGraph 更像“可控状态图”，CrewAI 更像“角色任务团队”，LangChain 更像“LLM 应用组件库”。</div>
     </section>
 
     <section class="panel">
       <h2>分享收束</h2>
-      <p>AutoGen 源码可以浓缩成一句话：Core 提供消息运行时，AgentChat 提供聊天 Agent 和 Team，Extensions 接入模型和工具，Studio 提供可视化入口。</p>
+      <p>AutoGen 源码最值得看的不是某个 prompt，而是它如何把多 Agent 系统拆成 Runtime、Agent、Message、Team、Model、Tool 几层。底层消息运行时提供通用能力，上层 AgentChat 提供好用入口，Extensions 把外部模型和工具接进来。</p>
       <p>分享讲解稿：<a href="share-guide.html">share-guide.html</a> / <a href="share-guide.md">share-guide.md</a></p>
     </section>
   </main>
