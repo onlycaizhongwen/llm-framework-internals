@@ -4,3 +4,6 @@
 [submodule "sources/langgraph"]
 	path = sources/langgraph
 	url = https://github.com/langchain-ai/langgraph.git
+[submodule "sources/crewai"]
+	path = sources/crewai
+	url = https://github.com/crewAIInc/crewAI.git

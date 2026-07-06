@@ -44,6 +44,26 @@ d57a74f950b87bfb9cb51240cc8dccf34b5edfaa
 - `share-guide.html`：面向分享的讲解稿 HTML
 - `share-guide.md`：面向分享的讲解稿 Markdown
 
+### CrewAI
+
+分析文档：`docs/crewai-source-analysis/`
+
+源码入口：`sources/crewai/`
+
+当前固定源码提交：
+
+```text
+2b90117e887ef68a22ccf9552a58ffaf96de1fc4
+```
+
+- `index.html`：CrewAI 源码架构分析主阅读页
+- `index.md`：Markdown 版分析底稿
+- `architecture.mmd`：总架构图
+- `crew-flow.mmd`：Crew 执行流程图
+- `flow-flow.mmd`：Flow 执行流程图
+- `share-guide.html`：面向分享的讲解稿 HTML
+- `share-guide.md`：面向分享的讲解稿 Markdown
+
 ## 仓库约定
 
 - 本仓库优先保存分析文档，并通过 `sources/` 下的 Git submodule 固定上游源码版本。

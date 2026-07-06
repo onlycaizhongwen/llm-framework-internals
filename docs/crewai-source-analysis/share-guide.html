@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CrewAI 源码分享讲解稿</title>
+  <style>
+    body { margin:0; font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif; background:#fbfbfd; color:#1f2937; line-height:1.72; }
+    header { background:#fff; border-bottom:1px solid #d9dee8; padding:38px 24px 26px; }
+    main,.wrap { max-width:1060px; margin:0 auto; }
+    main { padding:26px 24px 64px; }
+    h1 { margin:0 0 10px; font-size:clamp(30px,4vw,46px); line-height:1.18; letter-spacing:0; }
+    h2 { margin:34px 0 12px; padding-top:10px; border-top:1px solid #d9dee8; font-size:25px; }
+    h3 { margin:24px 0 8px; font-size:19px; }
+    .lead { max-width:840px; color:#667085; font-size:18px; }
+    .talk { background:#eff6ff; border-left:4px solid #2563eb; padding:14px 16px; margin:16px 0; border-radius:0 8px 8px 0; }
+    .panel,.item { background:#fff; border:1px solid #d9dee8; border-radius:8px; padding:18px; margin:16px 0; }
+    table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #d9dee8; margin:16px 0; }
+    th,td { border-bottom:1px solid #d9dee8; padding:11px 12px; text-align:left; vertical-align:top; }
+    th { background:#f3f6fb; }
+    code { font-family:Consolas,"JetBrains Mono",monospace; font-size:.92em; }
+    pre { overflow:auto; background:#101828; color:#e5e7eb; border-radius:8px; padding:15px; }
+    .timeline { display:grid; gap:10px; margin:16px 0; }
+    .item strong { color:#2563eb; }
+    a { color:#2563eb; text-decoration:none; }
+    @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:20px 18px 48px;} table{display:block; overflow-x:auto;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>CrewAI 源码分享讲解稿</h1>
+      <p class="lead">面向分享的讲法：定位 CrewAI，再讲 Crews 和 Flows 两条源码主线。</p>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>开场定位</h2>
+      <div class="talk">CrewAI 是一个多 Agent 自动化框架，但它不是只有 Agent。源码里最重要的是两条主线：Crews 负责角色化 Agent 协作，Flows 负责事件驱动流程控制。Crew 适合自治协作，Flow 适合确定性编排。</div>
+    </section>
+    <section>
+      <h2>目录怎么讲</h2>
+      <table>
+        <thead><tr><th>目录</th><th>分享口径</th></tr></thead>
+        <tbody>
+          <tr><td><code>lib/crewai</code></td><td>主框架包，包含 Agent、Task、Crew、Flow、LLM、memory、events。</td></tr>
+          <tr><td><code>lib/crewai-tools</code></td><td>工具生态和 RAG/外部集成。</td></tr>
+          <tr><td><code>lib/crewai-files</code></td><td>文件输入、上传、解析和处理。</td></tr>
+          <tr><td><code>lib/cli</code></td><td>创建项目、运行 crew/flow、部署等命令行。</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Crews 主流程</h2>
+      <pre><code>Crew.kickoff()
+  -> process: sequential / hierarchical
+  -> _execute_tasks()
+  -> Task.execute_sync / execute_async
+  -> Task._execute_core()
+  -> Agent.execute_task()
+  -> agent_executor.invoke()
+  -> LLM.call() + tools</code></pre>
+      <div class="talk">Crews 不是图运行时，而是任务编排器。Crew 决定任务怎么排，Task 定义执行单元，Agent 负责拿角色、目标、上下文和工具去完成任务。</div>
+    </section>
+    <section>
+      <h2>Flows 主流程</h2>
+      <pre><code>@start / @listen / @router
+  -> Flow.kickoff()
+  -> kickoff_async()
+  -> _execute_start_method()
+  -> _execute_method()
+  -> _execute_listeners()
+  -> final output</code></pre>
+      <div class="talk">Flow 是确定性流程控制层。它用装饰器把普通 Python 方法声明成入口、监听器和路由节点。</div>
+    </section>
+    <section>
+      <h2>核心代码证据</h2>
+      <h3>Crew</h3>
+      <pre><code>class Crew(FlowTrackable, BaseModel):
+    """
+    Represents a group of agents, defining how they should collaborate and the
+    tasks they should perform.
+    """</code></pre>
+      <h3>Task -> Agent</h3>
+      <pre><code>result = agent.execute_task(
+    task=self,
+    context=context,
+    tools=tools,
+)</code></pre>
+      <h3>Flow DSL</h3>
+      <pre><code>def start(condition=None): ...
+def listen(condition): ...
+def router(condition=None, *, emit=None): ...</code></pre>
+    </section>
+    <section>
+      <h2>15 分钟分享节奏</h2>
+      <div class="timeline">
+        <div class="item"><strong>2 分钟：</strong>定位 CrewAI，强调 Crews + Flows。</div>
+        <div class="item"><strong>3 分钟：</strong>讲目录结构和 workspace。</div>
+        <div class="item"><strong>4 分钟：</strong>讲 Crews 执行链路。</div>
+        <div class="item"><strong>3 分钟：</strong>讲 Flows 装饰器和事件流。</div>
+        <div class="item"><strong>3 分钟：</strong>讲设计思想和与 LangChain/LangGraph 的差异。</div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>收束句</h2>
+      <div class="talk">CrewAI 的源码主线可以浓缩成一句话：Crew 把角色化 Agent 和任务组织成协作团队，Flow 把自动化流程组织成事件驱动链路，LLM、tools、memory、events 都是围绕这两条主线服务的横切能力。</div>
+      <p>完整分析页：<a href="index.html">index.html</a></p>
+    </section>
+  </main>
+</body>
+</html>

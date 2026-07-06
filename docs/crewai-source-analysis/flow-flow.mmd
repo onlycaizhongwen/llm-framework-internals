@@ -1,0 +1,16 @@
+flowchart TD
+    Start([Flow.kickoff]) --> Async["kickoff_async"]
+    Async --> State["initialize / restore state"]
+    State --> EmitStart["emit FlowStartedEvent"]
+    EmitStart --> Starts["find @start methods"]
+    Starts --> ExecStart["_execute_start_method"]
+    ExecStart --> Method["_execute_method"]
+    Method --> Router{"router result?"}
+    Router -->|yes| RouteTrigger["emit route label trigger"]
+    Router -->|no| MethodTrigger["emit method-name trigger"]
+    RouteTrigger --> Listeners["_execute_listeners"]
+    MethodTrigger --> Listeners
+    Listeners --> More{"downstream listeners?"}
+    More -->|yes| Method
+    More -->|no| EmitEnd["emit FlowFinishedEvent"]
+    EmitEnd --> End([return final output])

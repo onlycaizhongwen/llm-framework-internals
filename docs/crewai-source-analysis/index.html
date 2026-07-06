@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CrewAI 源码架构分析</title>
+  <style>
+    :root { --bg:#f7f8fb; --panel:#fff; --ink:#20242c; --muted:#5b6472; --line:#dfe4ec; --accent:#0f766e; --accent2:#7c3aed; --code:#111827; --codeink:#e5e7eb; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif; background:var(--bg); color:var(--ink); line-height:1.72; }
+    header { background:#fff; border-bottom:1px solid var(--line); padding:40px 24px 28px; }
+    main,.hero { max-width:1120px; margin:0 auto; }
+    main { padding:28px 24px 64px; }
+    h1 { margin:0 0 12px; font-size:clamp(30px,4vw,48px); line-height:1.18; letter-spacing:0; }
+    h2 { margin:34px 0 12px; padding-top:10px; border-top:1px solid var(--line); font-size:26px; }
+    h3 { margin:24px 0 8px; font-size:20px; }
+    p { margin:10px 0; }
+    .lead { max-width:900px; color:var(--muted); font-size:18px; }
+    .badge-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+    .badge { border:1px solid var(--line); background:#f9fafb; border-radius:999px; padding:5px 12px; font-size:13px; color:var(--muted); }
+    .panel,.card { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    .panel { padding:20px; margin:18px 0; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin:18px 0; }
+    .card { padding:16px; }
+    .card strong { display:block; color:var(--accent); margin-bottom:6px; }
+    table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); margin:16px 0; }
+    th,td { padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:top; text-align:left; }
+    th { background:#eef7f6; color:#134e4a; }
+    tr:last-child td { border-bottom:0; }
+    code { font-family:Consolas,"JetBrains Mono",monospace; font-size:.92em; }
+    pre { overflow:auto; background:var(--code); color:var(--codeink); border-radius:8px; padding:16px; }
+    pre code { color:inherit; }
+    .quote { border-left:4px solid var(--accent); background:#ecfdf5; padding:12px 16px; margin:16px 0; color:#134e4a; }
+    .flow { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+    .step { background:#f3f4f6; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:14px; }
+    a { color:var(--accent2); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:20px 18px 48px;} table{display:block; overflow-x:auto;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>CrewAI 源码架构分析</h1>
+      <p class="lead">参考 LangChain 分析方式：先架构，后脉络。CrewAI 的源码主线是 Crews 多 Agent 协作和 Flows 事件驱动工作流。</p>
+      <div class="badge-row">
+        <span class="badge">源码：sources/crewai</span>
+        <span class="badge">提交：2b90117e887ef68a22ccf9552a58ffaf96de1fc4</span>
+        <span class="badge">HTML 分享优先</span>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>总体结论</h2>
+      <p>CrewAI 是一个面向生产级多 Agent 自动化的 Python 框架。它的源码主线不是单纯的“Agent 调 LLM”，而是两套互补抽象：<strong>Crews</strong> 用 <code>Crew + Agent + Task + Process</code> 表达角色化多 Agent 协作，<strong>Flows</strong> 用 <code>Flow + @start/@listen/@router</code> 表达事件驱动工作流。</p>
+      <div class="quote">分享时可以这样讲：Crew 解决“谁来做任务”，Flow 解决“流程怎么走”。</div>
+    </section>
+
+    <section>
+      <h2>最高层分层</h2>
+      <table>
+        <thead><tr><th>层级</th><th>目录/文件</th><th>主要职责</th></tr></thead>
+        <tbody>
+          <tr><td>Workspace</td><td><code>pyproject.toml</code>、<code>lib/*</code></td><td>主包、工具包、文件包、CLI、公共 core。</td></tr>
+          <tr><td>Crew 编排层</td><td><code>crew.py</code></td><td>管理 agents、tasks、process、memory、callbacks、kickoff。</td></tr>
+          <tr><td>Agent 执行层</td><td><code>agent/core.py</code>、<code>agents/crew_agent_executor.py</code></td><td>组装 prompt、knowledge、tools，并驱动 LLM/tool loop。</td></tr>
+          <tr><td>Task 单元层</td><td><code>task.py</code></td><td>任务描述、上下文、结构化输出、guardrail、同步/异步执行。</td></tr>
+          <tr><td>Flow 工作流层</td><td><code>flow/runtime</code>、<code>flow/dsl</code></td><td>状态、事件方法图、start/listen/router 装饰器。</td></tr>
+          <tr><td>LLM/Tool 层</td><td><code>llm.py</code>、<code>tools/*</code></td><td>模型 provider 路由、工具基类和结构化工具。</td></tr>
+          <tr><td>横切能力</td><td><code>events</code>、<code>memory</code>、<code>knowledge</code></td><td>事件、可观测、记忆、知识、安全和钩子。</td></tr>
+        </tbody>
+      </table>
+      <p>架构图：<a href="architecture.mmd">architecture.mmd</a></p>
+    </section>
+
+    <section>
+      <h2>Crews 主流程</h2>
+      <div class="flow">
+        <span class="step">Crew.kickoff</span><span class="step">process</span><span class="step">_execute_tasks</span><span class="step">Task.execute</span><span class="step">Agent.execute_task</span><span class="step">agent_executor.invoke</span><span class="step">LLM.call + tools</span><span class="step">CrewOutput</span>
+      </div>
+      <p>流程图：<a href="crew-flow.mmd">crew-flow.mmd</a></p>
+      <h3>源码证据</h3>
+      <p><code>crew.py:159</code></p>
+      <pre><code>class Crew(FlowTrackable, BaseModel):
+    """
+    Represents a group of agents, defining how they should collaborate and the
+    tasks they should perform.
+    """</code></pre>
+      <p><code>crew.py:966</code></p>
+      <pre><code>if self.process == Process.sequential:
+    result = self._run_sequential_process()
+elif self.process == Process.hierarchical:
+    result = self._run_hierarchical_process()</code></pre>
+      <p><code>task.py:762</code></p>
+      <pre><code>result = agent.execute_task(
+    task=self,
+    context=context,
+    tools=tools,
+)</code></pre>
+      <p><code>agent/core.py:846</code></p>
+      <pre><code>invoke_result = self.agent_executor.invoke(
+    {
+        "input": task_prompt,
+        "tool_names": self.agent_executor.tools_names,
+        "tools": self.agent_executor.tools_description,
+    }
+)</code></pre>
+    </section>
+
+    <section>
+      <h2>Flows 主流程</h2>
+      <div class="flow">
+        <span class="step">@start</span><span class="step">@listen</span><span class="step">@router</span><span class="step">Flow.kickoff</span><span class="step">kickoff_async</span><span class="step">_execute_start_method</span><span class="step">_execute_listeners</span>
+      </div>
+      <p>流程图：<a href="flow-flow.mmd">flow-flow.mmd</a></p>
+      <p><code>flow/runtime/__init__.py:428</code></p>
+      <pre><code>class Flow(BaseModel, Generic[T], metaclass=FlowMeta):
+    """Base class for all flows."""</code></pre>
+      <p><code>flow/dsl/_start.py:18</code>、<code>flow/dsl/_listen.py:18</code>、<code>flow/dsl/_router.py:97</code></p>
+      <pre><code>def start(condition=None): ...
+def listen(condition): ...
+def router(condition=None, *, emit=None): ...</code></pre>
+    </section>
+
+    <section>
+      <h2>核心设计思想</h2>
+      <div class="grid">
+        <div class="card"><strong>业务语义优先</strong>顶层就是 Agent、Task、Crew、Flow，贴近自动化业务表达。</div>
+        <div class="card"><strong>双主线架构</strong>Crews 偏自治协作，Flows 偏确定性控制。</div>
+        <div class="card"><strong>分层执行</strong>Crew 编排 Task，Task 委派 Agent，Agent 调 Executor/LLM/tools。</div>
+        <div class="card"><strong>装饰器 DSL</strong>Flow 用 @start/@listen/@router 把方法变成流程节点。</div>
+        <div class="card"><strong>事件总线横切</strong>CrewAIEventsBus 支撑 tracing、streaming、telemetry 和 hooks。</div>
+        <div class="card"><strong>适配器生态</strong>LLM 适配 provider/LiteLLM，Tool 标准化外部能力。</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>分享收束</h2>
+      <p>CrewAI 源码可以浓缩成一句话：Crew 把角色化 Agent 和任务组织成协作团队，Flow 把自动化流程组织成事件驱动链路，LLM、tools、memory、events 都是围绕这两条主线服务的横切能力。</p>
+      <p>分享讲解稿：<a href="share-guide.html">share-guide.html</a> / <a href="share-guide.md">share-guide.md</a></p>
+    </section>
+  </main>
+</body>
+</html>

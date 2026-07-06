@@ -1,0 +1,24 @@
+flowchart TD
+    Start([Crew.kickoff]) --> Prepare["prepare_kickoff\ninputs + files"]
+    Prepare --> Process{"process"}
+    Process -->|sequential| Seq["_run_sequential_process"]
+    Process -->|hierarchical| Manager["_create_manager_agent"]
+    Manager --> Hier["_run_hierarchical_process"]
+    Seq --> Execute["_execute_tasks"]
+    Hier --> Execute
+    Execute --> Loop{"for each task"}
+    Loop --> Context["build task context"]
+    Context --> Async{"async_execution?"}
+    Async -->|yes| Future["Task.execute_async"]
+    Async -->|no| Sync["Task.execute_sync"]
+    Future --> TaskCore["Task._execute_core"]
+    Sync --> TaskCore
+    TaskCore --> Agent["Agent.execute_task"]
+    Agent --> Prompt["prepare prompt\nknowledge + tools"]
+    Prompt --> Executor["agent_executor.invoke"]
+    Executor --> LLM["LLM.call + tool loop"]
+    LLM --> Output["TaskOutput"]
+    Output --> Next{"more tasks?"}
+    Next -->|yes| Loop
+    Next -->|no| CrewOutput["CrewOutput"]
+    CrewOutput --> End([return])

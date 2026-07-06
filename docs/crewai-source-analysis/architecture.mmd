@@ -1,0 +1,23 @@
+flowchart TB
+    User["Application / Developer"] --> Crews["Crews API\nCrew / Agent / Task"]
+    User --> Flows["Flows API\nFlow + @start/@listen/@router"]
+    Crews --> Crew["Crew\nprocess orchestration"]
+    Crew --> Process["Process\nsequential / hierarchical"]
+    Crew --> Task["Task\nexecution unit"]
+    Task --> Agent["Agent\nrole / goal / backstory"]
+    Agent --> Executor["AgentExecutor / CrewAgentExecutor\nReAct loop"]
+    Executor --> LLM["LLM\nprovider routing + call"]
+    Executor --> Tools["BaseTool / CrewStructuredTool"]
+    Crew --> Memory["memory / knowledge / cache"]
+    Crew --> Events["CrewAIEventsBus\nobservability + hooks"]
+    Flows --> FlowRuntime["Flow runtime\nstate + method graph"]
+    FlowRuntime --> Decorators["DSL decorators\n@start / @listen / @router"]
+    FlowRuntime --> FlowState["Flow state\nBaseModel / dict"]
+    FlowRuntime --> FlowPersistence["checkpoint / @persist / restore"]
+    FlowRuntime --> Events
+    Tools --> ToolPackages["crewai-tools\nRAG and integrations"]
+    LLM --> Providers["native providers / LiteLLM"]
+    CLI["CLI"] --> Crews
+    CLI --> Flows
+    Core["crewai-core"] --> CLI
+    Files["crewai-files"] --> Task
