@@ -1,0 +1,9 @@
+flowchart LR
+    User["用户请求<br/>例如：继续分析 mem0 源码"] --> Graph["LangGraph StateGraph<br/>负责流程状态和节点流转"]
+    Graph --> Load["load_memory 节点<br/>调用 mem0.search<br/>为什么：进入任务前取回长期上下文"]
+    Load --> Agent["agent / tool 节点<br/>结合 state + memories 做推理或执行"]
+    Agent --> Decide{"流程是否结束?<br/>LangGraph 根据 state 分支"}
+    Decide -->|未结束| Agent
+    Decide -->|结束| Save["save_memory 节点<br/>调用 mem0.add<br/>为什么：把新偏好、决策、任务状态沉淀为长期 facts"]
+    Save --> Store["mem0 Memory Layer<br/>按 user_id / agent_id / run_id 隔离保存"]
+    Store --> Next["下次会话<br/>mem0.search 再把相关记忆取回"]

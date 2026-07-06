@@ -191,6 +191,49 @@ flowchart TD
     </section>
 
     <section>
+      <h2>真实例子怎么讲</h2>
+      <div class="talk">可以用一句用户输入串起写入和检索：“以后帮我分析源码时，尽量用中文说明，先讲架构再讲主流程。我最近在准备 mem0 和 LangGraph 的源码分享。”</div>
+      <pre><code>可能抽取出的 memories:
+- 用户偏好用中文解释源码。
+- 用户偏好源码分享先讲架构，再讲主流程。
+- 用户正在准备 mem0 和 LangGraph 的源码分享。</code></pre>
+      <div class="talk">讲法：直接存原文会带入聊天噪音；mem0 的价值是让 LLM 抽取长期 facts，再通过 embedding、hash 去重、history 和 entity linking 变成可检索记忆。后续搜索时，semantic 负责语义召回，BM25 强化 mem0/LangGraph 关键词，entity boost 提高同一项目相关 memory 的排名。</div>
+    </section>
+
+    <section>
+      <h2>局限性和使用边界</h2>
+      <div class="talk">这部分建议主动讲：长期记忆不是“把所有聊天都存进去”，它是一层状态系统，所以要考虑质量、隐私、隔离和过期。</div>
+      <table>
+        <thead><tr><th>边界</th><th>讲法</th></tr></thead>
+        <tbody>
+          <tr><td>抽取误差</td><td>LLM 可能误抽或漏抽，关键业务记忆要可审计、可回滚。</td></tr>
+          <tr><td>记忆污染</td><td>寒暄、临时上下文、敏感信息不应该默认进入长期 memory。</td></tr>
+          <tr><td>作用域隔离</td><td>必须按 <code>user_id</code>、<code>agent_id</code>、<code>run_id</code> 隔离。</td></tr>
+          <tr><td>隐私治理</td><td>长期 memory 需要删除、导出、脱敏和保留周期策略。</td></tr>
+          <tr><td>成本控制</td><td>semantic、BM25、entity、reranker 都有成本，生产落地应逐步开启。</td></tr>
+        </tbody>
+      </table>
+      <div class="talk">收束句：mem0 的价值不是让系统“记得更多”，而是让系统“记得更值得记住的东西”。</div>
+    </section>
+
+    <section>
+      <h2>和 LangGraph 怎么组合</h2>
+      <p>Mermaid 源文件：<a href="langgraph-combo.mmd">langgraph-combo.mmd</a></p>
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+    User["用户请求<br/>例如：继续分析 mem0 源码"] --> Graph["LangGraph StateGraph<br/>负责流程状态和节点流转"]
+    Graph --> Load["load_memory 节点<br/>调用 mem0.search<br/>进入任务前取回长期上下文"]
+    Load --> Agent["agent / tool 节点<br/>结合 state + memories 执行"]
+    Agent --> Decide{"流程是否结束?"}
+    Decide -->|未结束| Agent
+    Decide -->|结束| Save["save_memory 节点<br/>调用 mem0.add<br/>沉淀新偏好、决策、任务状态"]
+    Save --> Store["mem0 Memory Layer<br/>跨会话长期记忆"]
+    Store --> Next["下次会话<br/>再由 mem0.search 取回"]
+      </pre></div>
+      <div class="talk">讲法：LangGraph 的 state 解决“这次流程怎么走”，mem0 的 memory 解决“下次还要记住什么”。组合时，在图入口先 <code>mem0.search</code> 取回长期上下文，在图结束或关键节点后 <code>mem0.add</code> 沉淀新的长期 facts。不要把所有 state 都写入 mem0，只保存下次会话仍然有价值的事实。</div>
+    </section>
+
+    <section>
       <h2>详细演讲结构</h2>
       <div class="timeline">
         <div class="item"><strong>第一部分：为什么需要 mem0。</strong>从普通 RAG 和聊天历史的局限讲起：聊天历史太吵，RAG 文档太静态，Agent 需要的是跨会话、可检索、按用户/Agent/运行隔离的长期记忆。</div>
@@ -198,8 +241,9 @@ flowchart TD
         <div class="item"><strong>第三部分：写入链路精读。</strong>从 <code>Memory.add</code> 讲到 <code>_add_to_vector_store</code>：校验作用域、构造 prompt、LLM 抽 facts、批量 embedding、hash 去重、vector insert、history、entity linking。</div>
         <div class="item"><strong>第四部分：检索链路精读。</strong>从 <code>Memory.search</code> 讲到 <code>_search_vector_store</code>：query 预处理、semantic search、BM25、entity boost、<code>score_and_rank</code>、可选 reranker。</div>
         <div class="item"><strong>第五部分：为什么这么设计。</strong>展开 pipeline、Ports and Adapters、Factory、Hybrid Retrieval、Session-scoped Memory、Audit Trail。</div>
-        <div class="item"><strong>第六部分：和其他框架放在一起看。</strong>mem0 解决“记住什么”，AutoGen 解决“多 Agent 怎么协作”，LangGraph 解决“状态流程怎么可控”，LangChain 解决“LLM 组件怎么搭”。</div>
-        <div class="item"><strong>第七部分：落地建议。</strong>新项目可以把 mem0 当成外部 memory layer 接到 Agent 工作流里；已有项目先从 user preference、recent task context、customer history 这类高价值记忆开始。</div>
+        <div class="item"><strong>第六部分：真实例子和边界。</strong>用一句用户输入串起 add/search，再主动讲抽取误差、记忆污染、作用域隔离、隐私治理和成本控制。</div>
+        <div class="item"><strong>第七部分：和其他框架放在一起看。</strong>mem0 解决“记住什么”，AutoGen 解决“多 Agent 怎么协作”，LangGraph 解决“状态流程怎么可控”，LangChain 解决“LLM 组件怎么搭”。</div>
+        <div class="item"><strong>第八部分：落地建议。</strong>新项目可以把 mem0 当成外部 memory layer 接到 Agent 工作流里；已有项目先从 user preference、recent task context、customer history 这类高价值记忆开始。</div>
       </div>
     </section>
 

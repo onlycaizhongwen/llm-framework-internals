@@ -257,6 +257,66 @@ flowchart TD
       <div class="quote">一句话选型：如果问题是“Agent 要记住什么”，看 mem0；如果问题是“多个 Agent 怎么协作”，看 AutoGen；如果问题是“流程状态怎么可控流转”，看 LangGraph。</div>
     </section>
 
+    <section>
+      <h2>真实例子：从一句话到可检索记忆</h2>
+      <p>假设用户在代码助手里说：“以后帮我分析源码时，尽量用中文说明，先讲架构再讲主流程。我最近在准备 mem0 和 LangGraph 的源码分享。”</p>
+      <p>如果直接把整句话存进向量库，后面会混入“以后”“最近”“帮我”等聊天噪音。mem0 更关注把这句话沉淀成长期 facts。</p>
+      <pre><code>原始消息
+  -> LLM 抽取长期 facts
+  -> embed_batch
+  -> hash 去重
+  -> vector_store.insert
+  -> history + entity linking</code></pre>
+      <p>可能沉淀出的 memories：</p>
+      <pre><code>[
+  {"memory": "用户偏好用中文解释源码。"},
+  {"memory": "用户偏好源码分享先讲架构，再讲主流程。"},
+  {"memory": "用户正在准备 mem0 和 LangGraph 的源码分享。"}
+]</code></pre>
+      <div class="explain">
+        <strong>为什么这个例子重要：</strong>它能把写入和检索两条源码链路讲活。后续用户问“我上次准备的框架分享讲到哪了？”时，semantic search 召回语义相关 memory，BM25 强化 <code>mem0</code>、<code>LangGraph</code> 这类精确词，entity boost 把同一项目或框架相关记忆往前推。
+      </div>
+    </section>
+
+    <section>
+      <h2>局限性和使用边界</h2>
+      <table>
+        <thead><tr><th>风险 / 边界</th><th>为什么存在</th><th>落地建议</th></tr></thead>
+        <tbody>
+          <tr><td>LLM 事实抽取可能误抽或漏抽</td><td>写入质量依赖 prompt、模型能力和上下文</td><td>关键业务记忆增加人工确认、置信度或回滚机制</td></tr>
+          <tr><td>不是所有聊天都应该进入 memory</td><td>临时上下文、寒暄、敏感信息会污染长期记忆</td><td>只沉淀偏好、约束、长期状态、关键决策和客户历史</td></tr>
+          <tr><td>记忆需要作用域隔离</td><td>用户、Agent、run 混在一起会造成记忆串线</td><td>强制传 <code>user_id</code>、<code>agent_id</code> 或 <code>run_id</code></td></tr>
+          <tr><td>长期记忆涉及隐私治理</td><td>memory 可能包含客户信息、偏好、健康或财务内容</td><td>提供删除、导出、审计、脱敏和保留周期策略</td></tr>
+          <tr><td>混合检索增加成本和复杂度</td><td>semantic、BM25、entity、reranker 都有额外计算或存储成本</td><td>默认先开 semantic + keyword，关键场景再加 entity/reranker</td></tr>
+          <tr><td>记忆过期和冲突需要治理</td><td>用户偏好和任务状态会变化，旧记忆可能不再正确</td><td>结合 update/delete、history 和时间字段处理过期事实</td></tr>
+        </tbody>
+      </table>
+      <div class="quote">讲这部分不是为了削弱 mem0，而是为了说明：长期记忆是一层带治理责任的状态系统，不是无脑追加的向量库。</div>
+    </section>
+
+    <section>
+      <h2>和 LangGraph 怎么组合</h2>
+      <p>LangGraph 和 mem0 适合互补：LangGraph 管“这次任务怎么流转”，mem0 管“跨会话应该记住什么”。</p>
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+    User["用户请求<br/>例如：继续分析 mem0 源码"] --> Graph["LangGraph StateGraph<br/>负责流程状态和节点流转"]
+    Graph --> Load["load_memory 节点<br/>调用 mem0.search<br/>为什么：进入任务前取回长期上下文"]
+    Load --> Agent["agent / tool 节点<br/>结合 state + memories 做推理或执行"]
+    Agent --> Decide{"流程是否结束?<br/>LangGraph 根据 state 分支"}
+    Decide -->|未结束| Agent
+    Decide -->|结束| Save["save_memory 节点<br/>调用 mem0.add<br/>为什么：把新偏好、决策、任务状态沉淀为长期 facts"]
+    Save --> Store["mem0 Memory Layer<br/>按 user_id / agent_id / run_id 隔离保存"]
+    Store --> Next["下次会话<br/>mem0.search 再把相关记忆取回"]
+      </pre></div>
+      <div class="explain">
+        <strong>讲解重点：</strong>LangGraph 的 <code>state</code> 是单次流程内的显式状态，适合控制节点、分支、checkpoint 和恢复；mem0 的 <code>memory</code> 是跨会话长期事实，适合保存用户偏好、项目背景、关键决策和历史约束。组合时可以在图入口加 <code>load_memory</code> 节点，在图结束或关键节点后加 <code>save_memory</code> 节点。
+        <ul>
+          <li><strong>为什么不是把所有 state 写入 mem0：</strong>LangGraph state 里有大量临时变量和中间结果，只有下次会话仍有价值的 facts 才适合沉淀为 memory。</li>
+          <li><strong>Mermaid 源文件：</strong><a href="langgraph-combo.mmd">langgraph-combo.mmd</a></li>
+        </ul>
+      </div>
+    </section>
+
     <section class="panel">
       <h2>分享收束</h2>
       <p>mem0 源码最值得看的不是某个 provider，而是它如何把长期记忆拆成事实抽取、向量写入、历史记录、实体链接、混合检索和可选 rerank。读懂 <code>Memory.add</code> 和 <code>Memory.search</code> 两条主线，就读懂了 mem0 的核心设计。</p>
