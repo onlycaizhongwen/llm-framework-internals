@@ -34,6 +34,28 @@ Library Memory / FastAPI Server / MemoryClient Cloud SDK / CLI
 
 ## 4. 源码精读口径
 
+### 4.0 图怎么讲，为什么这么设计
+
+架构图不要只按节点念一遍。推荐这样讲：
+
+> 先看入口：应用、Agent、CLI、REST 都可以用 mem0。再看核心：这些入口最终都会落到 Memory core。Memory core 不是模型调用器，而是长期记忆编排器，负责把 add 写入和 search 检索两条链路组织起来。底部的 LLM、Embedding、VectorStore、Reranker 是可替换 provider，所以源码用 Factory 和抽象基类隔离它们。
+
+add 图可以这样讲：
+
+> 这条链路回答“什么内容值得长期保存”。mem0 不直接存聊天原文，而是先结合最近消息和已有记忆，让 LLM 抽取事实，再做 embedding、hash 去重、vector insert、history 和 entity linking。这样做是为了把聊天噪音变成稳定 facts。
+
+search 图可以这样讲：
+
+> 这条链路回答“如何把长期记忆找回来”。mem0 不只做向量检索，而是融合 semantic、BM25 keyword、entity boost。原因是长期记忆里具体的人、地点、项目、偏好很重要，只靠 embedding 可能语义相近但实体不准。
+
+如果听众只看图，不看讲稿，也应该能读出“为什么这么干”。所以图里的节点建议按“动作 + 目的”讲，例如：
+
+- `Memory.add`：不是“保存消息”，而是“把对话提炼成长期 facts”。
+- `LLM 事实抽取`：目的不是炫技，而是过滤聊天噪音。
+- `hash 去重`：目的不是优化性能，而是避免重复 facts 污染长期记忆。
+- `score_and_rank`：目的不是简单排序，而是融合 semantic、BM25、entity 三类信号。
+- `optional reranker`：目的不是默认加复杂度，而是在高质量排序场景里用额外成本换精度。
+
 ### 4.1 Memory 初始化
 
 证据链：
@@ -122,13 +144,96 @@ Library Memory / FastAPI Server / MemoryClient Cloud SDK / CLI
 
 > 如果问题是“Agent 要记住什么”，看 mem0；如果问题是“多个 Agent 怎么协作”，看 AutoGen；如果问题是“流程状态怎么可控流转”，看 LangGraph。
 
-## 7. 15 分钟分享节奏
+## 7. 详细演讲结构
 
-1. 2 分钟：讲 mem0 定位，强调它是 memory layer。
-2. 3 分钟：讲架构分层：Memory core、provider 抽象、存储检索、产品入口。
-3. 4 分钟：精读 `Memory.add` 写入流程。
-4. 3 分钟：精读 `Memory.search` 混合检索流程。
-5. 3 分钟：讲设计范式、应用场景和框架对比。
+不需要强行压缩到 15 分钟，可以按 35 到 60 分钟展开。
+
+### 7.1 为什么需要 mem0
+
+先从问题出发：LLM 本身没有长期记忆，聊天历史又太吵、太长、太贵；普通 RAG 更适合静态文档，不适合持续变化的用户偏好、任务状态、客户历史。mem0 的价值是把这些动态信息沉淀成可检索 memory。
+
+可以举例：
+
+- 用户偏好：“以后代码解释用中文，少讲概念，多讲源码路径。”
+- 客服历史：“这个客户上次反馈过登录失败，偏好邮件沟通。”
+- Agent 任务：“当前项目在分析 LLM 框架源码，已完成 AutoGen 和 mem0。”
+
+### 7.2 整体架构
+
+这部分慢一点讲图：
+
+1. 入口层：Library、Server、Client、CLI。
+2. Memory core：`Memory.add` 和 `Memory.search`。
+3. Provider 抽象：LLM、Embedding、VectorStore、Reranker。
+4. 辅助存储：SQLite history、entity store。
+
+过渡句：
+
+> 接下来不要继续看目录，我们直接沿两条最重要的源码路径走：写入路径和检索路径。
+
+### 7.3 写入链路精读
+
+讲解顺序：
+
+1. `Memory.add` 负责参数校验和作用域构造。
+2. `_build_filters_and_metadata` 要求至少有 `user_id`、`agent_id`、`run_id` 之一，避免记忆串线。
+3. `_add_to_vector_store` 读取最近消息和已有 memory。
+4. `generate_additive_extraction_prompt` 构造事实抽取 prompt。
+5. LLM 返回 JSON memories。
+6. `embed_batch` 批量向量化 facts。
+7. hash 去重，避免重复写入。
+8. `vector_store.insert` 持久化。
+9. `SQLiteManager.batch_add_history` 记录审计。
+10. `extract_entities_batch` 建立 entity -> memory_id 链接。
+
+为什么这么设计：
+
+> 写入链路的目标不是“保存全部聊天”，而是“提炼长期 facts”。所以它要先抽取，再存储；要先去重，再写入；要写 history，方便审计；要做 entity linking，方便未来检索。
+
+### 7.4 检索链路精读
+
+讲解顺序：
+
+1. `Memory.search` 校验 query、filters、top_k、threshold。
+2. `_process_metadata_filters` 支持高级过滤条件。
+3. `_search_vector_store` 做 query lemmatize 和 entity extraction。
+4. `embedding_model.embed(query, "search")` 生成查询向量。
+5. `vector_store.search` 做 semantic over-fetch。
+6. `vector_store.keyword_search` 做 BM25 关键词匹配。
+7. `_compute_entity_boosts` 根据实体链接给相关 memory 加分。
+8. `score_and_rank` 融合 semantic、BM25、entity boost。
+9. 可选 reranker 做二次排序。
+
+为什么这么设计：
+
+> 长期记忆检索不是文档 RAG。它经常问“我之前说过什么偏好”“某个客户上次怎么了”“这个项目现在到哪一步了”。这些问题既需要语义，也需要实体和关键词，因此 mem0 采用多信号融合。
+
+### 7.5 设计思想
+
+可以重点展开六个点：
+
+1. Memory Layer 优先：它不是 Agent 框架，而是 Agent 的记忆层。
+2. Pipeline 架构：写入和检索都拆成稳定阶段，便于优化。
+3. Ports and Adapters：provider 可替换。
+4. Factory Method：按配置创建具体实现。
+5. Hybrid Retrieval：多信号融合比单向量检索更适合长期记忆。
+6. Session-scoped Memory：按 user/agent/run 隔离，避免跨用户污染。
+
+### 7.6 和其他框架的关系
+
+可以这样收束：
+
+> mem0、AutoGen、LangGraph 不是同一类东西。mem0 是记忆层，AutoGen 是多 Agent 消息运行时，LangGraph 是状态图运行时。它们可以组合：LangGraph 负责流程，AutoGen 负责多 Agent 协作，mem0 负责长期记忆。
+
+### 7.7 落地建议
+
+落地时不要一开始就把所有聊天都塞进 mem0。建议先选高价值 memory：
+
+- 用户长期偏好。
+- 项目当前状态。
+- 客户历史和约束。
+- Agent 执行中的关键决策。
+- 需要跨 session 保留的信息。
 
 ## 8. 收束口
 

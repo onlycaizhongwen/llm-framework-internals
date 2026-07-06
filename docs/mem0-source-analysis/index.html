@@ -39,6 +39,9 @@
     .mermaid svg { background:#fff; }
     .caption,.evidence { color:var(--muted); font-size:14px; }
     .evidence { margin:6px 0 12px; }
+    .explain { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin:12px 0 18px; }
+    .explain strong { color:var(--accent); }
+    .explain ul { margin:8px 0 0 20px; padding:0; }
     a { color:var(--accent2); text-decoration:none; }
     a:hover { text-decoration:underline; }
     @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:20px 18px 48px;} table{display:block; overflow-x:auto;} }
@@ -78,28 +81,36 @@
       <h3>架构图</h3>
       <div class="diagram"><pre class="mermaid">
 flowchart TB
-    App["应用 / Agent / CLI / REST"] --> OSS["mem0.Memory<br/>OSS 本地记忆层"]
-    App --> Client["MemoryClient<br/>Cloud API SDK"]
-    App --> Server["Self-hosted FastAPI Server"]
+    App["应用 / Agent / CLI / REST<br/>使用方只关心 add/search"] --> OSS["mem0.Memory<br/>长期记忆编排核心"]
+    App --> Client["MemoryClient<br/>Cloud API 入口"]
+    App --> Server["Self-hosted FastAPI Server<br/>把 Memory 包成 REST 服务"]
     Server --> OSS
-    OSS --> Config["MemoryConfig<br/>LLM / Embedder / VectorStore / Reranker"]
-    OSS --> Add["Memory.add<br/>事实抽取 + 写入"]
-    OSS --> Search["Memory.search<br/>混合检索 + 排序"]
-    Add --> LLM["LLMBase<br/>generate_response"]
-    Add --> Embedder["EmbeddingBase<br/>embed / embed_batch"]
-    Add --> Vector["VectorStoreBase<br/>insert / search / keyword_search"]
-    Add --> SQLite["SQLiteManager<br/>history + last messages"]
-    Add --> Entity["Entity Store<br/>实体抽取 + linked_memory_ids"]
+    OSS --> Config["MemoryConfig<br/>声明要用哪些 provider"]
+    OSS --> Add["Memory.add<br/>把对话提炼成长期 facts"]
+    OSS --> Search["Memory.search<br/>把长期 facts 找回来"]
+    Add --> LLM["LLMBase<br/>负责事实抽取<br/>为什么：过滤聊天噪音"]
+    Add --> Embedder["EmbeddingBase<br/>事实向量化<br/>为什么：支持语义召回"]
+    Add --> Vector["VectorStoreBase<br/>写入 / 检索 / keyword_search<br/>为什么：统一不同向量库"]
+    Add --> SQLite["SQLiteManager<br/>history + last messages<br/>为什么：保留审计和上下文"]
+    Add --> Entity["Entity Store<br/>实体 -> memory_id 链接<br/>为什么：提高人/项目相关召回"]
     Search --> Embedder
     Search --> Vector
     Search --> Entity
-    Search --> Scoring["score_and_rank<br/>semantic + BM25 + entity boost"]
-    Search --> Reranker["Reranker<br/>可选二次排序"]
-    Factory["Factory Layer<br/>Llm / Embedder / VectorStore / Reranker"] --> LLM
+    Search --> Scoring["score_and_rank<br/>semantic + BM25 + entity boost<br/>为什么：多信号比单向量更稳"]
+    Search --> Reranker["Reranker<br/>可选二次排序<br/>为什么：高质量场景再付成本"]
+    Factory["Factory Layer<br/>按配置创建 provider<br/>为什么：避免绑定单一模型/向量库"] --> LLM
     Factory --> Embedder
     Factory --> Vector
     Factory --> Reranker
       </pre></div>
+      <div class="explain">
+        <strong>读图说明：</strong>这张图要从上往下读。最上面是使用入口：应用可以直接调用本地 <code>mem0.Memory</code>，也可以通过 self-hosted server 间接调用，或者用 <code>MemoryClient</code> 访问 Cloud API。中间的 <code>Memory</code> 是 OSS 内核，真正的主流程只有两条：<code>add</code> 写入记忆、<code>search</code> 检索记忆。
+        <ul>
+          <li><strong>为什么这么设计：</strong>长期记忆不应该绑定某个模型或向量库，所以 LLM、Embedding、VectorStore、Reranker 都放在抽象层后面，由 Factory 按配置创建。</li>
+          <li><strong>讲解重点：</strong>不要把这张图讲成“模块清单”，要强调它是“入口层 -> Memory core -> provider 抽象 -> 存储/检索能力”的依赖方向。</li>
+          <li><strong>源码证据：</strong><code>memory/main.py:445-489</code> 初始化这些依赖，<code>utils/factory.py</code> 负责 provider 创建。</li>
+        </ul>
+      </div>
       <p>Mermaid 源文件：<a href="architecture.mmd">architecture.mmd</a></p>
     </section>
 
@@ -125,24 +136,33 @@ flowchart TB
       <p class="evidence">证据：<code>memory/main.py:717</code> 定义 <code>add()</code>；<code>:831</code> 进入 <code>_add_to_vector_store()</code>；<code>:895-907</code> 调 LLM；<code>:932-944</code> 批量 embedding；<code>:991-999</code> 写 vector store；<code>:1031-1145</code> 做 entity linking。</p>
       <div class="diagram"><pre class="mermaid">
 flowchart TD
-    Start([Memory.add]) --> Validate["校验 user_id / agent_id / run_id<br/>构造 metadata 和 filters"]
-    Validate --> Normalize["messages 标准化<br/>str / dict / list -> list[dict]"]
-    Normalize --> Infer{"infer?"}
-    Infer -->|否| Raw["逐条消息 embedding<br/>_create_memory 写入"]
-    Infer -->|是| Context["读取最近消息<br/>SQLiteManager.get_last_messages"]
-    Context --> Existing["向量检索已有 memory<br/>vector_store.search top_k=10"]
-    Existing --> Prompt["generate_additive_extraction_prompt"]
-    Prompt --> LLM["LLM.generate_response<br/>单次 ADD-only 事实抽取"]
-    LLM --> Parse["解析 JSON memory 列表"]
-    Parse --> Embed["embed_batch 所有新事实"]
-    Embed --> Dedup["hash 去重"]
-    Dedup --> Insert["vector_store.insert 批量写入"]
-    Insert --> History["SQLiteManager.batch_add_history"]
-    History --> Entities["extract_entities_batch<br/>实体入 entity_store"]
+    Start([Memory.add<br/>写入长期记忆]) --> Validate["校验 user_id / agent_id / run_id<br/>为什么：避免不同用户/Agent 记忆串线"]
+    Validate --> Normalize["messages 标准化<br/>为什么：统一 str / dict / list 输入形态"]
+    Normalize --> Infer{"infer=True?<br/>是否让 LLM 提炼事实"}
+    Infer -->|否，低成本直存| Raw["逐条消息 embedding<br/>_create_memory 写入<br/>适合不需要事实抽取的场景"]
+    Infer -->|是，默认主链路| Context["读取最近消息<br/>为什么：给事实抽取补上下文"]
+    Context --> Existing["检索已有 memory<br/>为什么：减少重复 facts"]
+    Existing --> Prompt["构造 additive extraction prompt<br/>带 existing + new + last messages"]
+    Prompt --> LLM["LLM.generate_response<br/>只抽取 ADD facts<br/>为什么：把聊天噪音变成稳定事实"]
+    LLM --> Parse["解析 JSON memory 列表<br/>为什么：后续流程需要结构化 facts"]
+    Parse --> Embed["embed_batch 批量向量化<br/>为什么：比逐条 embedding 更高效"]
+    Embed --> Dedup["hash 去重<br/>为什么：挡住 LLM 重复抽取和本批重复"]
+    Dedup --> Insert["vector_store.insert 批量写入<br/>写入可语义检索的长期 facts"]
+    Insert --> History["SQLiteManager.batch_add_history<br/>为什么：可审计、可回放变更"]
+    History --> Entities["extract_entities_batch<br/>实体入 entity_store<br/>为什么：后续按人/项目增强召回"]
     Raw --> Return["返回 ADD 结果"]
-    Entities --> SaveMessages["save_messages"]
+    Entities --> SaveMessages["save_messages<br/>保存最近消息给下一次抽取用"]
     SaveMessages --> Return
       </pre></div>
+      <div class="explain">
+        <strong>读图说明：</strong>这张图展示的是“从对话到长期记忆”的写入路径。输入不是直接进入向量库，而是先被标准化为 messages，再结合最近对话和已有记忆，让 LLM 做一次事实抽取，最后才进入 embedding、去重、写库、历史记录和实体链接。
+        <ul>
+          <li><strong>为什么这么设计：</strong>聊天原文通常有寒暄、重复、临时上下文，直接存会污染长期记忆；先抽取 facts 可以让 memory 更稳定、更可检索。</li>
+          <li><strong>为什么要查 existing memories：</strong>抽取 prompt 会带已有记忆，目的是减少重复事实，并让 LLM 知道哪些内容已经沉淀过。</li>
+          <li><strong>为什么要 hash 去重：</strong>LLM 仍可能抽出重复 facts，hash 是低成本的确定性防线。</li>
+          <li><strong>为什么要 entity linking：</strong>长期记忆查询常围绕人、地点、项目、偏好展开，实体链接能在后续检索时给相关 memory 加分。</li>
+        </ul>
+      </div>
       <p>Mermaid 源文件：<a href="add-flow.mmd">add-flow.mmd</a></p>
       <p>设计含义：mem0 的 memory 不是普通聊天日志，而是经过 LLM 提炼后的事实记录。它用 hash 去重、history 审计、entity linking 提升长期记忆质量。</p>
     </section>
@@ -153,24 +173,32 @@ flowchart TD
       <p class="evidence">证据：<code>memory/main.py:1331</code> 定义 <code>search()</code>；<code>:1456-1465</code> 调 <code>_search_vector_store()</code>；<code>:1586-1612</code> 做 query 预处理、semantic 和 keyword；<code>:1622-1624</code> 计算 entity boost；<code>:1638-1645</code> 调 <code>score_and_rank()</code>；<code>utils/scoring.py:60</code> 定义融合评分。</p>
       <div class="diagram"><pre class="mermaid">
 flowchart TD
-    Start([Memory.search]) --> Validate["校验 query / filters / top_k / threshold"]
-    Validate --> Advanced{"高级 metadata operators?"}
-    Advanced -->|是| Process["_process_metadata_filters"]
+    Start([Memory.search<br/>检索长期记忆]) --> Validate["校验 query / filters / top_k / threshold<br/>为什么：控制检索范围和质量下限"]
+    Validate --> Advanced{"是否有高级 metadata operators?<br/>例如范围、包含、组合过滤"}
+    Advanced -->|是| Process["_process_metadata_filters<br/>把高级条件转成向量库可用过滤"]
     Advanced -->|否| QueryPrep
-    Process --> QueryPrep["query lemmatize<br/>extract_entities"]
-    QueryPrep --> Embed["embedding_model.embed(query, search)"]
-    Embed --> Semantic["vector_store.search<br/>semantic over-fetch"]
-    QueryPrep --> Keyword["vector_store.keyword_search<br/>BM25 可选"]
-    QueryPrep --> Entity["_compute_entity_boosts<br/>实体链接增强"]
-    Semantic --> Score["score_and_rank<br/>semantic + BM25 + entity"]
+    Process --> QueryPrep["query lemmatize + extract_entities<br/>为什么：同时准备关键词和实体信号"]
+    QueryPrep --> Embed["embedding_model.embed(query, search)<br/>为什么：生成语义检索向量"]
+    Embed --> Semantic["vector_store.search<br/>semantic over-fetch<br/>为什么：先多召回再排序"]
+    QueryPrep --> Keyword["vector_store.keyword_search<br/>BM25 可选<br/>为什么：补足姓名/术语精确匹配"]
+    QueryPrep --> Entity["_compute_entity_boosts<br/>实体链接增强<br/>为什么：同一人/项目的 memory 应更靠前"]
+    Semantic --> Score["score_and_rank<br/>融合 semantic + BM25 + entity<br/>为什么：长期记忆不能只靠单一相似度"]
     Keyword --> Score
     Entity --> Score
-    Score --> Format["MemoryItem 格式化"]
-    Format --> Rerank{"rerank=True 且有 reranker?"}
-    Rerank -->|是| Reranker["reranker.rerank"]
+    Score --> Format["MemoryItem 格式化<br/>带 metadata / score_details<br/>方便解释为什么命中"]
+    Format --> Rerank{"rerank=True 且有 reranker?<br/>是否愿意为更好排序付额外成本"}
+    Rerank -->|是| Reranker["reranker.rerank<br/>二次排序提升精度"]
     Rerank -->|否| Return["返回 results"]
     Reranker --> Return
       </pre></div>
+      <div class="explain">
+        <strong>读图说明：</strong>这张图展示的是“从问题到相关记忆”的检索路径。mem0 先做 query 清洗和作用域校验，再并行取得三类信号：语义向量召回、BM25 关键词匹配、实体链接增强，然后交给 <code>score_and_rank</code> 做融合排序。
+        <ul>
+          <li><strong>为什么不是只做向量检索：</strong>长期记忆里常有姓名、产品、地点、具体偏好，仅靠语义可能把精确实体打散；BM25 和 entity boost 用来补足精确匹配。</li>
+          <li><strong>为什么 threshold 先过滤 semantic：</strong>源码里先用 semantic threshold 过滤候选，再叠加 BM25/entity，避免关键词把语义完全不相关的内容强行推上来。</li>
+          <li><strong>为什么 reranker 是可选：</strong>rerank 成本更高，适合对排序质量要求高的场景；普通场景用融合分数已经能覆盖主要需求。</li>
+        </ul>
+      </div>
       <p>Mermaid 源文件：<a href="search-flow.mmd">search-flow.mmd</a></p>
       <pre><code>def score_and_rank(...):
     raw_combined = semantic_score + bm25_score + entity_boost

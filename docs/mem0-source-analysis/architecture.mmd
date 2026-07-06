@@ -1,22 +1,22 @@
 flowchart TB
-    App["应用 / Agent / CLI / REST"] --> OSS["mem0.Memory<br/>OSS 本地记忆层"]
-    App --> Client["MemoryClient<br/>Cloud API SDK"]
-    App --> Server["Self-hosted FastAPI Server"]
+    App["应用 / Agent / CLI / REST<br/>使用方只关心 add/search"] --> OSS["mem0.Memory<br/>长期记忆编排核心"]
+    App --> Client["MemoryClient<br/>Cloud API 入口"]
+    App --> Server["Self-hosted FastAPI Server<br/>把 Memory 包成 REST 服务"]
     Server --> OSS
-    OSS --> Config["MemoryConfig<br/>LLM / Embedder / VectorStore / Reranker"]
-    OSS --> Add["Memory.add<br/>事实抽取 + 写入"]
-    OSS --> Search["Memory.search<br/>混合检索 + 排序"]
-    Add --> LLM["LLMBase<br/>generate_response"]
-    Add --> Embedder["EmbeddingBase<br/>embed / embed_batch"]
-    Add --> Vector["VectorStoreBase<br/>insert / search / keyword_search"]
-    Add --> SQLite["SQLiteManager<br/>history + last messages"]
-    Add --> Entity["Entity Store<br/>实体抽取 + linked_memory_ids"]
+    OSS --> Config["MemoryConfig<br/>声明要用哪些 provider"]
+    OSS --> Add["Memory.add<br/>把对话提炼成长期 facts"]
+    OSS --> Search["Memory.search<br/>把长期 facts 找回来"]
+    Add --> LLM["LLMBase<br/>负责事实抽取<br/>为什么：过滤聊天噪音"]
+    Add --> Embedder["EmbeddingBase<br/>事实向量化<br/>为什么：支持语义召回"]
+    Add --> Vector["VectorStoreBase<br/>写入 / 检索 / keyword_search<br/>为什么：统一不同向量库"]
+    Add --> SQLite["SQLiteManager<br/>history + last messages<br/>为什么：保留审计和上下文"]
+    Add --> Entity["Entity Store<br/>实体 -> memory_id 链接<br/>为什么：提高人/项目相关召回"]
     Search --> Embedder
     Search --> Vector
     Search --> Entity
-    Search --> Scoring["score_and_rank<br/>semantic + BM25 + entity boost"]
-    Search --> Reranker["Reranker<br/>可选二次排序"]
-    Factory["Factory Layer<br/>Llm / Embedder / VectorStore / Reranker"] --> LLM
+    Search --> Scoring["score_and_rank<br/>semantic + BM25 + entity boost<br/>为什么：多信号比单向量更稳"]
+    Search --> Reranker["Reranker<br/>可选二次排序<br/>为什么：高质量场景再付成本"]
+    Factory["Factory Layer<br/>按配置创建 provider<br/>为什么：避免绑定单一模型/向量库"] --> LLM
     Factory --> Embedder
     Factory --> Vector
     Factory --> Reranker

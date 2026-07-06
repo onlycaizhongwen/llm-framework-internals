@@ -26,6 +26,9 @@
     .mermaid svg { background:#fff; }
     .timeline { display:grid; gap:10px; margin:16px 0; }
     .item strong { color:#2563eb; }
+    .explain { background:#fff; border:1px solid #d9dee8; border-radius:8px; padding:14px 16px; margin:12px 0 18px; }
+    .explain strong { color:#2563eb; }
+    .explain ul { margin:8px 0 0 20px; padding:0; }
     a { color:#2563eb; text-decoration:none; }
     @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:20px 18px 48px;} table{display:block; overflow-x:auto;} }
   </style>
@@ -75,47 +78,69 @@ Library Memory / FastAPI Server / MemoryClient Cloud SDK / CLI</code></pre>
       <h3>整体架构图</h3>
       <div class="diagram"><pre class="mermaid">
 flowchart TB
-    App["应用 / Agent"] --> Memory["mem0.Memory"]
-    Memory --> Add["Memory.add"]
-    Memory --> Search["Memory.search"]
-    Add --> LLM["LLMBase"]
-    Add --> Embedder["EmbeddingBase"]
-    Add --> Vector["VectorStoreBase"]
-    Add --> SQLite["SQLiteManager"]
-    Add --> Entity["Entity Store"]
+    App["应用 / Agent / REST<br/>入口不同，核心相同"] --> Memory["mem0.Memory<br/>长期记忆编排器"]
+    Memory --> Add["Memory.add<br/>提炼并写入长期 facts"]
+    Memory --> Search["Memory.search<br/>找回相关长期 facts"]
+    Add --> LLM["LLMBase<br/>过滤噪音，抽取事实"]
+    Add --> Embedder["EmbeddingBase<br/>把 facts 变成可检索向量"]
+    Add --> Vector["VectorStoreBase<br/>统一适配不同向量库"]
+    Add --> SQLite["SQLiteManager<br/>保存 history 和 recent messages"]
+    Add --> Entity["Entity Store<br/>按人/项目增强召回"]
     Search --> Vector
     Search --> Entity
-    Search --> Scoring["score_and_rank"]
-    Factory["Factory Layer"] --> LLM
+    Search --> Scoring["score_and_rank<br/>融合语义、关键词、实体"]
+    Factory["Factory Layer<br/>配置驱动 provider 替换"] --> LLM
     Factory --> Embedder
     Factory --> Vector
       </pre></div>
+      <div class="explain">
+        <strong>这张图怎么讲：</strong>先说 mem0 有多个入口，但核心都汇到 <code>mem0.Memory</code>。然后强调 <code>Memory</code> 不是模型调用器，而是长期记忆编排器：左边写入，右边检索，下方是 LLM、Embedding、VectorStore、SQLite、Entity Store 这些可替换能力。
+        <ul>
+          <li><strong>为什么这么分层：</strong>记忆系统要长期运行，最怕和单一 provider 绑死；所以源码用 Factory + 抽象基类隔离 provider。</li>
+          <li><strong>可以展开讲：</strong>同一个 Memory core 可以配 OpenAI/Qdrant，也可以配其他 LLM、embedding 或向量库。</li>
+        </ul>
+      </div>
 
       <h3>add 写入流程</h3>
       <div class="diagram"><pre class="mermaid">
 flowchart TD
-    Start([Memory.add]) --> Validate["校验作用域"]
-    Validate --> Context["last messages + existing memories"]
-    Context --> LLM["LLM 事实抽取"]
-    LLM --> Embed["embed_batch"]
-    Embed --> Dedup["hash 去重"]
-    Dedup --> Insert["vector_store.insert"]
-    Insert --> History["history"]
-    History --> Entity["entity linking"]
+    Start([Memory.add<br/>写入长期记忆]) --> Validate["校验作用域<br/>为什么：防止记忆串线"]
+    Validate --> Context["last messages + existing memories<br/>为什么：让抽取知道上下文和已有事实"]
+    Context --> LLM["LLM 事实抽取<br/>为什么：不直接保存聊天噪音"]
+    LLM --> Embed["embed_batch<br/>为什么：批量向量化更高效"]
+    Embed --> Dedup["hash 去重<br/>为什么：挡住重复 facts"]
+    Dedup --> Insert["vector_store.insert<br/>写入可检索 facts"]
+    Insert --> History["history<br/>为什么：审计记忆变化"]
+    History --> Entity["entity linking<br/>为什么：后续按人/项目增强召回"]
       </pre></div>
+      <div class="explain">
+        <strong>这张图怎么讲：</strong>重点是“不是直接存原文”。mem0 会先拿最近消息和已有 memory 做上下文，再让 LLM 抽取长期事实，之后才向量化、去重、写入、记录历史和做实体链接。
+        <ul>
+          <li><strong>为什么这么干：</strong>长期记忆需要沉淀事实，不需要把所有聊天噪音都存进去。</li>
+          <li><strong>讲到源码：</strong><code>memory/main.py:831</code> 开始的 <code>_add_to_vector_store</code> 就是这条 pipeline。</li>
+          <li><strong>可以举例：</strong>用户说“以后给我代码解释尽量用中文，我最近在看 mem0”，适合抽成“用户偏好中文代码解释”和“用户正在研究 mem0”。</li>
+        </ul>
+      </div>
 
       <h3>search 检索流程</h3>
       <div class="diagram"><pre class="mermaid">
 flowchart TD
-    Start([Memory.search]) --> Prep["query 预处理"]
-    Prep --> Semantic["semantic search"]
-    Prep --> Keyword["BM25 keyword"]
-    Prep --> Entity["entity boost"]
-    Semantic --> Score["score_and_rank"]
+    Start([Memory.search<br/>检索长期记忆]) --> Prep["query 预处理<br/>清洗 query 并抽实体"]
+    Prep --> Semantic["semantic search<br/>找语义相近 memory"]
+    Prep --> Keyword["BM25 keyword<br/>补足精确关键词"]
+    Prep --> Entity["entity boost<br/>同一实体相关内容加分"]
+    Semantic --> Score["score_and_rank<br/>融合三路信号"]
     Keyword --> Score
     Entity --> Score
-    Score --> Rerank["optional reranker"]
+    Score --> Rerank["optional reranker<br/>高质量排序场景再启用"]
       </pre></div>
+      <div class="explain">
+        <strong>这张图怎么讲：</strong>重点是“三路信号融合”。semantic search 找语义相近，BM25 找关键词精确命中，entity boost 把同一实体相关的记忆推上来，最后再可选 reranker。
+        <ul>
+          <li><strong>为什么这么干：</strong>长期记忆里“谁”“哪个项目”“什么偏好”很重要，只靠 embedding 容易召回宽泛但不够精确的内容。</li>
+          <li><strong>讲到源码：</strong><code>memory/main.py:1580</code> 的 <code>_search_vector_store</code> 串起三路信号，<code>utils/scoring.py:60</code> 的 <code>score_and_rank</code> 做融合。</li>
+        </ul>
+      </div>
     </section>
 
     <section>
@@ -166,13 +191,15 @@ flowchart TD
     </section>
 
     <section>
-      <h2>15 分钟分享节奏</h2>
+      <h2>详细演讲结构</h2>
       <div class="timeline">
-        <div class="item"><strong>2 分钟：</strong>讲 mem0 定位，强调它是 memory layer。</div>
-        <div class="item"><strong>3 分钟：</strong>讲架构分层：Memory core、provider 抽象、存储检索、产品入口。</div>
-        <div class="item"><strong>4 分钟：</strong>精读 <code>Memory.add</code> 写入流程。</div>
-        <div class="item"><strong>3 分钟：</strong>精读 <code>Memory.search</code> 混合检索流程。</div>
-        <div class="item"><strong>3 分钟：</strong>讲设计范式、应用场景和框架对比。</div>
+        <div class="item"><strong>第一部分：为什么需要 mem0。</strong>从普通 RAG 和聊天历史的局限讲起：聊天历史太吵，RAG 文档太静态，Agent 需要的是跨会话、可检索、按用户/Agent/运行隔离的长期记忆。</div>
+        <div class="item"><strong>第二部分：整体架构。</strong>讲入口层、Memory core、provider 抽象、存储和检索层。这里可以停留在架构图上，把每个箭头说明白。</div>
+        <div class="item"><strong>第三部分：写入链路精读。</strong>从 <code>Memory.add</code> 讲到 <code>_add_to_vector_store</code>：校验作用域、构造 prompt、LLM 抽 facts、批量 embedding、hash 去重、vector insert、history、entity linking。</div>
+        <div class="item"><strong>第四部分：检索链路精读。</strong>从 <code>Memory.search</code> 讲到 <code>_search_vector_store</code>：query 预处理、semantic search、BM25、entity boost、<code>score_and_rank</code>、可选 reranker。</div>
+        <div class="item"><strong>第五部分：为什么这么设计。</strong>展开 pipeline、Ports and Adapters、Factory、Hybrid Retrieval、Session-scoped Memory、Audit Trail。</div>
+        <div class="item"><strong>第六部分：和其他框架放在一起看。</strong>mem0 解决“记住什么”，AutoGen 解决“多 Agent 怎么协作”，LangGraph 解决“状态流程怎么可控”，LangChain 解决“LLM 组件怎么搭”。</div>
+        <div class="item"><strong>第七部分：落地建议。</strong>新项目可以把 mem0 当成外部 memory layer 接到 Agent 工作流里；已有项目先从 user preference、recent task context、customer history 这类高价值记忆开始。</div>
       </div>
     </section>
 

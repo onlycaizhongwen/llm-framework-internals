@@ -1,18 +1,18 @@
 flowchart TD
-    Start([Memory.search]) --> Validate["校验 query / filters / top_k / threshold"]
-    Validate --> Advanced{"高级 metadata operators?"}
-    Advanced -->|是| Process["_process_metadata_filters"]
+    Start([Memory.search<br/>检索长期记忆]) --> Validate["校验 query / filters / top_k / threshold<br/>为什么：控制检索范围和质量下限"]
+    Validate --> Advanced{"是否有高级 metadata operators?<br/>例如范围、包含、组合过滤"}
+    Advanced -->|是| Process["_process_metadata_filters<br/>把高级条件转成向量库可用过滤"]
     Advanced -->|否| QueryPrep
-    Process --> QueryPrep["query lemmatize<br/>extract_entities"]
-    QueryPrep --> Embed["embedding_model.embed(query, search)"]
-    Embed --> Semantic["vector_store.search<br/>semantic over-fetch"]
-    QueryPrep --> Keyword["vector_store.keyword_search<br/>BM25 可选"]
-    QueryPrep --> Entity["_compute_entity_boosts<br/>实体链接增强"]
-    Semantic --> Score["score_and_rank<br/>semantic + BM25 + entity"]
+    Process --> QueryPrep["query lemmatize + extract_entities<br/>为什么：同时准备关键词和实体信号"]
+    QueryPrep --> Embed["embedding_model.embed(query, search)<br/>为什么：生成语义检索向量"]
+    Embed --> Semantic["vector_store.search<br/>semantic over-fetch<br/>为什么：先多召回再排序"]
+    QueryPrep --> Keyword["vector_store.keyword_search<br/>BM25 可选<br/>为什么：补足姓名/术语精确匹配"]
+    QueryPrep --> Entity["_compute_entity_boosts<br/>实体链接增强<br/>为什么：同一人/项目的 memory 应更靠前"]
+    Semantic --> Score["score_and_rank<br/>融合 semantic + BM25 + entity<br/>为什么：长期记忆不能只靠单一相似度"]
     Keyword --> Score
     Entity --> Score
-    Score --> Format["MemoryItem 格式化<br/>metadata / score_details"]
-    Format --> Rerank{"rerank=True 且有 reranker?"}
-    Rerank -->|是| Reranker["reranker.rerank"]
+    Score --> Format["MemoryItem 格式化<br/>带 metadata / score_details<br/>方便解释为什么命中"]
+    Format --> Rerank{"rerank=True 且有 reranker?<br/>是否愿意为更好排序付额外成本"}
+    Rerank -->|是| Reranker["reranker.rerank<br/>二次排序提升精度"]
     Rerank -->|否| Return["返回 results"]
     Reranker --> Return
