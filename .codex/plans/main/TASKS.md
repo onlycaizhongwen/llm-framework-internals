@@ -35,3 +35,15 @@
 - 摘要：基于 `sources/crewai` 固定提交整理 CrewAI 总架构、Crews/Flows 双主线、Crew 执行流程、Flow 事件流程、LLM/Tool/Event 横切能力，并产出 Markdown、HTML、架构图、流程图和分享讲解稿。
 - 过程文件：无，短任务直接闭环。
 - 恢复提示：如需继续深入，可按 memory/knowledge、Flow persistence/checkpoint、AgentExecutor、crewai-tools/RAG、CLI/AMP 控制面专题扩展。
+
+## AutoGen 上游源码入口
+- 状态：已完成
+- 摘要：以 Git submodule 方式把 `microsoft/autogen` 固定到 `sources/autogen`，作为 AutoGen 源码分析的源码入口。
+- 过程文件：无，短任务直接闭环。
+- 恢复提示：后续如更新 AutoGen 版本，需同步更新 README 中的固定提交和分析文档中的源码证据。
+
+## AutoGen 源码架构分析文档
+- 状态：已完成
+- 摘要：基于 `sources/autogen` 固定提交整理 AutoGen 总架构、Core Runtime、AgentChat、AssistantAgent、GroupChat、Extensions/Studio 分层，并产出 Markdown、HTML、架构图、流程图和分享讲解稿。
+- 过程文件：无，短任务直接闭环。
+- 恢复提示：如需继续深入，可按 distributed runtime/gRPC、Magentic-One、Studio 数据模型、MCP Workbench、代码执行器专题扩展。

@@ -1,0 +1,31 @@
+flowchart TB
+    User["调用方\n应用代码 / Studio / CLI"] --> AgentChat["AgentChat API\nAssistantAgent / Teams"]
+    User --> Core["Core API\n消息、Agent、Runtime"]
+    User --> Studio["AutoGen Studio\n可视化构建和运行"]
+
+    AgentChat --> BaseChatAgent["BaseChatAgent\nrun / run_stream"]
+    BaseChatAgent --> Assistant["AssistantAgent\n模型调用 + 工具循环"]
+    AgentChat --> Teams["Teams\nRoundRobin / Selector / Swarm"]
+    Teams --> GroupChat["BaseGroupChat\n团队运行入口"]
+    GroupChat --> Manager["GroupChatManager\n选择下一位发言者"]
+    GroupChat --> Runtime["SingleThreadedAgentRuntime\n队列 + 消息投递"]
+
+    Core --> Runtime
+    Core --> Routed["RoutedAgent\n@message_handler / @event / @rpc"]
+    Core --> ModelClient["ChatCompletionClient\n模型抽象"]
+    Core --> Tool["BaseTool / Workbench\n工具抽象"]
+    Core --> State["State / Memory / Context\n状态和上下文"]
+    Core --> Trace["Tracing / Events\n观测和日志"]
+
+    Assistant --> ModelClient
+    Assistant --> Tool
+    Assistant --> State
+    Manager --> ModelClient
+
+    Ext["autogen-ext\n模型、MCP、代码执行、RAG"] --> ModelClient
+    Ext --> Tool
+    Ext --> CodeExec["Code Executors\nDocker / Local"]
+    Ext --> MCP["MCP Workbench\n外部工具协议"]
+
+    Studio --> AgentChat
+    Bench["agbench\n评测工具"] --> AgentChat

@@ -1,0 +1,17 @@
+flowchart TD
+    Start([用户调用 agent.run / run_stream]) --> Normalize["转换任务输入\nstr -> TextMessage"]
+    Normalize --> OnMessages["BaseChatAgent.on_messages\n或 on_messages_stream"]
+    OnMessages --> Assistant["AssistantAgent.on_messages_stream"]
+    Assistant --> Context["更新模型上下文\nsystem / memory / messages"]
+    Context --> ModelCall["调用 ChatCompletionClient.create\n或 create_stream"]
+    ModelCall --> ToolCalls{"模型是否返回工具调用?"}
+    ToolCalls -->|否| FinalText["生成最终 TextMessage\n或 StructuredMessage"]
+    ToolCalls -->|是| ExecuteTools["执行工具 / Workbench\n可并发执行"]
+    ExecuteTools --> ToolResult["生成 ToolCallExecutionEvent\n和工具结果"]
+    ToolResult --> Reflect{"是否反思工具结果?"}
+    Reflect -->|是| ModelCall
+    Reflect -->|否| Summary["生成 ToolCallSummaryMessage"]
+    FinalText --> Response["Response"]
+    Summary --> Response
+    Response --> TaskResult["TaskResult\n汇总输出消息"]
+    TaskResult --> End([返回调用方])

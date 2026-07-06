@@ -1,0 +1,22 @@
+flowchart TD
+    Start([team.run / run_stream]) --> Init{"是否已初始化?"}
+    Init -->|否| Register["注册参与者容器\nChatAgentContainer"]
+    Register --> Manager["注册 GroupChatManager"]
+    Manager --> Subs["添加 topic subscriptions\n群组、参与者、输出 topic"]
+    Init -->|是| StartMsg
+    Subs --> StartMsg["发布 GroupChatStart"]
+    StartMsg --> Runtime["SingleThreadedAgentRuntime.start\n处理消息队列"]
+    Runtime --> Select["Manager.select_speaker\n选择下一位发言者"]
+    Select --> Mode{"团队类型"}
+    Mode -->|RoundRobin| RR["按顺序轮转"]
+    Mode -->|Selector| Sel["模型或 selector_func 选择"]
+    Mode -->|Swarm| Swarm["根据 handoff 交接"]
+    RR --> AgentTopic["向参与者 topic 发消息"]
+    Sel --> AgentTopic
+    Swarm --> AgentTopic
+    AgentTopic --> Participant["参与者 Agent/Team 响应"]
+    Participant --> Publish["发布到 group topic\n共享上下文"]
+    Publish --> Term{"终止条件或 max_turns?"}
+    Term -->|未满足| Select
+    Term -->|满足| Stop["GroupChatTermination"]
+    Stop --> Result["TaskResult\n消息 + stop_reason"]

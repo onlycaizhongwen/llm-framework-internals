@@ -64,6 +64,26 @@ d57a74f950b87bfb9cb51240cc8dccf34b5edfaa
 - `share-guide.html`：面向分享的讲解稿 HTML
 - `share-guide.md`：面向分享的讲解稿 Markdown
 
+### AutoGen
+
+分析文档：`docs/autogen-source-analysis/`
+
+源码入口：`sources/autogen/`
+
+当前固定源码提交：
+
+```text
+027ecf0a379bcc1d09956d46d12d44a3ad9cee14
+```
+
+- `index.html`：AutoGen 源码架构分析主阅读页
+- `index.md`：Markdown 版分析底稿
+- `architecture.mmd`：总架构图
+- `agent-flow.mmd`：AssistantAgent 执行流程图
+- `groupchat-flow.mmd`：GroupChat 团队编排流程图
+- `share-guide.html`：面向分享的讲解稿 HTML
+- `share-guide.md`：面向分享的讲解稿 Markdown
+
 ## 仓库约定
 
 - 本仓库优先保存分析文档，并通过 `sources/` 下的 Git submodule 固定上游源码版本。

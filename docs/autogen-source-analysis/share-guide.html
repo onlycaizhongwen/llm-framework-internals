@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoGen 源码分享讲解稿</title>
+  <style>
+    body { margin:0; font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif; background:#fbfbfd; color:#1f2937; line-height:1.72; }
+    header { background:#fff; border-bottom:1px solid #d9dee8; padding:38px 24px 26px; }
+    main,.wrap { max-width:1060px; margin:0 auto; }
+    main { padding:26px 24px 64px; }
+    h1 { margin:0 0 10px; font-size:clamp(30px,4vw,46px); line-height:1.18; letter-spacing:0; }
+    h2 { margin:34px 0 12px; padding-top:10px; border-top:1px solid #d9dee8; font-size:25px; }
+    h3 { margin:24px 0 8px; font-size:19px; }
+    .lead { max-width:840px; color:#667085; font-size:18px; }
+    .talk { background:#eff6ff; border-left:4px solid #2563eb; padding:14px 16px; margin:16px 0; border-radius:0 8px 8px 0; }
+    .panel,.item { background:#fff; border:1px solid #d9dee8; border-radius:8px; padding:18px; margin:16px 0; }
+    table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #d9dee8; margin:16px 0; }
+    th,td { border-bottom:1px solid #d9dee8; padding:11px 12px; text-align:left; vertical-align:top; }
+    th { background:#f3f6fb; }
+    code { font-family:Consolas,"JetBrains Mono",monospace; font-size:.92em; }
+    pre { overflow:auto; background:#101828; color:#e5e7eb; border-radius:8px; padding:15px; }
+    .diagram { background:#fff; border:1px solid #d9dee8; border-radius:8px; padding:18px; margin:16px 0; overflow-x:auto; }
+    .diagram pre, .diagram .mermaid { background:#fff; color:#1f2937; }
+    .mermaid { min-width:760px; text-align:center; }
+    .mermaid svg { background:#fff; }
+    .caption { color:#667085; font-size:14px; margin-top:-6px; }
+    .timeline { display:grid; gap:10px; margin:16px 0; }
+    .item strong { color:#2563eb; }
+    a { color:#2563eb; text-decoration:none; }
+    @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:20px 18px 48px;} table{display:block; overflow-x:auto;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>AutoGen 源码分享讲解稿</h1>
+      <p class="lead">面向分享的讲法：先说明版本状态，再讲 Core、AgentChat、Extensions、Studio 四层，最后对比 LangChain、LangGraph 和 CrewAI。</p>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>开场定位</h2>
+      <div class="talk">AutoGen 是微软开源的多 Agent 框架，当前已经进入 maintenance mode。源码学习价值在于：它把多 Agent 系统拆成 Core Runtime、AgentChat、Extensions 和 Studio 几层，是很典型的“消息运行时 + Agent Team”设计。</div>
+    </section>
+
+    <section>
+      <h2>目录怎么讲</h2>
+      <table>
+        <thead><tr><th>目录</th><th>分享口径</th></tr></thead>
+        <tbody>
+          <tr><td><code>autogen-core</code></td><td>底层消息运行时，包含 AgentRuntime、RoutedAgent、模型和工具抽象。</td></tr>
+          <tr><td><code>autogen-agentchat</code></td><td>用户常用 API，包含 AssistantAgent、Team、GroupChat、终止条件。</td></tr>
+          <tr><td><code>autogen-ext</code></td><td>模型、MCP、代码执行、GraphRAG 等生态适配。</td></tr>
+          <tr><td><code>autogen-studio</code></td><td>可视化构建和运行多 Agent 应用。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>主流程怎么讲</h2>
+      <pre><code>Core Runtime:
+AgentRuntime -> send/publish -> queue -> RoutedAgent -> handler
+
+AgentChat:
+BaseChatAgent.run -> AssistantAgent -> model/tool loop -> TaskResult
+
+GroupChat:
+Team.run_stream -> register participants -> manager selects speaker -> termination</code></pre>
+      <div class="talk">AutoGen 不是只看 AssistantAgent。真正的主线是：Core 负责消息运行时，AgentChat 把运行时包装成 Agent 和 Team，Extensions 再接模型与工具。</div>
+    </section>
+
+    <section>
+      <h2>架构图和流程图</h2>
+      <h3>整体架构图</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+    User["调用方<br/>应用代码 / Studio / CLI"] --> AgentChat["AgentChat API<br/>AssistantAgent / Teams"]
+    User --> Core["Core API<br/>消息、Agent、Runtime"]
+    User --> Studio["AutoGen Studio<br/>可视化构建和运行"]
+    AgentChat --> BaseChatAgent["BaseChatAgent<br/>run / run_stream"]
+    BaseChatAgent --> Assistant["AssistantAgent<br/>模型调用 + 工具循环"]
+    AgentChat --> Teams["Teams<br/>RoundRobin / Selector / Swarm"]
+    Teams --> GroupChat["BaseGroupChat<br/>团队运行入口"]
+    GroupChat --> Manager["GroupChatManager<br/>选择下一位发言者"]
+    GroupChat --> Runtime["SingleThreadedAgentRuntime<br/>队列 + 消息投递"]
+    Core --> Runtime
+    Core --> Routed["RoutedAgent<br/>@message_handler / @event / @rpc"]
+    Core --> ModelClient["ChatCompletionClient<br/>模型抽象"]
+    Core --> Tool["BaseTool / Workbench<br/>工具抽象"]
+    Ext["autogen-ext<br/>模型、MCP、代码执行、RAG"] --> ModelClient
+    Ext --> Tool
+    Studio --> AgentChat
+        </pre>
+      </div>
+      <p class="caption">读图方式：AutoGen 分成高层 AgentChat 和底层 Core，Extensions 把外部模型和工具接进来。</p>
+
+      <h3>AssistantAgent 流程图</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TD
+    Start([agent.run / run_stream]) --> Msg["任务转消息"]
+    Msg --> Agent["AssistantAgent"]
+    Agent --> Model["ChatCompletionClient"]
+    Model --> Tool{"工具调用?"}
+    Tool -->|否| Final["最终回复"]
+    Tool -->|是| Execute["执行工具 / Workbench"]
+    Execute --> Reflect{"反思工具结果?"}
+    Reflect -->|是| Model
+    Reflect -->|否| Summary["工具摘要"]
+    Final --> Result["TaskResult"]
+    Summary --> Result
+        </pre>
+      </div>
+
+      <h3>GroupChat 流程图</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TD
+    Start([team.run_stream]) --> Register["注册参与者和 manager"]
+    Register --> Runtime["启动 Core Runtime"]
+    Runtime --> Select["选择 speaker"]
+    Select --> Agent["参与者响应"]
+    Agent --> Broadcast["广播到 group topic"]
+    Broadcast --> Term{"终止条件?"}
+    Term -->|否| Select
+    Term -->|是| Result["TaskResult"]
+        </pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>核心代码证据</h2>
+      <h3>Core Runtime</h3>
+      <pre><code>class AgentRuntime(Protocol):
+    async def send_message(...)
+    async def publish_message(...)</code></pre>
+      <h3>AssistantAgent</h3>
+      <pre><code>class AssistantAgent(BaseChatAgent, Component[AssistantAgentConfig]):
+    """An agent that provides assistance with tool use."""</code></pre>
+      <h3>GroupChat</h3>
+      <pre><code>class BaseGroupChat(Team, ABC, ComponentBase[BaseModel]):
+    """The base class for group chat teams."""</code></pre>
+    </section>
+
+    <section>
+      <h2>和其他框架对比</h2>
+      <table>
+        <thead><tr><th>框架</th><th>一句话定位</th><th>分享口径</th></tr></thead>
+        <tbody>
+          <tr><td>AutoGen</td><td>多 Agent 消息运行时 + Chat Team</td><td>像一个 Agent actor runtime。</td></tr>
+          <tr><td>LangGraph</td><td>状态图 Agent Runtime</td><td>像可控状态机。</td></tr>
+          <tr><td>CrewAI</td><td>角色化 Agent 团队和任务编排</td><td>像组织一支 AI 团队。</td></tr>
+          <tr><td>LangChain</td><td>LLM 应用组件库</td><td>像模型、工具、RAG 的集成工具箱。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>15 分钟分享节奏</h2>
+      <div class="timeline">
+        <div class="item"><strong>2 分钟：</strong>说明 maintenance mode 和源码学习价值。</div>
+        <div class="item"><strong>3 分钟：</strong>讲 Core、AgentChat、Extensions、Studio 四层。</div>
+        <div class="item"><strong>4 分钟：</strong>讲 Core Runtime 的消息投递。</div>
+        <div class="item"><strong>3 分钟：</strong>讲 AssistantAgent 的模型和工具循环。</div>
+        <div class="item"><strong>3 分钟：</strong>讲 GroupChat 和框架对比。</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>收束句</h2>
+      <div class="talk">AutoGen 源码可以浓缩成一句话：Core 提供消息运行时，AgentChat 提供聊天 Agent 和 Team，Extensions 接入模型和工具，Studio 提供可视化入口。</div>
+      <p>完整分析页：<a href="index.html">index.html</a></p>
+    </section>
+  </main>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      securityLevel: "loose",
+      themeVariables: {
+        background: "#ffffff",
+        mainBkg: "#f8f5ff",
+        secondaryColor: "#eef7f6",
+        tertiaryColor: "#f8fafc",
+        primaryBorderColor: "#b7a8e8",
+        secondaryBorderColor: "#9ac7c1",
+        lineColor: "#667085",
+        textColor: "#1f2937"
+      }
+    });
+  </script>
+</body>
+</html>

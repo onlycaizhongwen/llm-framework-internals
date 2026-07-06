@@ -7,3 +7,6 @@
 [submodule "sources/crewai"]
 	path = sources/crewai
 	url = https://github.com/crewAIInc/crewAI.git
+[submodule "sources/autogen"]
+	path = sources/autogen
+	url = https://github.com/microsoft/autogen.git
