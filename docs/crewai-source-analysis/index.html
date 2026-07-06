@@ -210,6 +210,32 @@ def router(condition=None, *, emit=None): ...</code></pre>
     </section>
 
     <section>
+      <h2>应用场景和选型判断</h2>
+      <div class="grid">
+        <div class="card"><strong>研究和报告生成</strong>把 researcher、analyst、writer、reviewer 拆成不同 Agent，由 Crew 顺序或层级协作完成资料收集、分析、撰写和校对。</div>
+        <div class="card"><strong>销售/客服自动化</strong>用 Agent 扮演线索筛选、客户画像、邮件生成、CRM 更新等角色，适合目标明确但执行步骤需要一定自治的任务。</div>
+        <div class="card"><strong>运营内容流水线</strong>用 Flow 固定住“选题 -> 生成 -> 审核 -> 发布”的流程，用 Crew 处理其中需要多角色协作的内容生成环节。</div>
+        <div class="card"><strong>企业知识助手</strong>结合 crewai-tools、knowledge、memory，让不同 Agent 面向检索、总结、合规检查、答案生成分工。</div>
+        <div class="card"><strong>半自动业务流程</strong>当流程节点清晰、但某些节点需要 LLM 判断时，用 Flow 管主流程，用 Crew/Agent 处理智能节点。</div>
+        <div class="card"><strong>原型和演示系统</strong>CrewAI 的 Agent/Task/Crew 语义很直观，适合快速把“团队协作式 AI 自动化”讲清楚并跑起来。</div>
+      </div>
+      <div class="quote">选型口径：如果你想快速表达“几个角色一起完成一件事”，CrewAI 更顺手；如果你想精确控制状态、分支、循环、恢复和节点级流转，LangGraph 更强。</div>
+
+      <h3>和 LangGraph 的对比</h3>
+      <table>
+        <thead><tr><th>维度</th><th>CrewAI</th><th>LangGraph</th><th>分享时怎么讲</th></tr></thead>
+        <tbody>
+          <tr><td>核心抽象</td><td>Agent、Task、Crew、Flow，偏业务协作语义。</td><td>StateGraph、Node、Edge、State，偏状态机/图运行时语义。</td><td>CrewAI 像“组织一支 AI 团队”，LangGraph 像“定义一个可控状态图”。</td></tr>
+          <tr><td>开发入口</td><td>先定义角色、目标、任务，再 kickoff。</td><td>先定义状态结构、节点函数、边和条件路由。</td><td>CrewAI 上手更像写业务说明，LangGraph 更像写工作流引擎。</td></tr>
+          <tr><td>流程控制</td><td>Crew 支持 sequential/hierarchical；Flow 用装饰器表达事件流。</td><td>显式图边、条件边、循环、中断、检查点。</td><td>复杂分支和可恢复长流程优先看 LangGraph。</td></tr>
+          <tr><td>多 Agent 协作</td><td>内建角色化 Agent、Task 委派和 manager agent。</td><td>多 Agent 通常建模为多个节点或子图，需要自己设计协作协议。</td><td>讲多角色协作和任务分工时 CrewAI 表达更直接。</td></tr>
+          <tr><td>可控性</td><td>语义友好，但底层调度自由度相对少。</td><td>节点、状态、路由、持久化边界更显式，可控性更强。</td><td>生产级复杂编排、审计和恢复要求高时 LangGraph 更稳。</td></tr>
+          <tr><td>适合人群</td><td>产品、业务自动化、Agent 原型、内容/研究工作流。</td><td>工程团队、平台化 Agent Runtime、复杂状态流应用。</td><td>一个偏“业务表达速度”，一个偏“工程控制力度”。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
       <h2>核心设计思想</h2>
       <div class="grid">
         <div class="card"><strong>业务语义优先</strong>顶层就是 Agent、Task、Crew、Flow，贴近自动化业务表达。</div>

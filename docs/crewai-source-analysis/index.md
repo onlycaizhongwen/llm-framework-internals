@@ -281,33 +281,58 @@ CrewAI 的核心执行路径大量 emit event，例如 Crew kickoff、Task start
 - `events/event_bus.py:572` 定义 `emit()`。
 - `events/types/*` 定义 Crew、Task、Agent、LLM、Flow 等事件类型。
 
-## 4. 核心设计思想
+## 4. 应用场景和选型判断
 
-### 4.1 面向业务语义建模
+### 4.1 适合 CrewAI 的场景
+
+- **研究和报告生成**：把 researcher、analyst、writer、reviewer 拆成不同 Agent，由 Crew 顺序或层级协作完成资料收集、分析、撰写和校对。
+- **销售/客服自动化**：用 Agent 扮演线索筛选、客户画像、邮件生成、CRM 更新等角色，适合目标明确但执行步骤需要一定自治的任务。
+- **运营内容流水线**：用 Flow 固定住“选题 -> 生成 -> 审核 -> 发布”的流程，用 Crew 处理其中需要多角色协作的内容生成环节。
+- **企业知识助手**：结合 crewai-tools、knowledge、memory，让不同 Agent 面向检索、总结、合规检查、答案生成分工。
+- **半自动业务流程**：当流程节点清晰、但某些节点需要 LLM 判断时，用 Flow 管主流程，用 Crew/Agent 处理智能节点。
+
+选型口径：
+
+> 如果你想快速表达“几个角色一起完成一件事”，CrewAI 更顺手；如果你想精确控制状态、分支、循环、恢复和节点级流转，LangGraph 更强。
+
+### 4.2 和 LangGraph 的对比
+
+| 维度 | CrewAI | LangGraph | 分享时怎么讲 |
+| --- | --- | --- | --- |
+| 核心抽象 | Agent、Task、Crew、Flow，偏业务协作语义。 | StateGraph、Node、Edge、State，偏状态机/图运行时语义。 | CrewAI 像“组织一支 AI 团队”，LangGraph 像“定义一个可控状态图”。 |
+| 开发入口 | 先定义角色、目标、任务，再 kickoff。 | 先定义状态结构、节点函数、边和条件路由。 | CrewAI 上手更像写业务说明，LangGraph 更像写工作流引擎。 |
+| 流程控制 | Crew 支持 sequential/hierarchical；Flow 用装饰器表达事件流。 | 显式图边、条件边、循环、中断、检查点。 | 复杂分支和可恢复长流程优先看 LangGraph。 |
+| 多 Agent 协作 | 内建角色化 Agent、Task 委派和 manager agent。 | 多 Agent 通常建模为多个节点或子图，需要自己设计协作协议。 | 讲多角色协作和任务分工时 CrewAI 表达更直接。 |
+| 可控性 | 语义友好，但底层调度自由度相对少。 | 节点、状态、路由、持久化边界更显式，可控性更强。 | 生产级复杂编排、审计和恢复要求高时 LangGraph 更稳。 |
+| 适合人群 | 产品、业务自动化、Agent 原型、内容/研究工作流。 | 工程团队、平台化 Agent Runtime、复杂状态流应用。 | 一个偏“业务表达速度”，一个偏“工程控制力度”。 |
+
+## 5. 核心设计思想
+
+### 5.1 面向业务语义建模
 
 CrewAI 的顶层抽象直接是 `Agent`、`Task`、`Crew`、`Flow`，这比通用 Runnable/Graph 更贴近业务自动化表达。
 
-### 4.2 双主线架构
+### 5.2 双主线架构
 
 Crews 偏自治协作，Flows 偏确定性控制。两者可以组合：Flow 里可以调用 Crew，Crew 的结果也能进入 Flow 的后续节点。
 
-### 4.3 编排和执行分离
+### 5.3 编排和执行分离
 
 Crew 负责组织 task 顺序和 process，Task 负责执行边界，Agent 负责 prompt/tools/knowledge，Executor 负责 LLM/tool loop。
 
-### 4.4 装饰器 DSL
+### 5.4 装饰器 DSL
 
 Flow 用装饰器把 Python 方法转成 workflow 节点和路由。这种设计让普通 Python 类可以变成事件图。
 
-### 4.5 事件总线横切
+### 5.5 事件总线横切
 
 CrewAI 没有把 tracing、streaming、telemetry 写死在业务逻辑里，而是通过 event bus 把执行过程广播出去。
 
-### 4.6 适配器和工具生态
+### 5.6 适配器和工具生态
 
 LLM 层适配 native providers / LiteLLM，Tool 层通过 `BaseTool` / structured tool 把外部能力标准化。
 
-## 5. 分享建议
+## 6. 分享建议
 
 建议分享顺序：
 

@@ -182,6 +182,20 @@ def listen(condition): ...
 def router(condition=None, *, emit=None): ...</code></pre>
     </section>
     <section>
+      <h2>应用场景和 LangGraph 对比</h2>
+      <div class="talk">应用场景可以这样讲：CrewAI 适合研究报告、销售/客服自动化、内容生产流水线、企业知识助手和半自动业务流程。它最擅长把“多个角色一起完成任务”表达清楚。</div>
+      <table>
+        <thead><tr><th>问题</th><th>CrewAI 更合适</th><th>LangGraph 更合适</th></tr></thead>
+        <tbody>
+          <tr><td>我要表达什么？</td><td>几个 Agent 按角色分工完成任务。</td><td>一个状态图按节点、边、条件持续流转。</td></tr>
+          <tr><td>上手方式</td><td>定义 Agent、Task、Crew，业务语义很直观。</td><td>定义 State、Node、Edge，工程控制更强。</td></tr>
+          <tr><td>流程复杂度</td><td>适合顺序协作、层级委派、轻量 Flow。</td><td>适合复杂分支、循环、检查点、中断恢复。</td></tr>
+          <tr><td>分享口径</td><td>像组织一支 AI 团队。</td><td>像实现一个可控的 Agent 状态机。</td></tr>
+        </tbody>
+      </table>
+      <div class="talk">一句话对比：CrewAI 强在业务语义和多角色协作表达，LangGraph 强在状态图控制、持久化和复杂运行时编排。</div>
+    </section>
+    <section>
       <h2>15 分钟分享节奏</h2>
       <div class="timeline">
         <div class="item"><strong>2 分钟：</strong>定位 CrewAI，强调 Crews + Flows。</div>
