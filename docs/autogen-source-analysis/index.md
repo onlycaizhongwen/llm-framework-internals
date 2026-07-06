@@ -230,14 +230,31 @@ BaseChatAgent 强调 Agent 是 stateful，并通过 `run_stream` 输出中间事
 
 大量类继承 `Component` / `ComponentBase`，配合 Pydantic config 支持序列化、Studio、配置化加载和团队编排。
 
-## 5. 应用场景和对比
+## 5. 应用场景和 LangGraph 对比
 
 适合 AutoGen 的场景：
 
-- 多 Agent 研究、写作、审查、代码执行工作流。
-- 需要流式事件、human-in-the-loop、工具调用和终止条件的聊天型应用。
-- 需要把 Agent 团队可视化或序列化到 Studio 的原型。
-- 已经使用 AutoGen 的系统维护和迁移评估。
+- **多 Agent 研究协作**：把检索、阅读、总结、审查拆成多个 AssistantAgent，用 RoundRobin 或 SelectorGroupChat 组织对话。
+- **团队式聊天原型**：需要快速演示“多个专家一起讨论问题”时，AgentChat 的 Team API 比直接写底层图更快。
+- **人机协同流程**：UserProxyAgent、终止条件、流式事件适合做 human-in-the-loop 的聊天型应用。
+- **工具和代码执行任务**：AssistantAgent + Workbench + Code Executor 适合网页浏览、代码执行、文件处理等工具密集型任务。
+- **可视化原型和演示**：AutoGen Studio 适合把 Agent、Team、模型配置先可视化跑起来，再沉淀为代码。
+- **存量 AutoGen 系统维护**：AutoGen 已进入 maintenance mode，新项目需谨慎；但存量系统仍需要理解 Runtime、Team 和 Extension 边界。
+
+选型口径：
+
+> 如果目标是“多个聊天 Agent 通过消息协作”，AutoGen 表达直接；如果目标是“可恢复、可审计、可精确控制的状态流”，LangGraph 更合适。
+
+### 5.1 AutoGen vs LangGraph
+
+| 维度 | AutoGen | LangGraph | 选型判断 |
+| --- | --- | --- | --- |
+| 核心模型 | AgentRuntime + Message + Team，偏 actor/message runtime。 | StateGraph + Node + Edge + Checkpoint，偏状态机运行时。 | 对话协作优先 AutoGen；状态流控制优先 LangGraph。 |
+| 多 Agent 表达 | RoundRobin、Selector、Swarm 等 Team 模式内建。 | 多 Agent 通常建模为节点、子图、条件边和共享状态。 | 想快速组织“谁发言”用 AutoGen；想明确“状态如何变”用 LangGraph。 |
+| 流程可控性 | 通过 manager、termination、topic 控制，语义偏群聊。 | 通过显式边、条件路由、interrupt、checkpoint 控制。 | 复杂分支、暂停恢复、审计回放更偏 LangGraph。 |
+| 状态管理 | Agent 自身有状态，Team/Manager 可保存状态，但不是以全局 StateGraph 为中心。 | 全局状态是第一等概念，节点读写状态，checkpoint 可持久化。 | 业务状态强约束时选 LangGraph。 |
+| 工具生态 | 通过 autogen-ext 接模型、MCP、代码执行、GraphRAG。 | 通常复用 LangChain 工具生态，并在图节点中组合。 | 工具密集聊天原型 AutoGen 顺手；工程化组合 LangGraph 更稳。 |
+| 项目状态 | 官方 README 标记 maintenance mode，适合学习和存量维护。 | LangGraph 仍是活跃 Agent Runtime 方向。 | 新项目优先评估 LangGraph 或 Microsoft Agent Framework。 |
 
 与其他框架的简要对比：
 

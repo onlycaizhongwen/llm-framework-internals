@@ -115,7 +115,24 @@ class RoundRobinGroupChatManager(BaseGroupChatManager):
 - **状态和流式输出**：Agent 是 stateful，`run_stream` 能输出中间事件和最终结果。
 - **可插拔生态**：模型、工具、MCP、代码执行都通过抽象接口接入。
 
-## 7. 和 LangChain / LangGraph / CrewAI 对比
+## 7. 应用场景和 LangGraph 对比
+
+应用场景可以这样讲：
+
+> AutoGen 适合多 Agent 研究协作、团队式聊天原型、人机协同、工具/代码执行任务、Studio 可视化演示，以及存量 AutoGen 系统维护。
+
+| 问题 | AutoGen 更合适 | LangGraph 更合适 |
+| --- | --- | --- |
+| 我要表达什么？ | 多个 Agent 像群聊一样协作。 | 一个状态图按节点和边精确流转。 |
+| 多 Agent 怎么组织？ | RoundRobin、Selector、Swarm 等 Team 模式。 | 用节点、子图、条件边和共享状态建模。 |
+| 控制要求 | 关注发言顺序、终止条件、工具调用和流式事件。 | 关注 checkpoint、interrupt、恢复、审计和复杂分支。 |
+| 项目建议 | 适合源码学习、原型、存量维护。 | 更适合新项目里的复杂 Agent Runtime。 |
+
+一句话选型：
+
+> AutoGen 强在“消息驱动的 Agent 团队协作”，LangGraph 强在“状态驱动的可控执行流”。
+
+## 8. 和 LangChain / LangGraph / CrewAI 对比
 
 | 框架 | 一句话定位 | 更适合 |
 | --- | --- | --- |
@@ -128,7 +145,7 @@ class RoundRobinGroupChatManager(BaseGroupChatManager):
 
 > AutoGen 更像“多 Agent 消息运行时”，LangGraph 更像“可控状态图”，CrewAI 更像“角色任务团队”，LangChain 更像“LLM 应用组件库”。
 
-## 8. 15 分钟分享节奏
+## 9. 15 分钟分享节奏
 
 1. 2 分钟：说明 AutoGen 版本状态和学习价值。
 2. 3 分钟：讲 Core、AgentChat、Extensions、Studio 四层。
@@ -136,6 +153,6 @@ class RoundRobinGroupChatManager(BaseGroupChatManager):
 4. 3 分钟：讲 AssistantAgent 的模型和工具循环。
 5. 3 分钟：讲 GroupChat 团队编排和与其他框架对比。
 
-## 9. 收束句
+## 10. 收束句
 
 > AutoGen 源码可以浓缩成一句话：Core 提供消息运行时，AgentChat 提供聊天 Agent 和 Team，Extensions 接入模型和工具，Studio 提供可视化入口。理解这几层，就能看懂 AutoGen 的多 Agent 设计。

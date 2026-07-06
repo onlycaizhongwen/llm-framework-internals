@@ -145,6 +145,21 @@ flowchart TD
     </section>
 
     <section>
+      <h2>应用场景和 LangGraph 对比</h2>
+      <div class="talk">应用场景可以这样讲：AutoGen 适合多 Agent 研究协作、团队式聊天原型、人机协同、工具/代码执行任务、Studio 可视化演示，以及存量 AutoGen 系统维护。</div>
+      <table>
+        <thead><tr><th>问题</th><th>AutoGen 更合适</th><th>LangGraph 更合适</th></tr></thead>
+        <tbody>
+          <tr><td>我要表达什么？</td><td>多个 Agent 像群聊一样协作。</td><td>一个状态图按节点和边精确流转。</td></tr>
+          <tr><td>多 Agent 怎么组织？</td><td>RoundRobin、Selector、Swarm 等 Team 模式。</td><td>用节点、子图、条件边和共享状态建模。</td></tr>
+          <tr><td>控制要求</td><td>关注发言顺序、终止条件、工具调用和流式事件。</td><td>关注 checkpoint、interrupt、恢复、审计和复杂分支。</td></tr>
+          <tr><td>项目建议</td><td>适合源码学习、原型、存量维护。</td><td>更适合新项目里的复杂 Agent Runtime。</td></tr>
+        </tbody>
+      </table>
+      <div class="talk">一句话选型：AutoGen 强在“消息驱动的 Agent 团队协作”，LangGraph 强在“状态驱动的可控执行流”。</div>
+    </section>
+
+    <section>
       <h2>和其他框架对比</h2>
       <table>
         <thead><tr><th>框架</th><th>一句话定位</th><th>分享口径</th></tr></thead>

@@ -217,7 +217,32 @@ class RoundRobinGroupChatManager(BaseGroupChatManager):
     </section>
 
     <section>
-      <h2>应用场景和对比</h2>
+      <h2>应用场景和 LangGraph 对比</h2>
+      <h3>AutoGen 更适合的应用场景</h3>
+      <div class="grid">
+        <div class="card"><strong>多 Agent 研究协作</strong>把检索、阅读、总结、审查拆成多个 AssistantAgent，用 RoundRobin 或 SelectorGroupChat 组织对话。</div>
+        <div class="card"><strong>团队式聊天原型</strong>需要快速演示“多个专家一起讨论问题”时，AgentChat 的 Team API 比直接写底层图更快。</div>
+        <div class="card"><strong>人机协同流程</strong>UserProxyAgent、终止条件、流式事件适合做 human-in-the-loop 的聊天型应用。</div>
+        <div class="card"><strong>工具和代码执行任务</strong>AssistantAgent + Workbench + Code Executor 适合网页浏览、代码执行、文件处理等工具密集型任务。</div>
+        <div class="card"><strong>可视化原型和演示</strong>AutoGen Studio 适合把 Agent、Team、模型配置先可视化跑起来，再沉淀为代码。</div>
+        <div class="card"><strong>存量 AutoGen 系统维护</strong>AutoGen 已进入 maintenance mode，新项目需谨慎；但存量系统仍需要理解 Runtime、Team 和 Extension 边界。</div>
+      </div>
+      <div class="quote">选型口径：如果目标是“多个聊天 Agent 通过消息协作”，AutoGen 表达直接；如果目标是“可恢复、可审计、可精确控制的状态流”，LangGraph 更合适。</div>
+
+      <h3>AutoGen vs LangGraph</h3>
+      <table>
+        <thead><tr><th>维度</th><th>AutoGen</th><th>LangGraph</th><th>选型判断</th></tr></thead>
+        <tbody>
+          <tr><td>核心模型</td><td>AgentRuntime + Message + Team，偏 actor/message runtime。</td><td>StateGraph + Node + Edge + Checkpoint，偏状态机运行时。</td><td>对话协作优先 AutoGen；状态流控制优先 LangGraph。</td></tr>
+          <tr><td>多 Agent 表达</td><td>RoundRobin、Selector、Swarm 等 Team 模式内建。</td><td>多 Agent 通常建模为节点、子图、条件边和共享状态。</td><td>想快速组织“谁发言”用 AutoGen；想明确“状态如何变”用 LangGraph。</td></tr>
+          <tr><td>流程可控性</td><td>通过 manager、termination、topic 控制，语义偏群聊。</td><td>通过显式边、条件路由、interrupt、checkpoint 控制。</td><td>复杂分支、暂停恢复、审计回放更偏 LangGraph。</td></tr>
+          <tr><td>状态管理</td><td>Agent 自身有状态，Team/Manager 可保存状态，但不是以全局 StateGraph 为中心。</td><td>全局状态是第一等概念，节点读写状态，checkpoint 可持久化。</td><td>业务状态强约束时选 LangGraph。</td></tr>
+          <tr><td>工具生态</td><td>通过 autogen-ext 接模型、MCP、代码执行、GraphRAG。</td><td>通常复用 LangChain 工具生态，并在图节点中组合。</td><td>工具密集聊天原型 AutoGen 顺手；工程化组合 LangGraph 更稳。</td></tr>
+          <tr><td>项目状态</td><td>官方 README 标记 maintenance mode，适合学习和存量维护。</td><td>LangGraph 仍是活跃 Agent Runtime 方向。</td><td>新项目优先评估 LangGraph 或 Microsoft Agent Framework。</td></tr>
+        </tbody>
+      </table>
+
+      <h3>和其他框架的简要对比</h3>
       <table>
         <thead><tr><th>框架</th><th>一句话定位</th><th>更适合</th></tr></thead>
         <tbody>
