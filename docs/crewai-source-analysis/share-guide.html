@@ -20,6 +20,9 @@
     th { background:#f3f6fb; }
     code { font-family:Consolas,"JetBrains Mono",monospace; font-size:.92em; }
     pre { overflow:auto; background:#101828; color:#e5e7eb; border-radius:8px; padding:15px; }
+    .diagram { background:#fff; border:1px solid #d9dee8; border-radius:8px; padding:18px; margin:16px 0; overflow-x:auto; }
+    .diagram pre { background:#fff; color:#1f2937; }
+    .mermaid { min-width:760px; text-align:center; }
     .timeline { display:grid; gap:10px; margin:16px 0; }
     .item strong { color:#2563eb; }
     a { color:#2563eb; text-decoration:none; }
@@ -74,6 +77,87 @@
       <div class="talk">Flow 是确定性流程控制层。它用装饰器把普通 Python 方法声明成入口、监听器和路由节点。</div>
     </section>
     <section>
+      <h2>架构图和流程图</h2>
+      <h3>整体架构图</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+    User["Application / Developer"] --> Crews["Crews API<br/>Crew / Agent / Task"]
+    User --> Flows["Flows API<br/>Flow + @start/@listen/@router"]
+    Crews --> Crew["Crew<br/>process orchestration"]
+    Crew --> Process["Process<br/>sequential / hierarchical"]
+    Crew --> Task["Task<br/>execution unit"]
+    Task --> Agent["Agent<br/>role / goal / backstory"]
+    Agent --> Executor["AgentExecutor / CrewAgentExecutor<br/>ReAct loop"]
+    Executor --> LLM["LLM<br/>provider routing + call"]
+    Executor --> Tools["BaseTool / CrewStructuredTool"]
+    Crew --> Memory["memory / knowledge / cache"]
+    Crew --> Events["CrewAIEventsBus<br/>observability + hooks"]
+    Flows --> FlowRuntime["Flow runtime<br/>state + method graph"]
+    FlowRuntime --> Decorators["DSL decorators<br/>@start / @listen / @router"]
+    FlowRuntime --> FlowState["Flow state<br/>BaseModel / dict"]
+    FlowRuntime --> FlowPersistence["checkpoint / @persist / restore"]
+    FlowRuntime --> Events
+    Tools --> ToolPackages["crewai-tools<br/>RAG and integrations"]
+    LLM --> Providers["native providers / LiteLLM"]
+    CLI["CLI"] --> Crews
+    CLI --> Flows
+    Core["crewai-core"] --> CLI
+    Files["crewai-files"] --> Task
+        </pre>
+      </div>
+      <h3>Crew 执行流程图</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TD
+    Start([Crew.kickoff]) --> Prepare["prepare_kickoff<br/>inputs + files"]
+    Prepare --> Process{"process"}
+    Process -->|sequential| Seq["_run_sequential_process"]
+    Process -->|hierarchical| Manager["_create_manager_agent"]
+    Manager --> Hier["_run_hierarchical_process"]
+    Seq --> Execute["_execute_tasks"]
+    Hier --> Execute
+    Execute --> Loop{"for each task"}
+    Loop --> Context["build task context"]
+    Context --> Async{"async_execution?"}
+    Async -->|yes| Future["Task.execute_async"]
+    Async -->|no| Sync["Task.execute_sync"]
+    Future --> TaskCore["Task._execute_core"]
+    Sync --> TaskCore
+    TaskCore --> Agent["Agent.execute_task"]
+    Agent --> Prompt["prepare prompt<br/>knowledge + tools"]
+    Prompt --> Executor["agent_executor.invoke"]
+    Executor --> LLM["LLM.call + tool loop"]
+    LLM --> Output["TaskOutput"]
+    Output --> Next{"more tasks?"}
+    Next -->|yes| Loop
+    Next -->|no| CrewOutput["CrewOutput"]
+    CrewOutput --> End([return])
+        </pre>
+      </div>
+      <h3>Flow 事件流程图</h3>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TD
+    Start([Flow.kickoff]) --> Async["kickoff_async"]
+    Async --> State["initialize / restore state"]
+    State --> EmitStart["emit FlowStartedEvent"]
+    EmitStart --> Starts["find @start methods"]
+    Starts --> ExecStart["_execute_start_method"]
+    ExecStart --> Method["_execute_method"]
+    Method --> Router{"router result?"}
+    Router -->|yes| RouteTrigger["emit route label trigger"]
+    Router -->|no| MethodTrigger["emit method-name trigger"]
+    RouteTrigger --> Listeners["_execute_listeners"]
+    MethodTrigger --> Listeners
+    Listeners --> More{"downstream listeners?"}
+    More -->|yes| Method
+    More -->|no| EmitEnd["emit FlowFinishedEvent"]
+    EmitEnd --> End([return final output])
+        </pre>
+      </div>
+    </section>
+    <section>
       <h2>核心代码证据</h2>
       <h3>Crew</h3>
       <pre><code>class Crew(FlowTrackable, BaseModel):
@@ -108,5 +192,9 @@ def router(condition=None, *, emit=None): ...</code></pre>
       <p>完整分析页：<a href="index.html">index.html</a></p>
     </section>
   </main>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+  </script>
 </body>
 </html>
