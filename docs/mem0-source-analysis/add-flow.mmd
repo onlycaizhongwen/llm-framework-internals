@@ -1,0 +1,18 @@
+flowchart TD
+    Start([Memory.add]) --> Validate["校验 user_id / agent_id / run_id<br/>构造 metadata 和 filters"]
+    Validate --> Normalize["messages 标准化<br/>str / dict / list -> list[dict]"]
+    Normalize --> Infer{"infer?"}
+    Infer -->|否| Raw["逐条消息 embedding<br/>_create_memory 写入"]
+    Infer -->|是| Context["读取最近消息<br/>SQLiteManager.get_last_messages"]
+    Context --> Existing["向量检索已有 memory<br/>vector_store.search top_k=10"]
+    Existing --> Prompt["generate_additive_extraction_prompt<br/>带 existing + new + last messages"]
+    Prompt --> LLM["LLM.generate_response<br/>单次 ADD-only 事实抽取"]
+    LLM --> Parse["解析 JSON memory 列表"]
+    Parse --> Embed["embed_batch 所有新事实"]
+    Embed --> Dedup["hash 去重<br/>过滤已有和本批重复"]
+    Dedup --> Insert["vector_store.insert 批量写入"]
+    Insert --> History["SQLiteManager.batch_add_history"]
+    History --> Entities["extract_entities_batch<br/>实体入 entity_store"]
+    Raw --> Return["返回 ADD 结果"]
+    Entities --> SaveMessages["save_messages"]
+    SaveMessages --> Return

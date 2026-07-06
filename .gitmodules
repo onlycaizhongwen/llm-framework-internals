@@ -10,3 +10,6 @@
 [submodule "sources/autogen"]
 	path = sources/autogen
 	url = https://github.com/microsoft/autogen.git
+[submodule "sources/mem0"]
+	path = sources/mem0
+	url = https://github.com/mem0ai/mem0.git

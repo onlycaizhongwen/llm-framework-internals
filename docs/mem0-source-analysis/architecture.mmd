@@ -1,0 +1,22 @@
+flowchart TB
+    App["应用 / Agent / CLI / REST"] --> OSS["mem0.Memory<br/>OSS 本地记忆层"]
+    App --> Client["MemoryClient<br/>Cloud API SDK"]
+    App --> Server["Self-hosted FastAPI Server"]
+    Server --> OSS
+    OSS --> Config["MemoryConfig<br/>LLM / Embedder / VectorStore / Reranker"]
+    OSS --> Add["Memory.add<br/>事实抽取 + 写入"]
+    OSS --> Search["Memory.search<br/>混合检索 + 排序"]
+    Add --> LLM["LLMBase<br/>generate_response"]
+    Add --> Embedder["EmbeddingBase<br/>embed / embed_batch"]
+    Add --> Vector["VectorStoreBase<br/>insert / search / keyword_search"]
+    Add --> SQLite["SQLiteManager<br/>history + last messages"]
+    Add --> Entity["Entity Store<br/>实体抽取 + linked_memory_ids"]
+    Search --> Embedder
+    Search --> Vector
+    Search --> Entity
+    Search --> Scoring["score_and_rank<br/>semantic + BM25 + entity boost"]
+    Search --> Reranker["Reranker<br/>可选二次排序"]
+    Factory["Factory Layer<br/>Llm / Embedder / VectorStore / Reranker"] --> LLM
+    Factory --> Embedder
+    Factory --> Vector
+    Factory --> Reranker

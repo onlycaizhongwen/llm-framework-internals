@@ -1,0 +1,18 @@
+flowchart TD
+    Start([Memory.search]) --> Validate["校验 query / filters / top_k / threshold"]
+    Validate --> Advanced{"高级 metadata operators?"}
+    Advanced -->|是| Process["_process_metadata_filters"]
+    Advanced -->|否| QueryPrep
+    Process --> QueryPrep["query lemmatize<br/>extract_entities"]
+    QueryPrep --> Embed["embedding_model.embed(query, search)"]
+    Embed --> Semantic["vector_store.search<br/>semantic over-fetch"]
+    QueryPrep --> Keyword["vector_store.keyword_search<br/>BM25 可选"]
+    QueryPrep --> Entity["_compute_entity_boosts<br/>实体链接增强"]
+    Semantic --> Score["score_and_rank<br/>semantic + BM25 + entity"]
+    Keyword --> Score
+    Entity --> Score
+    Score --> Format["MemoryItem 格式化<br/>metadata / score_details"]
+    Format --> Rerank{"rerank=True 且有 reranker?"}
+    Rerank -->|是| Reranker["reranker.rerank"]
+    Rerank -->|否| Return["返回 results"]
+    Reranker --> Return

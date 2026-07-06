@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mem0 源码分享讲稿</title>
+  <style>
+    body { margin:0; font-family:"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif; background:#fbfbfd; color:#1f2937; line-height:1.72; }
+    header { background:#fff; border-bottom:1px solid #d9dee8; padding:38px 24px 26px; }
+    main,.wrap { max-width:1080px; margin:0 auto; }
+    main { padding:26px 24px 64px; }
+    h1 { margin:0 0 10px; font-size:clamp(30px,4vw,46px); line-height:1.18; letter-spacing:0; }
+    h2 { margin:34px 0 12px; padding-top:10px; border-top:1px solid #d9dee8; font-size:25px; }
+    h3 { margin:24px 0 8px; font-size:19px; }
+    .lead { max-width:860px; color:#667085; font-size:18px; }
+    .talk { background:#eff6ff; border-left:4px solid #2563eb; padding:14px 16px; margin:16px 0; border-radius:0 8px 8px 0; }
+    .panel,.item { background:#fff; border:1px solid #d9dee8; border-radius:8px; padding:18px; margin:16px 0; }
+    table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #d9dee8; margin:16px 0; }
+    th,td { border-bottom:1px solid #d9dee8; padding:11px 12px; text-align:left; vertical-align:top; }
+    th { background:#f3f6fb; }
+    code { font-family:Consolas,"JetBrains Mono",monospace; font-size:.92em; }
+    pre { overflow:auto; background:#101828; color:#e5e7eb; border-radius:8px; padding:15px; }
+    .diagram { background:#fff; border:1px solid #d9dee8; border-radius:8px; padding:18px; margin:16px 0; overflow-x:auto; }
+    .diagram pre, .diagram .mermaid { background:#fff; color:#1f2937; }
+    .mermaid { min-width:760px; text-align:center; }
+    .mermaid svg { background:#fff; }
+    .timeline { display:grid; gap:10px; margin:16px 0; }
+    .item strong { color:#2563eb; }
+    a { color:#2563eb; text-decoration:none; }
+    @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:20px 18px 48px;} table{display:block; overflow-x:auto;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>mem0 源码分享讲稿</h1>
+      <p class="lead">面向分享的精读版：先讲 mem0 是长期记忆层，再沿 Memory.add、Memory.search、Entity linking 三条源码主线讲到文件和函数。</p>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>开场定位</h2>
+      <div class="talk">mem0 不是 Agent 编排框架，而是给 AI 应用和 Agent 提供长期记忆层。它的主线不是“谁来发言”，而是“如何从对话里抽取事实、存成可检索记忆，并在后续查询里用语义、关键词、实体等多信号找回来”。</div>
+    </section>
+
+    <section>
+      <h2>目录怎么讲</h2>
+      <table>
+        <thead><tr><th>目录</th><th>分享口径</th><th>精读入口</th></tr></thead>
+        <tbody>
+          <tr><td><code>mem0/memory</code></td><td>OSS 本地记忆核心。</td><td><code>main.py</code>、<code>storage.py</code></td></tr>
+          <tr><td><code>mem0/llms</code></td><td>LLM provider 抽象和实现。</td><td><code>base.py</code>、<code>openai.py</code></td></tr>
+          <tr><td><code>mem0/embeddings</code></td><td>embedding provider 抽象和实现。</td><td><code>base.py</code>、<code>openai.py</code></td></tr>
+          <tr><td><code>mem0/vector_stores</code></td><td>向量库适配层。</td><td><code>base.py</code>、<code>qdrant.py</code>、<code>pgvector.py</code></td></tr>
+          <tr><td><code>server / client / cli</code></td><td>产品入口。</td><td>FastAPI、自托管、Cloud SDK、命令行。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>主流程一句话</h2>
+      <pre><code>Memory.add:
+messages -> LLM 单次事实抽取 -> embed_batch -> vector_store.insert -> history/entity linking
+
+Memory.search:
+query -> embedding semantic search + keyword BM25 + entity boost -> score_and_rank -> optional reranker
+
+产品入口:
+Library Memory / FastAPI Server / MemoryClient Cloud SDK / CLI</code></pre>
+      <div class="talk">讲源码时不要把 mem0 讲成普通向量库封装。它真正的价值是把“长期记忆”拆成写入 pipeline 和检索 pipeline。</div>
+    </section>
+
+    <section>
+      <h2>架构图和流程图</h2>
+      <h3>整体架构图</h3>
+      <div class="diagram"><pre class="mermaid">
+flowchart TB
+    App["应用 / Agent"] --> Memory["mem0.Memory"]
+    Memory --> Add["Memory.add"]
+    Memory --> Search["Memory.search"]
+    Add --> LLM["LLMBase"]
+    Add --> Embedder["EmbeddingBase"]
+    Add --> Vector["VectorStoreBase"]
+    Add --> SQLite["SQLiteManager"]
+    Add --> Entity["Entity Store"]
+    Search --> Vector
+    Search --> Entity
+    Search --> Scoring["score_and_rank"]
+    Factory["Factory Layer"] --> LLM
+    Factory --> Embedder
+    Factory --> Vector
+      </pre></div>
+
+      <h3>add 写入流程</h3>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    Start([Memory.add]) --> Validate["校验作用域"]
+    Validate --> Context["last messages + existing memories"]
+    Context --> LLM["LLM 事实抽取"]
+    LLM --> Embed["embed_batch"]
+    Embed --> Dedup["hash 去重"]
+    Dedup --> Insert["vector_store.insert"]
+    Insert --> History["history"]
+    History --> Entity["entity linking"]
+      </pre></div>
+
+      <h3>search 检索流程</h3>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    Start([Memory.search]) --> Prep["query 预处理"]
+    Prep --> Semantic["semantic search"]
+    Prep --> Keyword["BM25 keyword"]
+    Prep --> Entity["entity boost"]
+    Semantic --> Score["score_and_rank"]
+    Keyword --> Score
+    Entity --> Score
+    Score --> Rerank["optional reranker"]
+      </pre></div>
+    </section>
+
+    <section>
+      <h2>源码精读口径</h2>
+      <h3>1. Memory 初始化</h3>
+      <div class="talk">证据链：<code>memory/main.py:444</code> 定义 <code>Memory</code>；<code>:445-489</code> 初始化 embedder、vector_store、llm、SQLite、reranker；<code>configs/base.py:29</code> 定义 <code>MemoryConfig</code>；<code>utils/factory.py</code> 定义 provider factories。</div>
+      <pre><code>class Memory(MemoryBase):
+    def __init__(self, config: MemoryConfig = MemoryConfig()):
+        self.embedding_model = EmbedderFactory.create(...)
+        self.vector_store = VectorStoreFactory.create(...)
+        self.llm = LlmFactory.create(...)</code></pre>
+
+      <h3>2. add 写入流程</h3>
+      <div class="talk">证据链：<code>memory/main.py:717</code> 是 <code>add()</code>；<code>:831</code> 是 <code>_add_to_vector_store()</code>；<code>:895-907</code> 调 LLM 抽取 facts；<code>:932-944</code> 批量 embedding；<code>:991-999</code> 写 vector store；<code>:1031-1145</code> 做 entity linking。</div>
+
+      <h3>3. search 检索流程</h3>
+      <div class="talk">证据链：<code>memory/main.py:1331</code> 是 <code>search()</code>；<code>:1580</code> 是 <code>_search_vector_store()</code>；<code>:1602-1612</code> 做 semantic 和 keyword；<code>:1622-1624</code> 算 entity boost；<code>utils/scoring.py:60</code> 融合评分。</div>
+      <pre><code>def score_and_rank(...):
+    raw_combined = semantic_score + bm25_score + entity_boost</code></pre>
+    </section>
+
+    <section>
+      <h2>设计思想怎么讲</h2>
+      <table>
+        <thead><tr><th>设计思想</th><th>源码证据</th><th>一句话解释</th></tr></thead>
+        <tbody>
+          <tr><td>Memory Layer 优先</td><td><code>Memory.add/search</code></td><td>核心是记忆生命周期，不是 Agent 编排。</td></tr>
+          <tr><td>Pipeline 架构</td><td><code>_add_to_vector_store</code>、<code>_search_vector_store</code></td><td>写入和检索都被拆成稳定阶段。</td></tr>
+          <tr><td>Ports and Adapters</td><td><code>LLMBase</code>、<code>EmbeddingBase</code>、<code>VectorStoreBase</code></td><td>Core 依赖抽象，provider 通过 Factory 接入。</td></tr>
+          <tr><td>Hybrid Retrieval</td><td><code>score_and_rank</code></td><td>semantic、BM25、entity boost 多信号融合。</td></tr>
+          <tr><td>Session-scoped Memory</td><td><code>_build_filters_and_metadata</code></td><td>记忆按 user/agent/run 作用域隔离。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>应用场景和框架对比</h2>
+      <div class="talk">mem0 适合个性化助手、客服历史、长期偏好记忆、跨 session Agent 任务，以及给 LangGraph、AutoGen、CrewAI、LangChain 应用补长期记忆层。</div>
+      <table>
+        <thead><tr><th>问题</th><th>mem0</th><th>AutoGen</th><th>LangGraph</th></tr></thead>
+        <tbody>
+          <tr><td>核心问题</td><td>Agent 要记住什么？</td><td>多个 Agent 怎么协作？</td><td>流程状态怎么流转？</td></tr>
+          <tr><td>主流程</td><td>add/search memory</td><td>send/publish + Team chat</td><td>node/edge/checkpoint</td></tr>
+          <tr><td>适合场景</td><td>个性化和长期上下文</td><td>多 Agent 对话协作</td><td>可恢复、可审计复杂流程</td></tr>
+        </tbody>
+      </table>
+      <div class="talk">一句话选型：如果问题是“Agent 要记住什么”，看 mem0；如果问题是“多个 Agent 怎么协作”，看 AutoGen；如果问题是“流程状态怎么可控流转”，看 LangGraph。</div>
+    </section>
+
+    <section>
+      <h2>15 分钟分享节奏</h2>
+      <div class="timeline">
+        <div class="item"><strong>2 分钟：</strong>讲 mem0 定位，强调它是 memory layer。</div>
+        <div class="item"><strong>3 分钟：</strong>讲架构分层：Memory core、provider 抽象、存储检索、产品入口。</div>
+        <div class="item"><strong>4 分钟：</strong>精读 <code>Memory.add</code> 写入流程。</div>
+        <div class="item"><strong>3 分钟：</strong>精读 <code>Memory.search</code> 混合检索流程。</div>
+        <div class="item"><strong>3 分钟：</strong>讲设计范式、应用场景和框架对比。</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>收束口</h2>
+      <div class="talk">mem0 源码最值得看的不是某个 provider，而是它如何把“长期记忆”拆成事实抽取、向量写入、历史记录、实体链接、混合检索和可选 rerank。读懂 <code>Memory.add</code> 和 <code>Memory.search</code> 两条主线，就读懂了 mem0 的核心设计。</div>
+      <p>完整分析页：<a href="index.html">index.html</a></p>
+    </section>
+  </main>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      securityLevel: "loose",
+      themeVariables: {
+        background: "#ffffff",
+        mainBkg: "#f8f5ff",
+        secondaryColor: "#eef7f6",
+        tertiaryColor: "#f8fafc",
+        primaryBorderColor: "#b7a8e8",
+        secondaryBorderColor: "#9ac7c1",
+        lineColor: "#667085",
+        textColor: "#1f2937"
+      }
+    });
+  </script>
+</body>
+</html>
