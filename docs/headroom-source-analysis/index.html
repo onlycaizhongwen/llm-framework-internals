@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Headroom 源码架构精读</title>
+  <style>
+    :root {
+      --bg:#f6f8fb; --panel:#ffffff; --ink:#1f2937; --muted:#5b6575; --line:#d8e0ea;
+      --accent:#0f766e; --accent2:#2563eb; --soft:#eaf7f4; --warn:#fff7ed; --code:#111827; --codeink:#e5e7eb;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:"Microsoft YaHei","PingFang SC","Segoe UI",Arial,sans-serif; background:var(--bg); color:var(--ink); line-height:1.72; }
+    header { background:#fff; border-bottom:1px solid var(--line); padding:42px 24px 30px; }
+    .hero, main { max-width:1180px; margin:0 auto; }
+    main { padding:28px 24px 68px; }
+    h1 { margin:0 0 12px; font-size:clamp(30px,4vw,48px); line-height:1.16; letter-spacing:0; }
+    h2 { margin:38px 0 12px; padding-top:14px; border-top:1px solid var(--line); font-size:26px; }
+    h3 { margin:24px 0 8px; font-size:20px; }
+    p { margin:10px 0; }
+    .lead { max-width:980px; color:var(--muted); font-size:18px; }
+    .badge-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+    .badge { border:1px solid var(--line); background:#f9fafb; border-radius:999px; padding:5px 12px; font-size:13px; color:var(--muted); }
+    .panel,.card { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    .panel { padding:20px; margin:18px 0; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin:18px 0; }
+    .card { padding:16px; }
+    .card strong { display:block; color:var(--accent); margin-bottom:6px; }
+    table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); margin:16px 0; }
+    th,td { padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:top; text-align:left; }
+    th { background:var(--soft); color:#134e4a; }
+    tr:last-child td { border-bottom:0; }
+    code { font-family:Consolas,"JetBrains Mono",monospace; font-size:.92em; }
+    pre { overflow:auto; background:var(--code); color:var(--codeink); border-radius:8px; padding:16px; }
+    pre code { color:inherit; }
+    .quote { border-left:4px solid var(--accent); background:#ecfdf5; padding:12px 16px; margin:16px 0; color:#134e4a; }
+    .warn { border-left:4px solid #ea580c; background:var(--warn); padding:12px 16px; margin:16px 0; color:#7c2d12; }
+    .diagram { background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px; margin:16px 0; overflow-x:auto; }
+    .mermaid { min-width:860px; text-align:center; background:#fff; }
+    .caption,.evidence { color:var(--muted); font-size:14px; }
+    a { color:var(--accent2); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    .toc { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; padding:0; list-style:none; }
+    .toc a { display:block; background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+    @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:20px 18px 48px;} table{display:block; overflow-x:auto;} .mermaid{min-width:720px;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>Headroom 源码架构精读</h1>
+      <p class="lead">参考前面 LangChain、LangGraph、CrewAI、AutoGen、mem0、Zep、Graphiti 的分析方式，这份文档把 Headroom 放在“上下文压缩层”而不是“Agent 编排框架”的位置来读：先看架构，再看主流程，再解释核心设计思想、真实例子和组合方式。</p>
+      <div class="badge-row">
+        <span class="badge">源码：sources/headroom</span>
+        <span class="badge">提交：48201345be16a8b5aad74e8c390850dce0f34ec4</span>
+        <span class="badge">定位：Context compression layer for AI agents</span>
+        <span class="badge">浅色 HTML 分享版</span>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <h2 id="summary">总体结论</h2>
+      <p>Headroom 不是 LangGraph、CrewAI、AutoGen 那类“多 Agent/工作流编排框架”，它更像一个本地优先的上下文压缩与可恢复层。它站在 Agent 和 LLM API 之间，把工具输出、日志、搜索结果、RAG chunk、代码片段、历史消息在进入模型前压缩；如果压缩过程丢掉了细节，再通过 CCR 和 <code>headroom_retrieve</code> 工具按 hash 找回原文。</p>
+      <div class="quote">一句话定位：LangGraph 决定下一步怎么走，Headroom 决定这一步送给模型的上下文如何变短、变稳、还能找回。</div>
+      <ul class="toc">
+        <li><a href="#architecture">最高层架构</a></li>
+        <li><a href="#flow">核心压缩流程</a></li>
+        <li><a href="#proxy">Proxy + MCP + CCR</a></li>
+        <li><a href="#ideas">核心设计思想</a></li>
+        <li><a href="#example">真实例子</a></li>
+        <li><a href="#compare">框架对比</a></li>
+      </ul>
+    </section>
+
+    <section id="architecture">
+      <h2>最高层架构</h2>
+      <div class="diagram">
+        <div class="mermaid">
+flowchart TB
+    User["使用者 / Agent<br/>Codex、Claude、Cursor、OpenCode、业务后端<br/>为什么：Headroom 不接管任务规划，只接管上下文进入模型前的优化"] --> Entry["入口层<br/>Python API compress() / CLI proxy / wrap / MCP / TS SDK<br/>为什么：不同接入方式共用同一套压缩语义"]
+    Entry --> Proxy["本地代理 HeadroomProxy<br/>FastAPI 路由 / provider handler / 统计面板<br/>为什么：不用改 Agent 主体代码，只改 base_url 或 provider 配置即可插入链路"]
+    Entry --> Lib["库调用 compress()<br/>直接传 messages 返回 CompressResult<br/>为什么：给应用后端、RAG、测试提供最小依赖入口"]
+    Entry --> MCP["MCP Server<br/>headroom_compress / headroom_retrieve / headroom_stats<br/>为什么：让模型看到压缩后的摘要后，还能主动取回原文"]
+    Entry --> SDK["TypeScript SDK<br/>OpenAI / Anthropic / Gemini / Vercel AI 适配<br/>为什么：前端和 Node 应用也能使用相同的压缩能力"]
+    Proxy --> Pipeline["TransformPipeline<br/>CacheAligner -> ContentRouter<br/>为什么：先保护缓存热区，再按内容类型选择压缩器"]
+    Lib --> Pipeline
+    MCP --> Pipeline
+    SDK --> Proxy
+    Pipeline --> Cache["CacheAligner<br/>检测系统提示词中的时间戳、UUID、JWT、hash 等易变内容<br/>为什么：不随意改 prompt，只提示缓存前缀不稳定"]
+    Pipeline --> Router["ContentRouter<br/>source hint / mixed split / detect / route / reassemble<br/>为什么：日志、代码、JSON、搜索结果不能用同一种压缩策略"]
+    Router --> Smart["SmartCrusher<br/>JSON/表格/工具结果压缩 + CCR 标记<br/>为什么：结构化大数组需要保留代表性记录，并可按 hash 找回原始数据"]
+    Router --> Code["CodeCompressor<br/>tree-sitter AST 保语法压缩<br/>为什么：代码不能被普通摘要破坏语法和签名"]
+    Router --> Log["Log/Search/Diff/HTML Compressors<br/>日志、rg 结果、diff、HTML 的专用压缩<br/>为什么：每类工具输出都有不同的高价值片段"]
+    Router --> Kompress["Kompress / Text<br/>普通长文本 ML 压缩<br/>为什么：兜底处理没有强结构的文本"]
+    Smart --> Rust["Rust Core + PyO3 headroom._core<br/>SmartCrusher / detector / log/search/diff 桥接<br/>为什么：热路径 CPU 密集，Rust 提供速度，PyO3 保留 Python API"]
+    Log --> Rust
+    Code --> CCR["CCR Store<br/>Compress-Cache-Retrieve<br/>为什么：允许有损缩短当前上下文，但保留按 hash 恢复原文的通道"]
+    Smart --> CCR
+    CCR --> MCP
+    Proxy --> Obs["可观测性<br/>/stats / dashboard / metrics / transformations/feed / cost tracker<br/>为什么：压缩系统必须能证明节省了多少、哪里发生了变化"]
+        </div>
+      </div>
+      <p>读图说明：Headroom 的架构是“多入口、单核心、多策略、可恢复”。<code>wrap</code> 和 <code>proxy</code> 解决接入问题，<code>compress()</code> 解决库调用问题，MCP 解决“压缩后还能取回”的问题，Rust core 解决性能问题。</p>
+      <table>
+        <thead><tr><th>主题</th><th>源码位置</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>默认 pipeline</td><td><code>headroom/compress.py:385-405</code></td><td>单例 <code>TransformPipeline</code>，默认顺序是 <code>CacheAligner -> ContentRouter</code>。</td></tr>
+          <tr><td>Proxy 架构</td><td><code>headroom/proxy/server.py:623-775</code></td><td><code>HeadroomProxy</code> 初始化 provider runtime、metrics、router config、lossless/CCR/Kompress 等策略。</td></tr>
+          <tr><td>MCP 工具</td><td><code>headroom/ccr/mcp_server.py:322-356</code></td><td>MCP server 暴露 <code>headroom_compress</code>、<code>headroom_retrieve</code>、<code>headroom_stats</code>。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>核心入口矩阵</h2>
+      <table>
+        <thead><tr><th>入口</th><th>适合场景</th><th>最终主线</th><th>分享时怎么讲</th></tr></thead>
+        <tbody>
+          <tr><td><code>compress(messages)</code></td><td>Python 应用、RAG 后端、测试中直接压缩 messages</td><td><code>compress.py -> TransformPipeline</code></td><td>最小 API，像调用 tokenizer 一样调用压缩器。</td></tr>
+          <tr><td><code>headroom proxy</code></td><td>作为 OpenAI/Anthropic/Gemini/Codex 请求代理</td><td>FastAPI app -> provider handler -> pipeline -> upstream</td><td>不改 Agent 逻辑，只把请求先经过本地代理。</td></tr>
+          <tr><td><code>headroom wrap codex/claude</code></td><td>包装现有 AI 编码助手</td><td>启动 proxy + 注入 base_url + 注册 MCP</td><td>帮你把 Agent 的模型入口换成 Headroom。</td></tr>
+          <tr><td>MCP server</td><td>让模型显式压缩或取回原文</td><td><code>headroom_compress</code> / <code>headroom_retrieve</code></td><td>压缩不是黑盒，模型可以自己拿回细节。</td></tr>
+          <tr><td>TypeScript SDK</td><td>Node/前端/服务端 JS 接入</td><td>SDK 调 <code>/v1/compress</code> 或适配 provider</td><td>Python 核心能力通过代理给 JS 世界复用。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="flow">
+      <h2>主流程一：compress() 库调用</h2>
+      <div class="diagram">
+        <div class="mermaid">
+flowchart TD
+    A["1 调用 compress(messages)<br/>为什么：应用可不启动代理，直接复用核心能力"] --> B{"messages 为空或 optimize=False?"}
+    B -- "是" --> Z["原样返回 CompressResult<br/>为什么：支持 A/B 测试和安全旁路"]
+    B -- "否" --> C["构建 CompressConfig<br/>compress_user_messages / protect_recent / target_ratio / min_tokens<br/>为什么：默认保护用户输入和最近上下文，按场景再放开"]
+    C --> D["PipelineExtensionManager 发 INPUT_RECEIVED<br/>为什么：插件可在生命周期节点观察或调整 messages"]
+    D --> E["提取 user query 作为 relevance context<br/>为什么：压缩工具结果时要知道用户正在问什么"]
+    E --> F["TransformPipeline.apply 深拷贝 messages<br/>为什么：避免压缩过程污染调用方原始对象"]
+    F --> G["CacheAligner<br/>检测缓存前缀是否稳定，不改写消息<br/>为什么：缓存命中比局部压缩更重要，错误改写会破坏 provider KV cache"]
+    G --> H["ContentRouter<br/>跳过用户消息、系统消息、小内容、强错误输出、近期代码、分析意图代码<br/>为什么：优先保证正确性和可调试性"]
+    H --> I{"内容类型"}
+    I -- "JSON/表格/工具输出" --> J["SmartCrusher<br/>结构化裁剪、去重、CCR 标记"]
+    I -- "代码" --> K["CodeCompressor<br/>AST 解析，保 imports/signatures/types/error handlers"]
+    I -- "日志/搜索/diff/HTML" --> L["专用 compressor<br/>保留错误行、命中文件、变更摘要、正文"]
+    I -- "普通文本" --> M["Kompress/Text<br/>按目标比例压缩"]
+    J --> N["合并 TransformResult<br/>tokens_before/after、markers、warnings、timing"]
+    K --> N
+    L --> N
+    M --> N
+    N --> O{"tokens_after > tokens_before?"}
+    O -- "是" --> P["膨胀保护：回滚原始 messages<br/>为什么：优化不能比原文更贵"]
+    O -- "否" --> Q["返回 compressed messages + metrics<br/>为什么：上层只需要替换请求体和记录节省"]
+    F -. "异常" .-> R["fail-open 原样返回<br/>为什么：压缩失败不能阻断模型调用"]
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>设计点</th><th>源码证据</th><th>为什么这么设计</th></tr></thead>
+        <tbody>
+          <tr><td>默认不压缩 user message</td><td><code>headroom/compress.py:100-116</code></td><td>编码 Agent 的用户输入通常是任务意图，误压缩会影响正确性；RAG/文档场景可显式打开。</td></tr>
+          <tr><td>保护最近消息</td><td><code>headroom/compress.py:111-116</code></td><td>最近几轮往往是活跃上下文，过度压缩会让模型失去局部连续性。</td></tr>
+          <tr><td>提取 user query 做相关性上下文</td><td><code>headroom/compress.py:237-247</code></td><td>SmartCrusher 如果只看统计特征，可能丢掉和当前问题相关的行。</td></tr>
+          <tr><td>膨胀保护</td><td><code>headroom/compress.py:262-278</code></td><td>有些压缩器加了标记和摘要后可能比原文更长，必须回滚。</td></tr>
+          <tr><td>fail-open</td><td><code>headroom/compress.py:336-349</code></td><td>压缩是优化层，不应该因为失败阻断真正的 LLM 请求。</td></tr>
+        </tbody>
+      </table>
+      <pre><code class="language-python">if tokens_after > tokens_before:
+    return CompressResult(
+        messages=messages,
+        tokens_after=tokens_before,
+        tokens_saved=0,
+        transforms_applied=["inflation_guard:reverted"],
+    )</code></pre>
+    </section>
+
+    <section>
+      <h2>主流程二：TransformPipeline 与 ContentRouter</h2>
+      <p><code>TransformPipeline</code> 的源码注释说明旧的 “drop messages from history” 阶段被退休，现在主策略是 live-zone-only compression，不再在 pipeline 里删除消息列表。证据在 <code>headroom/transforms/pipeline.py:64-77</code>。</p>
+      <div class="grid">
+        <div class="card"><strong>1. 可选拦截器</strong>先缩小特殊工具结果，例如 ast-grep Read outline。证据：<code>pipeline.py:117-130</code>。</div>
+        <div class="card"><strong>2. CacheAligner</strong>关注 provider prefix cache 的稳定性。证据：<code>pipeline.py:132-134</code>。</div>
+        <div class="card"><strong>3. ContentRouter</strong>处理 JSON、文本、代码、日志、搜索结果、HTML。证据：<code>pipeline.py:136-144</code>。</div>
+      </div>
+      <p>ContentRouter 的核心范式是：先判定能不能动，再判断怎么压缩。</p>
+      <table>
+        <thead><tr><th>保护规则</th><th>源码位置</th><th>目的</th></tr></thead>
+        <tbody>
+          <tr><td>默认跳过用户消息</td><td><code>content_router.py:3103-3109</code>、<code>3388-3391</code></td><td>保护任务意图。</td></tr>
+          <tr><td>默认跳过 system/developer</td><td><code>content_router.py:3393-3400</code></td><td>保护缓存热区和系统指令。</td></tr>
+          <tr><td>小内容跳过</td><td><code>content_router.py:3402-3406</code></td><td>短文本压缩收益低，标记反而变贵。</td></tr>
+          <tr><td>强错误输出保护</td><td><code>content_router.py:3408-3424</code></td><td>小而关键的 traceback 要原样保留。</td></tr>
+          <tr><td>近期代码保护</td><td><code>content_router.py:3436-3442</code></td><td>最近代码通常正在被修改或分析。</td></tr>
+          <tr><td>分析/Review 意图保护代码</td><td><code>content_router.py:3444-3449</code></td><td>用户要分析代码时，代码本身不能被过度摘要。</td></tr>
+          <tr><td>已压缩内容不重复压缩</td><td><code>content_router.py:3451-3459</code></td><td>避免 CCR marker 改变导致缓存破坏和不可控递归。</td></tr>
+        </tbody>
+      </table>
+      <div class="warn">断路器也很重要：<code>pipeline.py:187-215</code> 记录连续失败并打开 cooldown 窗口，避免每个请求都重复触发失败压缩。</div>
+    </section>
+
+    <section id="proxy">
+      <h2>主流程三：Proxy + Wrap + MCP + CCR</h2>
+      <div class="diagram">
+        <div class="mermaid">
+sequenceDiagram
+    participant Agent as Agent/CLI
+    participant Wrap as headroom wrap
+    participant Proxy as Headroom Proxy
+    participant Pipe as TransformPipeline
+    participant Store as CCR Store
+    participant MCP as MCP headroom_retrieve
+    participant LLM as Upstream LLM
+    Agent->>Wrap: headroom wrap codex/claude
+    Wrap->>Proxy: 启动或复用本地代理
+    Wrap->>Agent: 注入 base_url / provider 配置 / MCP 工具
+    Agent->>Proxy: /v1/messages 或 /v1/chat/completions 或 /v1/responses
+    Proxy->>Pipe: 标准化请求，执行压缩
+    Pipe->>Store: 大工具输出被压缩时写入原文和 hash
+    Pipe-->>Proxy: 返回压缩后的 messages + CCR marker
+    Proxy->>LLM: 转发压缩请求
+    LLM-->>Proxy: 模型响应，可能要求调用 headroom_retrieve
+    Agent->>MCP: headroom_retrieve(hash)
+    MCP->>Store: 先查本地，再查 proxy store
+    Store-->>MCP: original_content
+    MCP-->>Agent: 返回原始内容
+    Note over Proxy,Store: 为什么这样设计：当前上下文可以短，但原文不能丢；模型需要细节时再按 hash 恢复，避免每轮都携带全部日志/搜索结果。
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>功能</th><th>源码位置</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>wrap</code> 支持多 CLI</td><td><code>headroom/cli/wrap.py:3517-3545</code></td><td>列出 Claude、Codex、Copilot、Aider、Cursor、Goose、OpenHands、OpenCode 等。</td></tr>
+          <tr><td>Codex 包装</td><td><code>headroom/cli/wrap.py:4393-4560</code></td><td>启动代理、注册 MCP、注入 Codex provider/base_url 配置。</td></tr>
+          <tr><td>Codex provider 注入</td><td><code>headroom/cli/wrap.py:1724-1862</code></td><td>写入 <code>openai_base_url = "http://127.0.0.1:{port}/v1"</code> 等配置，并保留 unwrap 恢复能力。</td></tr>
+          <tr><td>Proxy retrieve endpoint</td><td><code>headroom/proxy/server.py:3711-3755</code></td><td><code>/v1/retrieve</code> 按 hash 返回 <code>original_content</code>。</td></tr>
+          <tr><td>Provider tool call retrieve</td><td><code>headroom/proxy/server.py:4070-4145</code></td><td><code>/v1/retrieve/tool_call</code> 兼容 Anthropic/OpenAI tool call 形态。</td></tr>
+        </tbody>
+      </table>
+      <p>CCR 的核心不是“缓存一下”，而是给有损压缩补一个可恢复通道。SmartCrusher 的注释说明：当 lossy path 丢弃行时，会追加形如 <code>{"_ccr_dropped": "&lt;&lt;ccr:HASH N_rows_offloaded&gt;&gt;"}</code> 的 sentinel，模型看到 marker 后可以用 retrieval tool 取回原始数据，见 <code>headroom/transforms/smart_crusher.py:67-76</code>。</p>
+    </section>
+
+    <section>
+      <h2>Rust Core 与 CodeCompressor</h2>
+      <p>Headroom 是 Python 产品体验，但热路径下沉到 Rust：<code>smart_crusher.py:1-19</code> 说明 Python 实现已退休，公开 API 保留，实际委托 <code>headroom._core.SmartCrusher</code>。<code>crates/headroom-py/src/lib.rs:758-866</code> 体现了 JSON parse、crush、re-serialize 等重计算会释放 GIL。</p>
+      <p>代码压缩器则不能当普通文本摘要。<code>code_compressor.py:1-26</code> 说明它使用 tree-sitter AST，保证输出语法有效，保留 import、签名、类型、错误处理；<code>code_compressor.py:1525-1555</code> 说明它遍历完整 statement，而不是按行硬切。</p>
+    </section>
+
+    <section id="example">
+      <h2>真实例子：AI 编码助手调试 CI 失败</h2>
+      <p>你让 Codex 或 Claude 调试 CI 失败，Agent 跑了 <code>pytest</code>、<code>rg</code>、<code>git diff</code>，工具返回 6 万 token 的日志和代码片段。Headroom 介入后，日志、搜索结果、diff、代码片段被分别识别并压缩；小而关键的 traceback 原样保留；如果某个大 JSON/表格/工具输出需要丢弃部分行，SmartCrusher 写 CCR marker 和原始内容。模型需要细节时，再调用 <code>headroom_retrieve(hash)</code>。</p>
+      <table>
+        <thead><tr><th>行为</th><th>源码证据</th></tr></thead>
+        <tbody>
+          <tr><td>Proxy + MCP 同时跑的 e2e 测试</td><td><code>tests/e2e_cortex_proxy_mcp.py:1-15</code></td></tr>
+          <tr><td>Proxy-only 自动压缩路径</td><td><code>tests/e2e_cortex_proxy_mcp.py:225-237</code></td></tr>
+          <tr><td>MCP 显式压缩再走 proxy</td><td><code>tests/e2e_cortex_proxy_mcp.py:239-292</code></td></tr>
+          <tr><td>CCR retrieve round-trip</td><td><code>tests/e2e_cortex_proxy_mcp.py:294-305</code></td></tr>
+          <tr><td>验证 proxy、MCP、compress、retrieve、stats 同时工作</td><td><code>tests/e2e_cortex_proxy_mcp.py:333-339</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>应用场景</h2>
+      <table>
+        <thead><tr><th>场景</th><th>Headroom 价值</th><th>注意点</th></tr></thead>
+        <tbody>
+          <tr><td>AI 编码助手</td><td>压缩 <code>rg</code>、日志、diff、文件片段，减少上下文浪费。</td><td>分析代码时要保护近期代码，避免摘要破坏细节。</td></tr>
+          <tr><td>RAG 应用</td><td>压缩大量 chunk 或检索结果，让模型先看高价值摘要。</td><td>如果用户问题需要逐字引用，要保留 retrieve 通道。</td></tr>
+          <tr><td>数据分析 Agent</td><td>压缩大 JSON、CSV、表格和查询结果。</td><td>结构化数据有损压缩时要解释 CCR marker。</td></tr>
+          <tr><td>长会话 Agent</td><td>压缩旧工具输出，不删除消息列表。</td><td>它不是完整 memory 系统，长期记忆仍需要 mem0/Zep/Graphiti。</td></tr>
+          <tr><td>企业代理网关</td><td>统一接入 OpenAI/Anthropic/Gemini/Codex 并统计节省。</td><td>多 worker 需要关注 CCR store 分裂，源码里已有警告。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="compare">
+      <h2>和其他框架对比</h2>
+      <table>
+        <thead><tr><th>框架</th><th>核心问题</th><th>Headroom 的位置</th></tr></thead>
+        <tbody>
+          <tr><td>LangGraph</td><td>状态图、节点、边、checkpoint、可控工作流</td><td>Headroom 可放在 LangGraph 的模型调用或工具结果进入模型前，降低每个节点调用的 token 成本。</td></tr>
+          <tr><td>mem0</td><td>用户/Agent 的长期记忆事实写入与检索</td><td>mem0 决定“记什么”，Headroom 决定“当前请求怎么缩短”。</td></tr>
+          <tr><td>Zep</td><td>托管记忆平台、session/thread/user memory</td><td>Zep 是记忆服务，Headroom 是本地上下文优化层。</td></tr>
+          <tr><td>Graphiti</td><td>temporal context graph，带时间和来源的事实图</td><td>Graphiti 存知识图谱，Headroom 压缩当前上下文；二者可组合。</td></tr>
+          <tr><td>CrewAI</td><td>Role + Task + Crew 多 Agent 协作</td><td>CrewAI 负责角色和任务协作，Headroom 可减少各 Agent 工具输出的上下文浪费。</td></tr>
+          <tr><td>AutoGen</td><td>多 Agent 对话、工具调用、群聊协作</td><td>AutoGen 负责编排对话，Headroom 可作为 proxy/MCP 插入上下文压缩。</td></tr>
+        </tbody>
+      </table>
+      <h3>和 LangGraph 组合图</h3>
+      <div class="diagram">
+        <div class="mermaid">
+flowchart LR
+    LG["LangGraph<br/>StateGraph / node / edge / checkpoint<br/>决定任务下一步怎么走"] --> Node["某个节点调用工具<br/>搜索、读文件、跑测试、查数据库"]
+    Node --> HR["Headroom<br/>压缩工具输出和历史上下文<br/>为什么：节点状态可能很长，但模型调用不必携带全部原文"]
+    HR --> LLM["LLM 调用<br/>收到较短的高价值上下文"]
+    HR --> CCR["CCR Store + headroom_retrieve<br/>为什么：需要细节时按 hash 取回"]
+    LLM --> LG
+        </div>
+      </div>
+    </section>
+
+    <section id="ideas">
+      <h2>核心设计思想与设计范式</h2>
+      <table>
+        <thead><tr><th>设计思想</th><th>源码证据</th><th>可分享表述</th></tr></thead>
+        <tbody>
+          <tr><td>优化层必须 fail-open</td><td><code>compress.py:336-349</code></td><td>压缩失败时宁愿多花 token，也不能让 Agent 请求失败。</td></tr>
+          <tr><td>不可让优化变贵</td><td><code>compress.py:262-278</code></td><td>token 变多就回滚，优化不是信仰，是可验证收益。</td></tr>
+          <tr><td>先保护再压缩</td><td><code>content_router.py:3388-3459</code></td><td>用户意图、系统指令、错误输出、近期代码都是保护对象。</td></tr>
+          <tr><td>内容感知路由</td><td><code>content_router.py:1-20</code></td><td>日志、代码、JSON、搜索结果有不同的信息密度和风险。</td></tr>
+          <tr><td>可恢复有损压缩</td><td><code>smart_crusher.py:67-76</code>、<code>proxy/server.py:3711-3755</code></td><td>当前上下文短，原文仍然可按 hash 找回。</td></tr>
+          <tr><td>热路径 Rust 化</td><td><code>smart_crusher.py:1-19</code>、<code>crates/headroom-py/src/lib.rs:758-866</code></td><td>Python 做集成体验，Rust 做 CPU 密集压缩。</td></tr>
+          <tr><td>代理模式低侵入</td><td><code>cli/wrap.py:1724-1862</code>、<code>4393-4560</code></td><td>不重写 Agent，只把模型 endpoint 改到本地代理。</td></tr>
+        </tbody>
+      </table>
+      <pre><code class="language-python">except Exception as e:
+    logger.warning("Compression failed, returning original messages: %s", e)
+    return CompressResult(messages=messages, tokens_saved=0)</code></pre>
+      <p>这说明 Headroom 的工程哲学是防守型的。它不是为了极限压缩牺牲正确性，而是在“节省 token”和“保留可恢复性”之间做平衡。</p>
+    </section>
+
+    <section>
+      <h2>局限性与使用边界</h2>
+      <table>
+        <thead><tr><th>局限</th><th>为什么</th><th>建议</th></tr></thead>
+        <tbody>
+          <tr><td>不是 Agent 编排框架</td><td>没有 LangGraph 那种图状态和边控制。</td><td>需要复杂流程时和 LangGraph/AutoGen/CrewAI 组合。</td></tr>
+          <tr><td>不是长期记忆系统</td><td>CCR 主要服务当前压缩恢复，不等价于用户长期 memory。</td><td>长期记忆用 mem0/Zep/Graphiti，Headroom 做上下文预算。</td></tr>
+          <tr><td>有损压缩需要 retrieve 兜底</td><td>SmartCrusher/Kompress 可能丢细节。</td><td>分享时一定讲清 CCR marker 和 <code>headroom_retrieve</code>。</td></tr>
+          <tr><td>多 worker 有状态分裂风险</td><td>in-memory store 分散在不同进程。</td><td>配置 <code>HEADROOM_CCR_BACKEND=sqlite</code>、单 worker 或 sticky session。</td></tr>
+          <tr><td>过度压缩会影响代码分析</td><td>代码语义细节很脆弱。</td><td>保持默认保护近期代码和分析意图代码。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>分享时建议怎么讲</h2>
+      <ol>
+        <li>先讲痛点：Agent 工具输出越来越长，模型真正需要的是高价值上下文，不是所有原文。</li>
+        <li>再讲定位：Headroom 是上下文压缩层，不是工作流框架，也不是长期记忆数据库。</li>
+        <li>展示架构图：多入口收敛到 <code>TransformPipeline</code>，再由 <code>ContentRouter</code> 分发到专用压缩器。</li>
+        <li>展示主流程：压缩前保护规则、内容路由、膨胀回滚、fail-open。</li>
+        <li>讲 CCR：为什么有损压缩仍然可恢复。</li>
+        <li>用真实例子收束：调试 CI 大日志、<code>rg</code> 搜索结果、RAG 大 chunk。</li>
+      </ol>
+      <div class="quote">可以这样开场：Headroom 解决的不是 Agent 下一步做什么，而是 Agent 每次问模型时，不要把 6 万 token 的日志、搜索结果、重复 JSON 原封不动塞进去。它会先判断哪些内容不能动，再按内容类型压缩；如果压缩丢了细节，还能通过 CCR 和 <code>headroom_retrieve</code> 按 hash 找回。</div>
+    </section>
+  </main>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose", flowchart: { htmlLabels: true, curve: "basis" } });
+  </script>
+</body>
+</html>

@@ -1,352 +1,412 @@
-# LangChain 源码架构分析
+# LangChain 源码架构与专题精读
 
-分析对象：`langchain-src` 当前检出的 `master` 快照，提交 `dfca7f4`。
+分析对象：`sources/langchain`，当前本地源码为 `master` 分支，提交 `eb2dabb8b7102fbedb33016dcf10fe475efde88e`，提交时间 `2026-06-02 16:02:36 -0400`，提交信息 `release(langchain): 1.3.4 (#37861)`。
 
-本报告面向源码阅读，先给出总架构，再按源码分支展开。结论分为两类：
+这版在原有“先架构后分支”的基础上，重点补充四个专题：
 
-- **源码证据**：来自仓库中的 README、`pyproject.toml`、Python 类定义和函数实现。
-- **架构推断**：基于多处源码证据归纳出的职责边界和执行链路。
+1. Agent middleware：新 Agent 如何用 hook/wrapper 扩展主流程。
+2. Provider adapter：`init_chat_model` 与 `libs/partners/*` 如何把外部 SDK 翻译成统一接口。
+3. RAG 细节：Document、TextSplitter、Embeddings、VectorStore、Retriever 的真实拼接关系。
+4. Classic 迁移关系：`langchain` 与 `langchain-classic` 的包边界和阅读顺序。
 
 ## 1. 总体结论
 
-LangChain 当前 Python 仓库是一个多包 monorepo。核心不是单个巨型包，而是以 `langchain-core` 定义协议和运行时抽象，以 `langchain` 包提供当前 v1 应用入口，以 `langchain-classic` 保留旧式 chains/memory/agents，以 `libs/partners/*` 提供供应商集成。
-
-### 1.1 最高层分层
+LangChain 当前 Python 仓库不是一个单体包，而是一个多包 monorepo。它的核心分层是：
 
 | 层级 | 目录 | 包名 | 主要职责 |
 | --- | --- | --- | --- |
-| 应用入口层 | `libs/langchain_v1` | `langchain` | 当前主包，提供 `create_agent`、`init_chat_model`、轻量入口和 LangGraph agent 编排 |
-| 核心协议层 | `libs/core` | `langchain-core` | 定义 Runnable、模型、消息、工具、检索器、向量库、嵌入、回调等基础接口 |
-| 经典兼容层 | `libs/langchain` | `langchain-classic` | 旧 chains、memory、classic agents、legacy indexing 等 |
-| 集成层 | `libs/partners/*` | `langchain-openai` 等 | 各模型、嵌入、向量库、工具供应商实现 |
-| 文本切分层 | `libs/text-splitters` | `langchain-text-splitters` | 文本切块和 Document 转换工具 |
-| 标准测试层 | `libs/standard-tests` | `langchain-tests` | 为集成包提供标准接口测试基类 |
+| 应用入口层 | `libs/langchain_v1` | `langchain` | 当前主包，提供 `create_agent`、`init_chat_model`、轻量应用入口，并基于 LangGraph 构建 Agent。 |
+| 核心协议层 | `libs/core` | `langchain-core` | 定义 Runnable、ChatModel、Message、Tool、Retriever、VectorStore、Embeddings、Document、Callback 等基础抽象。 |
+| 经典兼容层 | `libs/langchain` | `langchain-classic` | 保留旧 chains、memory、classic agents、indexing API、community re-export 和 deprecated functionality。 |
+| 供应商适配层 | `libs/partners/*` | `langchain-openai` 等 | 把 OpenAI、Anthropic、向量库、工具等外部 SDK 适配为 core 协议。 |
+| 文本切分层 | `libs/text-splitters` | `langchain-text-splitters` | RAG 前处理，负责把文本或 Document 切成 chunk。 |
+| 标准测试层 | `libs/standard-tests` | `langchain-tests` | 给 partner integrations 提供统一行为测试。 |
 
-架构图见：[architecture.mmd](architecture.mmd)。
+一句话概括：**`langchain-core` 定协议，`langchain` 组装 Agent 和模型入口，`partners` 接外部 provider，`langchain-classic` 承接旧 API。**
 
 ```mermaid
 flowchart TB
-    User["Application / Developer"] --> LC["langchain package\nlibs/langchain_v1"]
-    LC --> Agents["agents.create_agent\nprebuilt agent graph"]
-    LC --> InitModel["chat_models.init_chat_model\nprovider model factory"]
-    LC --> Core["langchain-core\ncontracts and runtime primitives"]
-    Agents --> LangGraph["LangGraph StateGraph\nagent orchestration runtime"]
-    Agents --> Middleware["AgentMiddleware\nbefore/after/wrap hooks"]
-    Agents --> ToolNode["ToolNode\nclient-side tool execution"]
-    InitModel --> Partners["Partner integrations\nlibs/partners/*"]
-    Partners --> ProviderSDK["Provider SDKs\nOpenAI / Anthropic / Qdrant / etc."]
-    Core --> Runnable["Runnable\ninvoke / batch / stream / compose"]
-    Core --> Models["BaseLanguageModel / BaseChatModel"]
-    Core --> Messages["BaseMessage / chunks"]
-    Core --> Tools["BaseTool / BaseToolkit"]
-    Core --> Retrieval["BaseRetriever / VectorStore / Embeddings"]
-    Core --> Docs["Document / text splitters"]
-    Classic["langchain-classic\nlibs/langchain"] --> Core
-    Classic --> Legacy["legacy chains, memory,\nclassic agents, indexing"]
-    TextSplitters["langchain-text-splitters\nlibs/text-splitters"] --> Core
-    StandardTests["langchain-tests\nlibs/standard-tests"] --> Core
-    StandardTests --> Partners
+    App["应用 / 开发者"] --> LC["langchain<br/>libs/langchain_v1<br/>当前主入口"]
+    LC --> Agent["create_agent<br/>构建 LangGraph Agent"]
+    LC --> Init["init_chat_model<br/>统一模型初始化"]
+    LC --> Core["langchain-core<br/>基础协议"]
+    Agent --> Graph["LangGraph StateGraph<br/>model/tools/middleware 节点"]
+    Agent --> MW["AgentMiddleware<br/>before/after/wrap hooks"]
+    Init --> Partners["libs/partners/*<br/>provider adapter"]
+    Partners --> SDK["外部 SDK/API<br/>OpenAI/Anthropic/Qdrant 等"]
+    Core --> Runnable["Runnable<br/>invoke/batch/stream/compose"]
+    Core --> Chat["BaseChatModel / BaseMessage"]
+    Core --> Tool["BaseTool"]
+    Core --> Rag["Document / Embeddings / VectorStore / Retriever"]
+    Split["langchain-text-splitters"] --> Rag
+    Classic["langchain-classic<br/>libs/langchain"] --> Core
+    Classic --> Legacy["旧 chains/memory/agents/indexing"]
 ```
 
-## 2. 源码分支分析
+## 2. 专题一：Agent middleware
 
-### 2.1 `libs/core`: 抽象与组合内核
+### 2.1 源码定位
 
-**定位**：`langchain-core` 是整个生态的底座。它不绑定某个模型供应商，而是定义可互换接口。
+新 Agent 的入口在 `libs/langchain_v1/langchain/agents/factory.py:create_agent`。它不是直接运行一个函数链，而是创建并编译一个 LangGraph `StateGraph`。
 
-源码证据：
+核心证据：
 
-- `libs/core/README.md:21` 明确说 LangChain Core 包含支撑生态的基础抽象。
-- `libs/core/README.md:25` 说明任何 provider 实现接口后即可被生态其余部分使用。
-- `libs/core/pyproject.toml:6` 包名是 `langchain-core`。
-- `libs/core/pyproject.toml:27` 依赖 `langsmith`，说明 tracing/observability 是 core 级能力。
+| 证据 | 说明 |
+| --- | --- |
+| `factory.py:697-718` | `create_agent` 接收 `model`、`tools`、`middleware`、`response_format`、`checkpointer`、`store`、interrupt 等参数，并声明创建“调用工具直到停止条件满足”的 agent graph。 |
+| `factory.py:823-829` | 文档说明模型输出 `tool_calls` 后进入 tools 节点，工具结果以 `ToolMessage` 回到消息列表，再次调用模型直到没有 tool call。 |
+| `factory.py:1047-1055` | 创建 `StateGraph`，state/input/output/context schema 都在这里确定。 |
+| `factory.py:1386-1390` | 添加 `model` 节点；有工具时添加 `tools` 节点。 |
+| `factory.py:1392-1474` | middleware 的 before/after hook 被编译为独立图节点。 |
+| `factory.py:1516-1551` | 添加 tools -> model、model -> tools 的条件边，形成 Agent 循环。 |
+| `factory.py:1671-1680` | 最终 `graph.compile(...)`，并把 stream transformers 一起注册。 |
 
-关键抽象：
+### 2.2 Middleware 不是一个点，而是一组扩展面
 
-| 抽象 | 源码位置 | 作用 |
+`AgentMiddleware` 定义在 `libs/langchain_v1/langchain/agents/middleware/types.py:383`。它提供两类扩展：
+
+| 类型 | 方法 | 运行方式 | 适合做什么 |
+| --- | --- | --- | --- |
+| 生命周期节点 | `before_agent`、`before_model`、`after_model`、`after_agent` | 被 `create_agent` 编译成 LangGraph 节点 | 注入系统状态、裁剪消息、人工确认、结构化校验、结束前整理结果。 |
+| 调用包装器 | `wrap_model_call`、`wrap_tool_call` | 包住 handler，可调用一次、多次或短路 | 重试、限流、缓存、动态路由模型、工具错误处理、审计。 |
+| 附加工具 | `tools` 属性 | middleware 自带工具会并入 Agent 可用工具 | 把某个扩展能力连工具一起安装。 |
+| 流式转换 | `transformers` 属性 | graph compile 时注册 stream transformer | 对流式输出做观察、改写、结构化事件转换。 |
+
+关键代码片段：
+
+```python
+class AgentMiddleware(Generic[StateT, ContextT, ResponseT]):
+    """Base middleware class for an agent.
+
+    Subclass this and implement any of the defined methods to customize agent behavior
+    between steps in the main agent loop.
+    """
+```
+
+`wrap_model_call` 的设计很像 Web middleware：
+
+```python
+def wrap_model_call(self, request, handler):
+    # 可以修改 request
+    # 可以 handler(request) 调一次
+    # 可以为了重试调多次
+    # 也可以不调用 handler 直接返回
+```
+
+源码文档在 `types.py:491-503` 明确说明：middleware 可以多次调用 handler 做 retry，可以跳过 handler 做 short-circuit，也可以修改 request/response；多个 middleware 按列表顺序组合，第一个是最外层。
+
+`wrap_tool_call` 同样支持请求改写和重试，见 `types.py:662-730`。这说明 LangChain 把“工具调用可靠性”放在 middleware 层，而不是塞进每个 Tool。
+
+### 2.3 为什么这样设计
+
+Agent 的主循环很容易变复杂：模型调用前要改消息，模型失败要重试，工具调用要审计，工具结果可能要人工确认，结构化输出失败要回到模型重试。如果这些都写进 `create_agent` 主函数，Agent 会变成不可维护的大型 if/else。
+
+LangChain 的设计是：
+
+1. 主循环保持稳定：model 节点、tools 节点、条件边。
+2. 变化逻辑放进 middleware：before/after/wrap。
+3. 复杂控制交给 LangGraph：状态、节点、边、checkpoint、interrupt。
+
+这个范式可以概括为：**Agent 主干图稳定，扩展能力用 middleware 注入。**
+
+### 2.4 真实例子：动态模型路由和工具重试
+
+```python
+from langchain.agents.middleware import wrap_model_call, wrap_tool_call
+
+@wrap_model_call
+def route_model(request, handler):
+    if len(request.messages) > 20:
+        request = request.override(model=large_context_model)
+    return handler(request)
+
+@wrap_tool_call
+def retry_tool(request, handler):
+    last_error = None
+    for _ in range(3):
+        try:
+            return handler(request)
+        except Exception as exc:
+            last_error = exc
+    raise last_error
+```
+
+这类能力不需要改 `create_agent`，因为 `ModelRequest` 已经携带 `model`、`messages`、`system_message`、`tools`、`state`、`runtime`、`model_settings` 等上下文，见 `types.py:90-107`。
+
+## 3. 专题二：Provider adapter
+
+### 3.1 `init_chat_model` 是统一模型入口
+
+`init_chat_model` 定义在 `libs/langchain_v1/langchain/chat_models/base.py:210`。它的职责不是调用模型，而是把用户传入的 `model` 字符串和 provider 参数解析成具体 `BaseChatModel` 实例。
+
+关键证据：
+
+| 证据 | 说明 |
+| --- | --- |
+| `base.py:210-218` | `init_chat_model` 返回 `BaseChatModel` 或 `_ConfigurableModel`。 |
+| `base.py:239-266` | 支持 `openai:gpt-5.5` 这种 provider 前缀，也支持根据模型名前缀推断 provider。 |
+| `base.py:282-309` | 列出 provider 到 integration package 的映射，例如 `openai -> langchain-openai`、`anthropic -> langchain-anthropic`。 |
+| `base.py:324-330` | `configurable_fields="any"` 有安全警告，因为 `api_key`、`base_url` 等可能被运行时配置改写。 |
+| `base.py:493-518` | 固定模型直接 `_init_chat_model_helper`，后者 `_parse_model` 后找 provider creator。 |
+| `base.py:597-625` | `_parse_model` 处理 `provider:model`、自动推断 provider、规范化 provider 名称。 |
+| `base.py:640-705` | `_ConfigurableModel` 延迟实例化模型，并把 `bind_tools`、`with_structured_output` 这类声明式操作排队。 |
+
+读源码时要注意：`init_chat_model("openai:gpt-5.5")` 并不会把 OpenAI SDK 逻辑写在主包里，它只是选择 provider creator。真正的 OpenAI 请求转换在 `libs/partners/openai`。
+
+### 3.2 OpenAI adapter 如何翻译协议
+
+OpenAI 集成包的核心类是：
+
+```python
+class BaseChatOpenAI(BaseChatModel):
+    """Base wrapper around OpenAI large language models for chat."""
+
+class ChatOpenAI(BaseChatOpenAI):
+    r"""Interface to OpenAI chat model APIs."""
+```
+
+源码位置：
+
+| 文件 | 证据 | 说明 |
 | --- | --- | --- |
-| `Runnable` | `libs/core/langchain_core/runnables/base.py:125` | 统一“可调用、批量、流式、可组合”的运行单元 |
-| `BaseLanguageModel` | `libs/core/langchain_core/language_models/base.py:141` | 语言模型基类 |
-| `BaseChatModel` | `libs/core/langchain_core/language_models/chat_models.py:270` | Chat 模型基类，暴露 invoke/stream 和工具绑定 |
-| `BaseMessage` | `libs/core/langchain_core/messages/base.py:93` | Chat 模型输入输出消息基础类型 |
-| `BaseTool` | `libs/core/langchain_core/tools/base.py:405` | 所有工具的基础接口，也继承 Runnable 能力 |
-| `BaseRetriever` | `libs/core/langchain_core/retrievers.py:55` | 查询字符串到 Document 列表的检索接口 |
-| `VectorStore` | `libs/core/langchain_core/vectorstores/base.py:43` | 向量库接口 |
-| `Embeddings` | `libs/core/langchain_core/embeddings/embeddings.py:8` | 文本到向量的嵌入接口 |
+| `libs/partners/openai/langchain_openai/chat_models/base.py:581-612` | `BaseChatOpenAI` 继承 `BaseChatModel`，声明 client、async_client、model、temperature、model_kwargs、api_key 等字段。 |
+| `base.py:1549-1608` | `_stream` 构建 payload，调用 OpenAI SDK stream，并把 chunk 转成 `ChatGenerationChunk`。 |
+| `base.py:1624-1678` | `_generate` 构建 payload，根据 responses API / chat completions API 选择调用，并返回 LangChain `ChatResult`。 |
+| `base.py:1695-1724` | `_get_request_payload` 把 LangChain messages 转成 OpenAI payload。 |
+| `base.py:1771-1795` | `_create_chat_result` 把 OpenAI response 转成 `AIMessage`、usage metadata、llm_output。 |
+| `base.py:2131-2148` | `bind_tools` 把工具定义转换为 OpenAI tool-calling 兼容格式。 |
+| `base.py:2534-2585` | `ChatOpenAI` 文档明确只面向官方 OpenAI API；OpenRouter、vLLM、DeepSeek 等应使用对应 provider 包。 |
 
-架构推断：
+Provider adapter 的职责可以拆成 6 件事：
 
-`Runnable` 是横向运行协议，模型、工具、检索器等通过它进入同一组合体系。`BaseChatModel`、`BaseTool`、`BaseRetriever` 则是面向 LLM 应用常见部件的纵向协议。
+1. 参数适配：`model`、`temperature`、`api_key`、`base_url`、`timeout`、`max_retries`。
+2. 消息适配：LangChain `BaseMessage` <-> provider request dict。
+3. 工具适配：`BaseTool` / callable / schema -> provider tool schema。
+4. 响应适配：provider response -> `AIMessage` / `ChatGeneration` / `ChatResult`。
+5. 流式适配：provider chunk -> `AIMessageChunk` / callback token。
+6. 元数据适配：token usage、finish reason、model name、system fingerprint。
 
-### 2.2 `libs/langchain_v1`: 当前主包与 Agent 编排
+### 3.3 为什么 provider adapter 要独立成 partner 包
 
-**定位**：当前 `pip install langchain` 对应 `libs/langchain_v1`，它把 core 抽象、provider 集成和 LangGraph 编排组合成面向应用的入口。
+如果 OpenAI、Anthropic、Qdrant、Pinecone、Cohere 全放在主包里，主包会被 SDK 版本、鉴权方式、响应格式和可选依赖拖垮。LangChain 现在的模式是：
 
-源码证据：
-
-- `libs/langchain_v1/pyproject.toml:6` 包名是 `langchain`。
-- `libs/langchain_v1/pyproject.toml:27` 依赖 `langchain-core>=1.4.0,<2.0.0`。
-- `libs/langchain_v1/pyproject.toml:28` 依赖 `langgraph>=1.2.3,<1.3.0`。
-- `libs/langchain_v1/README.md:21` 描述 LangChain 用于快速构建 agents 和 LLM 应用。
-- `libs/langchain_v1/README.md:25` 明确说明 LangChain agents 建在 LangGraph 之上。
-
-#### Agent 入口
-
-`create_agent` 是当前主包最重要的高级入口之一。
-
-源码证据：
-
-- `libs/langchain_v1/langchain/agents/factory.py:697` 定义 `create_agent`。
-- `libs/langchain_v1/langchain/agents/factory.py:717` 文档说明它创建一个调用工具直到停止条件满足的 agent graph。
-- `libs/langchain_v1/langchain/agents/factory.py:818` 返回编译后的 `StateGraph`。
-- `libs/langchain_v1/langchain/agents/factory.py:24` 从 LangGraph 导入 `StateGraph`。
-- `libs/langchain_v1/langchain/agents/factory.py:26` 从 LangGraph 预构建模块导入 `ToolNode`。
-- `libs/langchain_v1/langchain/agents/factory.py:1671` 最终 `graph.compile(...)`。
-
-Agent 流程图见：[agent-flow.mmd](agent-flow.mmd)。
-
-```mermaid
-flowchart TD
-    Start([User invokes compiled agent]) --> State["Agent state\nmessages + context"]
-    State --> BeforeAgent{"before_agent\nmiddleware?"}
-    BeforeAgent --> BeforeModel{"before_model\nmiddleware?"}
-    BeforeModel --> ModelNode["model node\nbuild ModelRequest"]
-    ModelNode --> WrapModel["wrap_model_call stack\nretry/cache/route/modify"]
-    WrapModel --> ChatModel["BaseChatModel.invoke / stream"]
-    ChatModel --> AIMessage["AIMessage result"]
-    AIMessage --> AfterModel{"after_model\nmiddleware?"}
-    AfterModel --> HasTools{"tool calls?"}
-    HasTools -- no --> Structured{"structured output\nneeded?"}
-    Structured -- no --> AfterAgent{"after_agent\nmiddleware?"}
-    Structured -- yes --> StructuredTool["structured output tool"]
-    StructuredTool --> AfterAgent
-    HasTools -- yes --> ToolNode["tools node"]
-    ToolNode --> WrapTool["wrap_tool_call stack"]
-    WrapTool --> BaseTool["BaseTool.run / invoke"]
-    BaseTool --> ToolMessage["ToolMessage"]
-    ToolMessage --> ModelNode
-    AfterAgent --> End([END / response])
+```text
+应用代码
+  -> BaseChatModel / Embeddings / VectorStore / Retriever
+  -> partner package
+  -> provider SDK/API
 ```
 
-#### Middleware 机制
+这样上层只面向 core 协议，底层 provider 可以独立发版、独立测试、独立处理 SDK 变化。
 
-Agent 的可扩展性主要通过 middleware 注入。
+## 4. 专题三：RAG 细节
 
-源码证据：
-
-- `libs/langchain_v1/langchain/agents/middleware/types.py:383` 定义 `AgentMiddleware`。
-- `libs/langchain_v1/langchain/agents/middleware/types.py:443` 定义 `before_model`。
-- `libs/langchain_v1/langchain/agents/middleware/types.py:467` 定义 `after_model`。
-- `libs/langchain_v1/langchain/agents/middleware/types.py:491` 定义 `wrap_model_call`。
-- `libs/langchain_v1/langchain/agents/middleware/types.py:662` 定义 `wrap_tool_call`。
-- `libs/langchain_v1/langchain/agents/factory.py:1386` 添加 `model` 节点。
-- `libs/langchain_v1/langchain/agents/factory.py:1390` 在存在工具时添加 `tools` 节点。
-- `libs/langchain_v1/langchain/agents/factory.py:1411`、`:1432`、`:1453`、`:1472` 为 middleware hook 添加节点。
-
-架构推断：
-
-`create_agent` 不是普通函数链，而是 graph builder。它把模型调用、工具调用和 middleware hook 编译成 LangGraph 节点/边，因此天然支持循环、持久化、流式和中间状态控制。
-
-#### 模型初始化
-
-源码证据：
-
-- `libs/langchain_v1/langchain/chat_models/base.py:210` 定义 `init_chat_model`。
-- `libs/langchain_v1/langchain/chat_models/base.py:494` 当模型确定时调用 `_init_chat_model_helper`。
-- `libs/langchain_v1/langchain/agents/factory.py:853` 当 `create_agent` 收到字符串模型时调用 `init_chat_model(model)`。
-
-架构推断：
-
-`init_chat_model` 是 provider 选择层，`create_agent` 是 orchestration 层。应用代码传 `"openai:gpt-5.5"` 这类字符串时，先解析成具体 `BaseChatModel` 实例，再放进 agent graph。
-
-### 2.3 `libs/langchain`: classic 兼容分支
-
-**定位**：`libs/langchain` 当前发布为 `langchain-classic`，保留旧 chains、memory、classic agents 和 legacy API。
-
-源码证据：
-
-- `libs/langchain/pyproject.toml:6` 包名是 `langchain-classic`。
-- `libs/langchain/README.md:1` 标题是 LangChain Classic。
-- `libs/langchain/README.md:21` 说明包含 legacy chains、`langchain-community` re-exports、indexing API、deprecated functionality 等。
-- `libs/langchain/README.md:23` 建议多数情况下使用主 `langchain` 包。
-
-架构推断：
-
-Classic 分支是迁移缓冲区。它依赖 `langchain-core`，但主要服务旧式链式 API 和兼容场景。新项目源码阅读应优先从 `libs/langchain_v1` 和 `libs/core` 开始。
-
-### 2.4 `libs/partners`: provider 实现分支
-
-**定位**：供应商集成包把外部 SDK 适配到 `langchain-core` 定义的接口。
-
-源码证据：
-
-- `libs/partners/README.md:3` 指向 integrations provider 文档。
-- `libs/partners/openai/pyproject.toml:6` 包名是 `langchain-openai`。
-- `libs/partners/openai/pyproject.toml:26` 依赖 `langchain-core`。
-- `libs/partners/openai/pyproject.toml:27` 依赖 `openai` SDK。
-- `libs/partners/openai/langchain_openai/chat_models/base.py:581` `BaseChatOpenAI` 继承 `BaseChatModel`。
-- `libs/partners/openai/langchain_openai/chat_models/base.py:2534` 定义 `ChatOpenAI`。
-- `libs/partners/openai/langchain_openai/embeddings/base.py:86` `OpenAIEmbeddings` 实现 `Embeddings`。
-
-架构推断：
-
-供应商包的核心价值不是重新定义 LangChain 协议，而是做“协议到 SDK”的适配：认证参数、客户端构造、请求/响应转换、token 统计、流式处理、结构化输出和工具调用兼容。
-
-### 2.5 `libs/text-splitters`: 文档切块分支
-
-源码证据：
-
-- `libs/text-splitters/pyproject.toml:6` 包名是 `langchain-text-splitters`。
-- `libs/text-splitters/pyproject.toml:28` 依赖 `langchain-core`。
-- `libs/text-splitters/README.md:18` 说明它提供多种文本文档切块工具。
-- `libs/text-splitters/langchain_text_splitters/base.py:44` 定义 `TextSplitter`。
-- `libs/text-splitters/langchain_text_splitters/base.py:93` 子类需要实现 `split_text`。
-- `libs/text-splitters/langchain_text_splitters/base.py:103` `create_documents` 把文本切块转成 `Document`。
-- `libs/text-splitters/langchain_text_splitters/base.py:131` `split_documents` 支持 Document 到 Document 的切分。
-
-### 2.6 `libs/standard-tests`: 集成质量分支
-
-源码证据：
-
-- `libs/standard-tests/pyproject.toml:6` 包名是 `langchain-tests`。
-- `libs/standard-tests/README.md:18` 说明它为 LangChain integrations 提供标准测试基类。
-- `libs/standard-tests/README.md:42` 和 `:43` 要求实现 unit test class 与 integration test class。
-- `libs/standard-tests/README.md:53` 示例从 `langchain_core.language_models` 导入 `BaseChatModel`。
-
-架构推断：
-
-标准测试包是生态治理工具。它把 core 的抽象契约变成可执行测试，降低 partner integrations 行为漂移的风险。
-
-## 3. 核心运行流程
-
-### 3.1 普通模型调用
-
-1. 应用调用 `init_chat_model("provider:model")` 或直接构造 provider 模型。
-2. `init_chat_model` 根据 provider 创建具体 `BaseChatModel` 实现。
-3. 应用调用 `.invoke()` / `.stream()`。
-4. `BaseChatModel` 将输入转换为消息，进入 provider 实现的生成逻辑。
-5. provider 包调用外部 SDK 并把响应转换为 `AIMessage` / message chunks。
-
-证据：
-
-- `BaseChatModel` 定义在 `libs/core/langchain_core/language_models/chat_models.py:270`。
-- `BaseChatModel.invoke` 在 `libs/core/langchain_core/language_models/chat_models.py:461`。
-- `BaseChatModel.stream` 在 `libs/core/langchain_core/language_models/chat_models.py:713`。
-- OpenAI chat 模型继承关系见 `libs/partners/openai/langchain_openai/chat_models/base.py:581` 和 `:2534`。
-
-### 3.2 Agent + Tool 循环
-
-1. 应用调用 `create_agent(model, tools, middleware, ...)`。
-2. 字符串模型先通过 `init_chat_model` 转为模型实例。
-3. `create_agent` 构造 `StateGraph`。
-4. 图中至少有 model 节点；有工具时添加 tools 节点。
-5. middleware hook 被编译成 before/after/wrap 节点或包装栈。
-6. 模型输出含 tool calls 时流向 tools 节点。
-7. 工具结果以 `ToolMessage` 回到模型节点。
-8. 没有工具调用或满足停止条件时结束。
-
-证据：
-
-- `create_agent` 定义：`libs/langchain_v1/langchain/agents/factory.py:697`。
-- 创建 agent graph 的说明：`libs/langchain_v1/langchain/agents/factory.py:717`。
-- 添加 model 节点：`libs/langchain_v1/langchain/agents/factory.py:1386`。
-- 添加 tools 节点：`libs/langchain_v1/langchain/agents/factory.py:1390`。
-- 添加条件边：`libs/langchain_v1/langchain/agents/factory.py:1516`、`:1540`、`:1553`。
-- 编译图：`libs/langchain_v1/langchain/agents/factory.py:1671`。
-
-### 3.3 RAG / 检索增强流程
-
-RAG 流程图见：[rag-flow.mmd](rag-flow.mmd)。
+LangChain 的 RAG 不是一个单一大类，而是一组 core 协议组合：
 
 ```mermaid
 flowchart LR
-    Raw["Raw text / files"] --> Splitter["TextSplitter\nsplit_text / create_documents"]
-    Splitter --> Documents["Document chunks\npage_content + metadata"]
-    Documents --> EmbedDocs["Embeddings.embed_documents"]
-    EmbedDocs --> Store["VectorStore.add_texts / add_documents"]
-    Store --> Retriever["VectorStoreRetriever / BaseRetriever"]
-    Query["User query"] --> EmbedQuery["Embeddings.embed_query"]
-    EmbedQuery --> Search["VectorStore.similarity_search"]
-    Retriever --> Search
-    Search --> RelevantDocs["Relevant documents"]
-    RelevantDocs --> Prompt["Prompt / messages"]
-    Prompt --> ChatModel["BaseChatModel"]
-    ChatModel --> Answer["Generated answer"]
+    Raw["原始资料<br/>PDF/网页/Markdown/数据库文本"] --> Splitter["TextSplitter<br/>chunk_size / overlap / start_index"]
+    Splitter --> Docs["Document<br/>page_content + metadata"]
+    Docs --> EmbedDocs["Embeddings.embed_documents<br/>文档向量化"]
+    EmbedDocs --> Store["VectorStore.add_documents/add_texts<br/>写入向量库"]
+    Query["用户问题"] --> EmbedQuery["Embeddings.embed_query<br/>查询向量化"]
+    Store --> Retriever["VectorStoreRetriever<br/>similarity / score_threshold / mmr"]
+    EmbedQuery --> Retriever
+    Retriever --> Context["Relevant Documents<br/>召回上下文"]
+    Context --> Prompt["Prompt/messages<br/>把资料放进模型上下文"]
+    Prompt --> Model["BaseChatModel.invoke/stream"]
+    Model --> Answer["答案"]
 ```
 
-证据：
+### 4.1 Document 和 TextSplitter
 
-- `TextSplitter.create_documents`：`libs/text-splitters/langchain_text_splitters/base.py:103`。
-- `Embeddings.embed_documents`：`libs/core/langchain_core/embeddings/embeddings.py:37`。
-- `VectorStore.similarity_search`：`libs/core/langchain_core/vectorstores/base.py:361`。
-- `VectorStoreRetriever`：`libs/core/langchain_core/vectorstores/base.py:964`。
-- `BaseRetriever.invoke`：`libs/core/langchain_core/retrievers.py:179`。
+`TextSplitter` 在 `libs/text-splitters/langchain_text_splitters/base.py:44` 定义。构造参数包括：
 
-架构推断：
+| 参数 | 作用 | 细节 |
+| --- | --- | --- |
+| `chunk_size` | 每个 chunk 最大长度 | 默认 4000。 |
+| `chunk_overlap` | 相邻 chunk 重叠 | 默认 200，且不能大于 `chunk_size`。 |
+| `length_function` | 如何计算长度 | 默认 `len`，可换成 token 长度函数。 |
+| `add_start_index` | 是否把 chunk 起点写入 metadata | 便于追溯原文位置。 |
+| `strip_whitespace` | 是否去除首尾空白 | 默认 True。 |
 
-RAG 不是一个单独巨型模块，而是多个 core 协议的组合：Document -> TextSplitter -> Embeddings -> VectorStore -> Retriever -> Prompt/Model。不同供应商只替换某个协议实现。
+源码证据：
 
-## 4. 真实例子：企业知识库问答助手
+- `base.py:73-84`：校验 `chunk_size`、`chunk_overlap`。
+- `base.py:92-96`：子类必须实现 `split_text`。
+- `base.py:103-129`：`create_documents` 把文本切成 `Document(page_content=chunk, metadata=metadata)`。
+- `base.py:131-144`：`split_documents` 保留原 Document metadata 后继续切分。
 
-场景：用户问“我们源码分享文档里，Graphiti 和 mem0 的区别是什么？”系统需要从已有文档中检索相关内容，再让模型生成回答。
+设计含义：RAG 的第一步不是“向量化”，而是把资料变成可以检索、可追溯、大小合适的 Document chunk。
 
-最小链路可以这样理解：
+### 4.2 Embeddings
+
+`Embeddings` 在 `libs/core/langchain_core/embeddings/embeddings.py:8` 定义，它明确区分两类方法：
 
 ```python
-loader -> text_splitter -> embeddings -> vectorstore
-retriever = vectorstore.as_retriever()
-docs = retriever.invoke("Graphiti 和 mem0 的区别")
-answer = chat_model.invoke([
-    ("system", "你是源码分析助手，只基于检索内容回答。"),
-    ("human", f"问题：Graphiti 和 mem0 的区别？\n资料：{docs}")
+def embed_documents(self, texts: list[str]) -> list[list[float]]:
+    ...
+
+def embed_query(self, text: str) -> list[float]:
+    ...
+```
+
+源码注释在 `embeddings.py:20-26` 说明：文档 embedding 是向量列表，query embedding 是单个向量；通常两者一样，但抽象允许它们独立。这一点很重要，因为有些 embedding 模型会区分 document encoder 和 query encoder。
+
+### 4.3 VectorStore
+
+`VectorStore` 在 `libs/core/langchain_core/vectorstores/base.py:43` 定义，核心方法包括：
+
+| 方法 | 源码位置 | 作用 |
+| --- | --- | --- |
+| `add_texts` | `base.py:46-75` | 把字符串和 metadata 写入向量库。 |
+| `add_documents` | `base.py:234-258` | 把 `Document.page_content` 和 `Document.metadata` 转成 `add_texts`。 |
+| `similarity_search` | `base.py:361-388` | 按 query 返回最相似的 Document。 |
+| `similarity_search_with_score` | `base.py:417` | 返回 Document 和原始相似度/距离分数。 |
+| `similarity_search_with_relevance_scores` | `base.py:506` | 返回归一化 relevance score。 |
+| `max_marginal_relevance_search` | `base.py` 相关方法 | 用 MMR 在相关性和多样性之间平衡。 |
+
+这里的设计是 provider-neutral：Qdrant、Chroma、Pinecone 等只要实现 VectorStore 协议，就可以被上层 Retriever 使用。
+
+### 4.4 Retriever
+
+`BaseRetriever` 在 `libs/core/langchain_core/retrievers.py:55` 定义。它继承 Runnable，官方注释写明 retriever 应该通过 `invoke`、`ainvoke`、`batch`、`abatch` 使用。
+
+关键证据：
+
+| 源码位置 | 说明 |
+| --- | --- |
+| `retrievers.py:55-72` | Retriever 是“字符串查询 -> 相关 Document 列表”的抽象，实现者重写 `_get_relevant_documents`。 |
+| `retrievers.py:179-236` | `invoke` 配置 callback、metadata、run_manager，并调用 `_get_relevant_documents`。 |
+| `retrievers.py:298-320` | `_get_relevant_documents` 是同步检索核心方法。 |
+| `vectorstores/base.py:964-980` | `VectorStoreRetriever` 包装 VectorStore，支持 `similarity`、`similarity_score_threshold`、`mmr` 三种搜索类型。 |
+| `vectorstores/base.py:1040-1058` | 根据 `search_type` 分派到 `similarity_search`、`similarity_search_with_relevance_scores` 或 `max_marginal_relevance_search`。 |
+
+### 4.5 RAG 最小代码与源码映射
+
+```python
+splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=120)
+docs = splitter.create_documents([raw_text], metadatas=[{"source": "handbook.md"}])
+
+vectorstore.add_documents(docs)
+retriever = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": 5})
+
+context_docs = retriever.invoke("Graphiti 和 mem0 的区别是什么？")
+answer = model.invoke([
+    ("system", "只基于检索资料回答。"),
+    ("human", f"资料：{context_docs}\n问题：Graphiti 和 mem0 的区别是什么？"),
 ])
 ```
 
-| 业务动作 | LangChain 抽象 | 为什么便于理解源码 |
+源码映射：
+
+| 业务动作 | LangChain 抽象 | 源码 |
 | --- | --- | --- |
-| 文档切块 | `libs/text-splitters` | 长文档先变成适合 embedding 和上下文窗口的小块。 |
-| 向量化与存储 | `Embeddings` / `VectorStore` | provider 可替换，OpenAI、Qdrant、Chroma 等只实现统一接口。 |
-| 检索 | `Retriever.invoke()` | 应用层不关心底层是相似度、BM25 还是向量库 API。 |
-| 模型生成 | `BaseChatModel` / messages | 统一 chat model 输入输出，便于换模型。 |
-| Agent 加工具 | `create_agent` + tools | 当问题不能一次回答时，模型可以选择检索、搜索、计算等工具。 |
+| 切块 | `TextSplitter.create_documents` | `text_splitters/base.py:103-129` |
+| 文档向量化 | `Embeddings.embed_documents` | `embeddings.py:37-45` |
+| 查询向量化 | `Embeddings.embed_query` | `embeddings.py:47-56` |
+| 写向量库 | `VectorStore.add_documents` | `vectorstores/base.py:234-258` |
+| 召回 | `VectorStoreRetriever._get_relevant_documents` | `vectorstores/base.py:1040-1058` |
+| 进入模型 | `BaseChatModel.invoke` | `core/language_models/chat_models.py` |
 
-分享时这样讲：LangChain 的真实价值不是某个 RAG 函数，而是把“模型、prompt、retriever、tool、provider”都抽成可组合接口。它更像应用层胶水框架，让不同模型和数据源快速拼成可运行应用。
+## 5. 专题四：classic 迁移关系
 
-## 5. 阅读路线建议
+### 5.1 包边界
 
-如果你主要做源码分析，建议按这个顺序看：
+源码证据很明确：
+
+| 包 | 目录 | 证据 | 含义 |
+| --- | --- | --- | --- |
+| `langchain` | `libs/langchain_v1` | `pyproject.toml:6` 包名是 `langchain`，`pyproject.toml:24` 版本是 `1.3.4`。 | 当前主包。 |
+| `langchain-classic` | `libs/langchain` | `pyproject.toml:6` 包名是 `langchain-classic`，`README.md:1` 标题是 LangChain Classic。 | 经典兼容包。 |
+| `langchain-core` | `libs/core` | `README.md:29` 说明生态建立在 `langchain-core` 之上。 | 共享协议层。 |
+
+`libs/langchain/README.md:21-23` 写明 classic 包包含 legacy chains、`langchain-community` re-exports、indexing API、deprecated functionality，并建议多数情况下使用主 `langchain` 包。
+
+### 5.2 迁移关系怎么理解
+
+不是“旧 LangChain 没了”，而是拆成了两个角色：
+
+```text
+新项目 / 新 Agent
+  -> langchain (libs/langchain_v1)
+  -> create_agent + init_chat_model + LangGraph runtime
+
+旧项目 / 旧 chains / legacy memory / classic agents
+  -> langchain-classic (libs/langchain)
+  -> 保留兼容和迁移缓冲
+
+共用基础协议
+  -> langchain-core
+```
+
+### 5.3 迁移建议
+
+| 如果你现在用的是 | 建议迁移方向 | 原因 |
+| --- | --- | --- |
+| classic chains | 优先看是否能改成 LCEL/Runnable 或显式函数组合 | 新主包更强调 Runnable 与图编排。 |
+| classic agents | 迁到 `create_agent` | 当前 Agent 基于 LangGraph，支持 middleware、checkpoint、interrupt、store。 |
+| old memory | 迁到 LangGraph checkpointer/store 或外部 memory 系统 | `create_agent` 参数里已经有 `checkpointer` 和 `store`。 |
+| 旧 provider import | 使用 partner 包，如 `langchain-openai` | provider 适配已拆到独立包。 |
+| 旧 RAG helper chain | 拆成 TextSplitter、Embeddings、VectorStore、Retriever、Prompt、Model | 更透明，也更容易替换每个环节。 |
+
+分享时可以这样说：
+
+> `langchain-classic` 是迁移缓冲区，不是新项目的主入口。新项目优先从 `langchain`、`langchain-core` 和 provider 包开始读；遇到旧 chains、旧 memory、旧 agents，再回到 classic 包找兼容实现。
+
+## 6. 真实例子：企业知识库 Agent
+
+假设我们要做一个“源码分析知识库助手”：
+
+1. 用 text splitter 把已有源码分析 Markdown 切成 Document。
+2. 用 embedding provider 生成向量。
+3. 写入 Qdrant/Chroma/Pinecone。
+4. 用 retriever 根据用户问题取回相关片段。
+5. 用 `create_agent` 创建 Agent，把 retriever 包成工具。
+6. 用 middleware 做两件事：模型调用前裁剪历史消息，工具调用失败时重试。
+7. 模型用 `init_chat_model("openai:gpt-5.5")` 或可配置模型入口创建。
+
+这个例子能串起四个专题：
+
+| 部分 | 对应源码主线 |
+| --- | --- |
+| 模型可替换 | `init_chat_model` + provider adapter |
+| RAG 可替换 | `TextSplitter` / `Embeddings` / `VectorStore` / `Retriever` |
+| Agent 可扩展 | `create_agent` + `AgentMiddleware` |
+| 旧代码迁移 | classic chains 拆成新协议组合 |
+
+## 7. 分享建议
+
+推荐讲法：
+
+1. 先讲包边界：`core -> langchain_v1 -> partners -> classic`。
+2. 再讲一条主线：`create_agent` 编译 LangGraph，不是传统 chain。
+3. 然后讲 middleware：生命周期 hook 变节点，wrap hook 包调用。
+4. 再讲 provider adapter：主包不直接绑 SDK，partner 包负责翻译。
+5. 接着讲 RAG：它不是一个大模块，而是多个 core 协议组合。
+6. 最后讲 classic：旧 API 仍在，但新项目不应从 classic 开始。
+
+一句开场白：
+
+> 现在读 LangChain 源码，最重要的是别把它当成一个大包。它已经分成协议层、应用入口层、供应商适配层和 classic 兼容层。当前 Agent 是基于 LangGraph 编译出来的状态图，middleware 是扩展点；RAG 则是 Document、Embedding、VectorStore、Retriever 和 ChatModel 的组合。
+
+## 8. 推荐阅读路线
 
 1. `libs/core/langchain_core/runnables/base.py`
-   先理解 LangChain 的统一执行协议。
 2. `libs/core/langchain_core/language_models/chat_models.py`
-   理解 chat model 的输入输出、流式和工具绑定。
 3. `libs/langchain_v1/langchain/chat_models/base.py`
-   理解模型字符串如何解析成 provider 模型。
 4. `libs/langchain_v1/langchain/agents/factory.py`
-   理解新 agent 如何编译为 LangGraph。
 5. `libs/langchain_v1/langchain/agents/middleware/types.py`
-   理解 agent 可扩展点。
 6. `libs/core/langchain_core/tools/base.py`
-   理解工具如何作为 Runnable 参与执行。
-7. `libs/core/langchain_core/retrievers.py` 和 `libs/core/langchain_core/vectorstores/base.py`
-   理解检索/RAG 抽象。
-8. `libs/partners/openai/langchain_openai/*`
-   以 OpenAI 包作为 provider 适配样例。
-9. `libs/langchain/langchain_classic/*`
-   最后再看 classic，主要用于理解旧 API 和迁移背景。
+7. `libs/text-splitters/langchain_text_splitters/base.py`
+8. `libs/core/langchain_core/embeddings/embeddings.py`
+9. `libs/core/langchain_core/vectorstores/base.py`
+10. `libs/core/langchain_core/retrievers.py`
+11. `libs/partners/openai/langchain_openai/chat_models/base.py`
+12. `libs/langchain/langchain_classic/*`
 
-## 6. 高置信结论与限制
+## 9. 局限
 
-### 高置信结论
-
-- 当前主包是 `libs/langchain_v1`，包名为 `langchain`。
-- `langchain-core` 是生态核心抽象层。
-- 当前 agent 体系依赖 LangGraph，并由 `create_agent` 生成/编译 `StateGraph`。
-- partner integrations 通过实现 core 接口接入生态。
-- `langchain-classic` 是 legacy/compatibility 分支，不是新项目优先入口。
-
-### 限制
-
-- 本次分析基于浅克隆的最新源码快照，不覆盖历史演进。
-- 本次未运行 LangChain 测试套件；结论来自静态源码、README 和包元数据。
-- 未展开每个 provider 包的差异，只以 OpenAI/Qdrant 等代表验证集成模式。
+- 本文是静态源码分析，未运行 LangChain 测试套件。
+- 本文以 OpenAI partner 包作为 provider adapter 样例，没有逐个展开所有 provider。
+- 本文强调当前 `langchain` 1.3.4 源码结构；历史版本的 import 路径和 API 可能不同。

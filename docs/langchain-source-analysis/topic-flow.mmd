@@ -1,0 +1,14 @@
+flowchart TB
+    LC["langchain 主包<br/>libs/langchain_v1"] --> Agent["create_agent<br/>编译 Agent StateGraph"]
+    LC --> Init["init_chat_model<br/>解析 provider:model"]
+    Agent --> MW["AgentMiddleware<br/>before/after/wrap hooks"]
+    Agent --> Graph["LangGraph<br/>model/tools 条件循环"]
+    Init --> Partner["Provider adapter<br/>libs/partners/openai 等"]
+    Partner --> SDK["外部 SDK/API"]
+    Core["langchain-core"] --> Rag["RAG 协议组合"]
+    Rag --> Split["TextSplitter -> Document"]
+    Rag --> Embed["Embeddings"]
+    Rag --> Store["VectorStore"]
+    Rag --> Retriever["Retriever"]
+    Classic["langchain-classic<br/>libs/langchain"] --> Legacy["旧 chains / memory / agents"]
+    Classic --> Core

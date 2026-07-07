@@ -1,309 +1,267 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LangChain 源码架构分析</title>
-  <script type="module">
-    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
-  </script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LangChain 源码架构与专题精读</title>
   <style>
-    :root {
-      --bg: #f7f8fa;
-      --panel: #ffffff;
-      --ink: #1f2937;
-      --muted: #5f6b7a;
-      --line: #d9dee7;
-      --accent: #0f766e;
-      --accent-2: #365cc7;
-      --soft: #eef7f5;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
-      background: var(--bg);
-      color: var(--ink);
-      line-height: 1.72;
-    }
-    header {
-      background: var(--panel);
-      border-bottom: 1px solid var(--line);
-    }
-    .wrap {
-      width: min(1180px, calc(100% - 36px));
-      margin: 0 auto;
-    }
-    .hero { padding: 34px 0 22px; }
-    h1 {
-      margin: 0 0 10px;
-      font-size: clamp(28px, 4vw, 44px);
-      line-height: 1.16;
-      letter-spacing: 0;
-    }
-    h2 { margin: 0 0 14px; font-size: 24px; line-height: 1.25; }
-    h3 { margin: 22px 0 10px; font-size: 18px; }
-    p { margin: 8px 0; }
-    .subtitle { max-width: 900px; margin: 0; color: var(--muted); }
-    nav {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      padding: 12px 0 18px;
-    }
-    nav a {
-      flex: 0 0 auto;
-      color: var(--ink);
-      text-decoration: none;
-      border: 1px solid var(--line);
-      background: #fff;
-      padding: 7px 10px;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-    main { padding: 24px 0 56px; }
-    section {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 22px;
-      margin: 0 0 18px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 12px 0;
-      font-size: 14px;
-    }
-    th, td {
-      border: 1px solid var(--line);
-      padding: 9px 10px;
-      vertical-align: top;
-      text-align: left;
-    }
-    th { background: #f0f3f7; }
-    code {
-      background: #eef1f6;
-      padding: 1px 5px;
-      border-radius: 4px;
-      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-      font-size: 0.92em;
-    }
-    .note {
-      background: var(--soft);
-      border-left: 4px solid var(--accent);
-      padding: 12px 14px;
-      border-radius: 6px;
-      margin: 12px 0;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }
-    .branch {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 14px;
-      background: #fff;
-    }
-    .badge {
-      display: inline-block;
-      color: #fff;
-      background: var(--accent-2);
-      border-radius: 5px;
-      padding: 2px 7px;
-      font-size: 12px;
-      margin-right: 6px;
-    }
-    .diagram {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      overflow-x: auto;
-      padding: 12px;
-      background: #fff;
-      margin-top: 12px;
-    }
-    .mermaid { min-width: 760px; }
-    footer { color: var(--muted); padding: 10px 0 40px; font-size: 13px; }
-    @media (max-width: 760px) {
-      .grid { grid-template-columns: 1fr; }
-      section { padding: 16px; }
-      .wrap { width: min(100% - 24px, 1180px); }
-    }
+    :root { --bg:#f6f8fb; --panel:#fff; --ink:#1f2937; --muted:#5f6b7a; --line:#d8e1ec; --accent:#0f766e; --accent2:#2563eb; --soft:#eaf7f4; --warn:#fff7ed; --code:#111827; --codeink:#e5e7eb; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:"Microsoft YaHei","PingFang SC","Segoe UI",Arial,sans-serif; background:var(--bg); color:var(--ink); line-height:1.72; }
+    header { background:#fff; border-bottom:1px solid var(--line); padding:42px 24px 30px; }
+    .hero, main { max-width:1180px; margin:0 auto; }
+    main { padding:28px 24px 70px; }
+    h1 { margin:0 0 12px; font-size:clamp(30px,4vw,48px); line-height:1.16; letter-spacing:0; }
+    h2 { margin:38px 0 12px; padding-top:14px; border-top:1px solid var(--line); font-size:26px; }
+    h3 { margin:24px 0 8px; font-size:20px; }
+    p { margin:10px 0; }
+    .lead { max-width:980px; color:var(--muted); font-size:18px; }
+    .badge-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+    .badge { border:1px solid var(--line); background:#f9fafb; border-radius:999px; padding:5px 12px; font-size:13px; color:var(--muted); }
+    .panel,.card { background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+    .panel { padding:20px; margin:18px 0; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin:18px 0; }
+    .card { padding:16px; }
+    .card strong { display:block; color:var(--accent); margin-bottom:6px; }
+    table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); margin:16px 0; }
+    th,td { padding:11px 12px; border-bottom:1px solid var(--line); vertical-align:top; text-align:left; }
+    th { background:var(--soft); color:#134e4a; }
+    tr:last-child td { border-bottom:0; }
+    code { font-family:Consolas,"JetBrains Mono",monospace; font-size:.92em; }
+    pre { overflow:auto; background:var(--code); color:var(--codeink); border-radius:8px; padding:16px; }
+    pre code { color:inherit; }
+    .quote { border-left:4px solid var(--accent); background:#ecfdf5; padding:12px 16px; margin:16px 0; color:#134e4a; }
+    .warn { border-left:4px solid #ea580c; background:var(--warn); padding:12px 16px; margin:16px 0; color:#7c2d12; }
+    .diagram { background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px; margin:16px 0; overflow-x:auto; }
+    .mermaid { min-width:860px; text-align:center; background:#fff; }
+    .toc { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; padding:0; list-style:none; }
+    .toc a { display:block; background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 12px; color:var(--accent2); text-decoration:none; }
+    a { color:var(--accent2); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:20px 18px 48px;} table{display:block; overflow-x:auto;} .mermaid{min-width:760px;} }
   </style>
 </head>
 <body>
   <header>
-    <div class="wrap hero">
-      <h1>LangChain 源码架构分析</h1>
-      <p class="subtitle">这份 HTML 是主阅读版：先看总架构，再看源码分支，最后看 Agent 主流程和 RAG 流程。图中保留英文类名和函数名，方便你回到源码定位。</p>
+    <div class="hero">
+      <h1>LangChain 源码架构与专题精读</h1>
+      <p class="lead">本页补充四个专题：Agent middleware、provider adapter、RAG 细节、classic 迁移关系。分析对象是本地 <code>sources/langchain</code>，当前提交 <code>eb2dabb8b7102fbedb33016dcf10fe475efde88e</code>，版本线索为 <code>langchain 1.3.4</code>。</p>
+      <div class="badge-row">
+        <span class="badge">主包：libs/langchain_v1</span>
+        <span class="badge">协议：libs/core</span>
+        <span class="badge">适配：libs/partners</span>
+        <span class="badge">兼容：libs/langchain</span>
+      </div>
     </div>
-    <nav class="wrap" aria-label="目录">
-      <a href="#overview">总架构</a>
-      <a href="#branches">源码分支</a>
-      <a href="#agent">Agent 主流程</a>
-      <a href="#rag">RAG 流程</a>
-      <a href="#route">阅读路线</a>
-      <a href="#evidence">源码证据</a>
-    </nav>
   </header>
+  <main>
+    <section class="panel">
+      <h2 id="summary">总体结论</h2>
+      <p>LangChain 当前 Python 仓库不是一个单体包，而是一个多包 monorepo。<code>langchain-core</code> 定协议，<code>langchain</code> 组装 Agent 和模型入口，<code>partners</code> 接外部 provider，<code>langchain-classic</code> 承接旧 API。</p>
+      <div class="quote">一句话概括：现在读 LangChain，要先看协议层和新 Agent 图编排，再看 provider adapter，最后回到 classic 理解旧 API 和迁移背景。</div>
+      <ul class="toc">
+        <li><a href="#architecture">最高层架构</a></li>
+        <li><a href="#middleware">Agent middleware</a></li>
+        <li><a href="#adapter">Provider adapter</a></li>
+        <li><a href="#rag">RAG 细节</a></li>
+        <li><a href="#classic">Classic 迁移</a></li>
+        <li><a href="#share">分享建议</a></li>
+      </ul>
+    </section>
 
-  <main class="wrap">
-    <section id="overview">
-      <h2>1. 总体架构</h2>
-      <p>LangChain 当前 Python 仓库是一个多包 monorepo。它不是把所有能力塞进一个包，而是分成“核心协议、当前主包、经典兼容包、供应商集成、文本切分、标准测试”几条分支。</p>
-      <div class="note"><strong>怎么读这张图：</strong>从左上角“应用开发者”开始看。应用代码通常进入 <code>libs/langchain_v1</code>，再分成两条主线：<code>create_agent</code> 构建智能体图，<code>init_chat_model</code> 初始化模型。底部的 <code>langchain-core</code> 是所有分支共同依赖的协议层。</div>
+    <section id="architecture">
+      <h2>最高层架构</h2>
+      <div class="diagram"><div class="mermaid">
+flowchart TB
+    App["应用 / 开发者"] --> LC["langchain<br/>libs/langchain_v1<br/>当前主入口"]
+    LC --> Agent["create_agent<br/>构建 LangGraph Agent"]
+    LC --> Init["init_chat_model<br/>统一模型初始化"]
+    LC --> Core["langchain-core<br/>基础协议"]
+    Agent --> Graph["LangGraph StateGraph<br/>model/tools/middleware 节点"]
+    Agent --> MW["AgentMiddleware<br/>before/after/wrap hooks"]
+    Init --> Partners["libs/partners/*<br/>provider adapter"]
+    Partners --> SDK["外部 SDK/API<br/>OpenAI/Anthropic/Qdrant 等"]
+    Core --> Runnable["Runnable<br/>invoke/batch/stream/compose"]
+    Core --> Chat["BaseChatModel / BaseMessage"]
+    Core --> Tool["BaseTool"]
+    Core --> Rag["Document / Embeddings / VectorStore / Retriever"]
+    Split["langchain-text-splitters"] --> Rag
+    Classic["langchain-classic<br/>libs/langchain"] --> Core
+    Classic --> Legacy["旧 chains/memory/agents/indexing"]
+      </div></div>
       <table>
-        <thead><tr><th>层级</th><th>目录</th><th>包名</th><th>中文说明</th></tr></thead>
+        <thead><tr><th>层级</th><th>目录</th><th>包名</th><th>主要职责</th></tr></thead>
         <tbody>
-          <tr><td>当前主包</td><td><code>libs/langchain_v1</code></td><td><code>langchain</code></td><td>面向当前用户的入口，提供 Agent、模型初始化、工具节点等高层能力。</td></tr>
-          <tr><td>核心协议</td><td><code>libs/core</code></td><td><code>langchain-core</code></td><td>定义模型、消息、工具、检索器、向量库、Runnable 等基础接口。</td></tr>
-          <tr><td>经典兼容</td><td><code>libs/langchain</code></td><td><code>langchain-classic</code></td><td>旧 chains、memory、classic agents 等兼容代码，读旧教程时会遇到。</td></tr>
-          <tr><td>供应商集成</td><td><code>libs/partners/*</code></td><td><code>langchain-openai</code> 等</td><td>把 OpenAI、Anthropic、Qdrant 等外部 SDK 适配到 core 接口。</td></tr>
-          <tr><td>文本切分</td><td><code>libs/text-splitters</code></td><td><code>langchain-text-splitters</code></td><td>把原始文本切成 Document chunks，是 RAG 的前处理部分。</td></tr>
-          <tr><td>标准测试</td><td><code>libs/standard-tests</code></td><td><code>langchain-tests</code></td><td>给集成包提供统一测试基类，用来约束 provider 实现质量。</td></tr>
+          <tr><td>应用入口层</td><td><code>libs/langchain_v1</code></td><td><code>langchain</code></td><td>当前主包，提供 <code>create_agent</code>、<code>init_chat_model</code>，并基于 LangGraph 构建 Agent。</td></tr>
+          <tr><td>核心协议层</td><td><code>libs/core</code></td><td><code>langchain-core</code></td><td>定义 Runnable、ChatModel、Tool、Retriever、VectorStore、Embeddings 等基础抽象。</td></tr>
+          <tr><td>经典兼容层</td><td><code>libs/langchain</code></td><td><code>langchain-classic</code></td><td>保留旧 chains、memory、classic agents、indexing API 等。</td></tr>
+          <tr><td>供应商适配层</td><td><code>libs/partners/*</code></td><td><code>langchain-openai</code> 等</td><td>把外部 SDK 适配为 core 协议。</td></tr>
         </tbody>
       </table>
-      <div class="diagram">
-        <pre class="mermaid">flowchart TB
-    User["应用开发者\nApplication"] --> LC["当前主包：langchain\nlibs/langchain_v1"]
-    LC --> Agents["Agent 入口：create_agent\n预构建智能体图"]
-    LC --> InitModel["模型入口：init_chat_model\n供应商模型工厂"]
-    LC --> Core["核心协议：langchain-core\n抽象接口和运行时基础"]
-    Agents --> LangGraph["LangGraph StateGraph\n智能体编排运行时"]
-    Agents --> Middleware["AgentMiddleware\n前置 / 后置 / 包装钩子"]
-    Agents --> ToolNode["ToolNode\n客户端工具执行节点"]
-    InitModel --> Partners["供应商集成包\nlibs/partners/*"]
-    Partners --> ProviderSDK["外部 Provider SDK\nOpenAI / Anthropic / Qdrant 等"]
-    Core --> Runnable["统一执行协议 Runnable\ninvoke / batch / stream / compose"]
-    Core --> Models["模型抽象\nBaseLanguageModel / BaseChatModel"]
-    Core --> Messages["消息抽象\nBaseMessage / chunks"]
-    Core --> Tools["工具抽象\nBaseTool / BaseToolkit"]
-    Core --> Retrieval["检索抽象\nBaseRetriever / VectorStore / Embeddings"]
-    Core --> Docs["文档抽象\nDocument / text splitters"]
-    Classic["经典兼容包：langchain-classic\nlibs/langchain"] --> Core
-    Classic --> Legacy["旧式能力\nchains / memory / classic agents / indexing"]
-    TextSplitters["文本切分包\nlangchain-text-splitters"] --> Core
-    StandardTests["标准测试包\nlangchain-tests"] --> Core
-    StandardTests --> Partners</pre>
-      </div>
     </section>
 
-    <section id="branches">
-      <h2>2. 源码分支说明</h2>
-      <p>如果你只想分析当前版本主流程，优先看 <code>libs/langchain_v1</code> 和 <code>libs/core</code>。如果你看到旧式 Chain、Memory、Classic Agent，再去 <code>libs/langchain</code>。</p>
-      <div class="grid">
-        <div class="branch"><h3><span class="badge">core</span><code>libs/core</code></h3><p>这是“接口层”。LangChain 的模型、工具、检索器、向量库都先在这里定义统一协议，再由不同实现接入。</p></div>
-        <div class="branch"><h3><span class="badge">main</span><code>libs/langchain_v1</code></h3><p>这是当前主包。<code>create_agent</code> 在这里把模型、工具、中间件编译成 LangGraph 图。</p></div>
-        <div class="branch"><h3><span class="badge">classic</span><code>libs/langchain</code></h3><p>这是旧 API 兼容区。它还很重要，但不是当前主流程的第一入口。</p></div>
-        <div class="branch"><h3><span class="badge">partners</span><code>libs/partners</code></h3><p>这是供应商适配区。例如 OpenAI 包把 OpenAI SDK 的请求响应转换成 LangChain 的 <code>BaseChatModel</code>、<code>Embeddings</code> 等接口。</p></div>
-        <div class="branch"><h3><span class="badge">split</span><code>libs/text-splitters</code></h3><p>这是文本切块工具。RAG 场景里，原始文本通常先在这里切成 Document，再进入向量化和检索。</p></div>
-        <div class="branch"><h3><span class="badge">tests</span><code>libs/standard-tests</code></h3><p>这是集成包测试基座。它保证不同供应商实现同一套 LangChain 行为契约。</p></div>
-      </div>
+    <section id="middleware">
+      <h2>专题一：Agent middleware</h2>
+      <p>新 Agent 的入口在 <code>libs/langchain_v1/langchain/agents/factory.py:create_agent</code>。它不是直接运行一个函数链，而是创建并编译一个 LangGraph <code>StateGraph</code>。</p>
+      <table>
+        <thead><tr><th>源码证据</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>factory.py:697-718</code></td><td><code>create_agent</code> 接收 model、tools、middleware、response_format、checkpointer、store、interrupt 等参数。</td></tr>
+          <tr><td><code>factory.py:823-829</code></td><td>模型输出 tool calls 后进入 tools 节点，工具结果以 <code>ToolMessage</code> 回到消息列表，再次调用模型。</td></tr>
+          <tr><td><code>factory.py:1047-1055</code></td><td>创建 <code>StateGraph</code>。</td></tr>
+          <tr><td><code>factory.py:1386-1390</code></td><td>添加 model 节点和 tools 节点。</td></tr>
+          <tr><td><code>factory.py:1392-1474</code></td><td>middleware 的 before/after hook 被编译为独立图节点。</td></tr>
+          <tr><td><code>factory.py:1516-1551</code></td><td>添加 tools -> model、model -> tools 的条件边。</td></tr>
+        </tbody>
+      </table>
+      <h3>Middleware 的两类扩展面</h3>
+      <table>
+        <thead><tr><th>类型</th><th>方法</th><th>运行方式</th><th>适合做什么</th></tr></thead>
+        <tbody>
+          <tr><td>生命周期节点</td><td><code>before_agent</code>、<code>before_model</code>、<code>after_model</code>、<code>after_agent</code></td><td>被编译成 LangGraph 节点</td><td>注入状态、裁剪消息、人工确认、结果整理。</td></tr>
+          <tr><td>调用包装器</td><td><code>wrap_model_call</code>、<code>wrap_tool_call</code></td><td>包住 handler，可调用一次、多次或短路</td><td>重试、限流、缓存、动态路由模型、工具错误处理。</td></tr>
+        </tbody>
+      </table>
+      <pre><code class="language-python">class AgentMiddleware(Generic[StateT, ContextT, ResponseT]):
+    """Base middleware class for an agent.
+
+    Subclass this and implement any of the defined methods to customize agent behavior
+    between steps in the main agent loop.
+    """</code></pre>
+      <p><code>wrap_model_call</code> 的源码文档在 <code>types.py:491-503</code> 说明：middleware 可以多次调用 handler 做 retry，可以跳过 handler 做 short-circuit，也可以修改 request/response。<code>wrap_tool_call</code> 在 <code>types.py:662-730</code> 同样支持工具请求改写和重试。</p>
+      <div class="quote">设计含义：Agent 主干图稳定，扩展能力用 middleware 注入。</div>
     </section>
 
-    <section id="agent">
-      <h2>3. Agent 主流程</h2>
-      <p><code>create_agent</code> 不是普通函数链，而是图构建器。它把模型调用、工具调用和 middleware hook 编译成 LangGraph 的节点和边。</p>
-      <div class="note"><strong>流程说明：</strong>用户调用 agent 后，状态里带着历史消息和上下文。模型节点先调用 ChatModel；如果模型返回工具调用，流程进入 tools 节点执行工具，再把工具结果作为 <code>ToolMessage</code> 喂回模型。这个循环持续到模型不再请求工具，或结构化输出/中间件把流程导向结束。</div>
-      <div class="diagram">
-        <pre class="mermaid">flowchart TD
-    Start([用户调用已编译 Agent]) --> State["Agent 状态\nmessages + context"]
-    State --> BeforeAgent{"是否有 before_agent\n中间件？"}
-    BeforeAgent --> BeforeModel{"是否有 before_model\n中间件？"}
-    BeforeModel --> ModelNode["模型节点 model\n构造 ModelRequest"]
-    ModelNode --> WrapModel["wrap_model_call 调用栈\n重试 / 缓存 / 路由 / 修改请求"]
-    WrapModel --> ChatModel["Chat 模型调用\nBaseChatModel.invoke / stream"]
-    ChatModel --> AIMessage["模型返回\nAIMessage"]
-    AIMessage --> AfterModel{"是否有 after_model\n中间件？"}
-    AfterModel --> HasTools{"模型是否发起\ntool calls？"}
-    HasTools -- 否 --> Structured{"是否需要\n结构化输出？"}
-    Structured -- 否 --> AfterAgent{"是否有 after_agent\n中间件？"}
-    Structured -- 是 --> StructuredTool["结构化输出工具"]
-    StructuredTool --> AfterAgent
-    HasTools -- 是 --> ToolNode["工具节点 tools"]
-    ToolNode --> WrapTool["wrap_tool_call 调用栈"]
-    WrapTool --> BaseTool["工具执行\nBaseTool.run / invoke"]
-    BaseTool --> ToolMessage["工具结果\nToolMessage"]
-    ToolMessage --> ModelNode
-    AfterAgent --> End([结束并返回响应])</pre>
-      </div>
+    <section id="adapter">
+      <h2>专题二：Provider adapter</h2>
+      <p><code>init_chat_model</code> 定义在 <code>libs/langchain_v1/langchain/chat_models/base.py:210</code>。它的职责不是调用模型，而是把用户传入的 <code>model</code> 字符串和 provider 参数解析成具体 <code>BaseChatModel</code> 实例。</p>
+      <table>
+        <thead><tr><th>源码证据</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>base.py:210-218</code></td><td><code>init_chat_model</code> 返回 <code>BaseChatModel</code> 或 <code>_ConfigurableModel</code>。</td></tr>
+          <tr><td><code>base.py:239-266</code></td><td>支持 <code>openai:gpt-5.5</code> 这种 provider 前缀，也支持根据模型名前缀推断 provider。</td></tr>
+          <tr><td><code>base.py:282-309</code></td><td>列出 provider 到 integration package 的映射。</td></tr>
+          <tr><td><code>base.py:493-518</code></td><td>固定模型直接解析并创建；可配置模型返回延迟实例化包装。</td></tr>
+          <tr><td><code>base.py:597-625</code></td><td><code>_parse_model</code> 处理 <code>provider:model</code>、推断 provider、规范化 provider 名称。</td></tr>
+        </tbody>
+      </table>
+      <p>OpenAI adapter 的核心是 <code>BaseChatOpenAI(BaseChatModel)</code> 和 <code>ChatOpenAI(BaseChatOpenAI)</code>，位置在 <code>libs/partners/openai/langchain_openai/chat_models/base.py</code>。</p>
+      <table>
+        <thead><tr><th>源码位置</th><th>适配职责</th></tr></thead>
+        <tbody>
+          <tr><td><code>openai/base.py:581-612</code></td><td>声明 client、model、temperature、model_kwargs、api_key 等 provider 参数。</td></tr>
+          <tr><td><code>openai/base.py:1549-1608</code></td><td>流式调用 OpenAI SDK，并把 chunk 转成 LangChain chunk。</td></tr>
+          <tr><td><code>openai/base.py:1624-1678</code></td><td>非流式调用，兼容 responses API 和 chat completions API。</td></tr>
+          <tr><td><code>openai/base.py:1695-1724</code></td><td>把 LangChain messages 转成 OpenAI payload。</td></tr>
+          <tr><td><code>openai/base.py:1771-1795</code></td><td>把 OpenAI response 转成 <code>AIMessage</code>、usage metadata、llm_output。</td></tr>
+          <tr><td><code>openai/base.py:2131-2148</code></td><td><code>bind_tools</code> 把工具定义转换为 OpenAI tool-calling 格式。</td></tr>
+        </tbody>
+      </table>
+      <div class="quote">Provider adapter 的核心价值：主包不直接绑 SDK，上层面向 <code>BaseChatModel</code>，底层 provider 包负责参数、消息、工具、响应、流式和元数据转换。</div>
     </section>
 
     <section id="rag">
-      <h2>4. RAG / 检索增强流程</h2>
-      <p>RAG 不是单独巨型模块，而是多个 core 协议的组合：Document、TextSplitter、Embeddings、VectorStore、Retriever、Prompt/Model。</p>
-      <div class="note"><strong>流程说明：</strong>左侧是建库过程：原始文本先切成 Document chunks，再向量化并写入向量库。右侧是查询过程：用户问题被向量化后做相似度检索，相关文档再和问题一起组装成提示词，交给 ChatModel 生成答案。</div>
-      <div class="diagram">
-        <pre class="mermaid">flowchart LR
-    Raw["原始文本 / 文件"] --> Splitter["文本切分器 TextSplitter\nsplit_text / create_documents"]
-    Splitter --> Documents["文档块 Document chunks\npage_content + metadata"]
-    Documents --> EmbedDocs["文档向量化\nEmbeddings.embed_documents"]
-    EmbedDocs --> Store["写入向量库\nVectorStore.add_texts / add_documents"]
-    Store --> Retriever["检索器\nVectorStoreRetriever / BaseRetriever"]
-    Query["用户问题"] --> EmbedQuery["问题向量化\nEmbeddings.embed_query"]
-    EmbedQuery --> Search["相似度检索\nVectorStore.similarity_search"]
-    Retriever --> Search
-    Search --> RelevantDocs["相关文档"]
-    RelevantDocs --> Prompt["组装提示词 / 消息\nPrompt / messages"]
-    Prompt --> ChatModel["生成模型\nBaseChatModel"]
-    ChatModel --> Answer["最终回答"]</pre>
-      </div>
-    </section>
-
-    <section id="real-example">
-      <h2>5. 真实例子：企业知识库问答助手</h2>
-      <p>假设产品要做一个“内部源码知识库问答助手”，用户问：“Graphiti 和 mem0 的区别是什么？帮我用中文说明，最好能引用源码分析文档。”</p>
-      <pre><code>用户问题
-  -> Retriever 检索 docs/mem0-source-analysis 与 docs/graphiti-source-analysis
-  -> Prompt 把问题、检索片段、回答格式约束组装成 messages
-  -> ChatModel 生成中文答案
-  -> Runnable 链路统一支持 invoke / stream / batch</code></pre>
+      <h2>专题三：RAG 细节</h2>
+      <div class="diagram"><div class="mermaid">
+flowchart LR
+    Raw["原始资料<br/>PDF/网页/Markdown/数据库文本"] --> Splitter["TextSplitter<br/>chunk_size / overlap / start_index"]
+    Splitter --> Docs["Document<br/>page_content + metadata"]
+    Docs --> EmbedDocs["Embeddings.embed_documents<br/>文档向量化"]
+    EmbedDocs --> Store["VectorStore.add_documents/add_texts<br/>写入向量库"]
+    Query["用户问题"] --> EmbedQuery["Embeddings.embed_query<br/>查询向量化"]
+    Store --> Retriever["VectorStoreRetriever<br/>similarity / score_threshold / mmr"]
+    EmbedQuery --> Retriever
+    Retriever --> Context["Relevant Documents<br/>召回上下文"]
+    Context --> Prompt["Prompt/messages<br/>把资料放进模型上下文"]
+    Prompt --> Model["BaseChatModel.invoke/stream"]
+    Model --> Answer["答案"]
+      </div></div>
+      <h3>TextSplitter</h3>
+      <p><code>TextSplitter</code> 在 <code>libs/text-splitters/langchain_text_splitters/base.py:44</code> 定义。构造参数包括 <code>chunk_size</code>、<code>chunk_overlap</code>、<code>length_function</code>、<code>add_start_index</code>、<code>strip_whitespace</code>。<code>create_documents</code> 在 <code>base.py:103-129</code> 把文本切成 <code>Document(page_content=chunk, metadata=metadata)</code>。</p>
+      <h3>Embeddings</h3>
+      <p><code>Embeddings</code> 在 <code>libs/core/langchain_core/embeddings/embeddings.py:8</code> 定义，区分 <code>embed_documents</code> 和 <code>embed_query</code>。源码注释说明：文档 embedding 是向量列表，query embedding 是单个向量；抽象允许它们独立。</p>
+      <h3>VectorStore 和 Retriever</h3>
       <table>
-        <thead><tr><th>源码抽象</th><th>在例子里的角色</th><th>为什么这么设计</th></tr></thead>
+        <thead><tr><th>抽象</th><th>源码证据</th><th>说明</th></tr></thead>
         <tbody>
-          <tr><td><code>Document</code></td><td>保存 Markdown/HTML 切片和 metadata。</td><td>把“内容”和“来源”一起传递，答案才能引用出处。</td></tr>
-          <tr><td><code>TextSplitter</code></td><td>把长文档切成适合 embedding 的 chunks。</td><td>避免整篇文档过长，也让检索粒度更细。</td></tr>
-          <tr><td><code>Embeddings</code></td><td>把 chunk 和 query 转成向量。</td><td>把自然语言问题变成可做相似度搜索的数据结构。</td></tr>
-          <tr><td><code>VectorStoreRetriever</code></td><td>按语义找回相关文档片段。</td><td>让上层链路不关心具体向量库是 FAISS、Chroma 还是云服务。</td></tr>
-          <tr><td><code>ChatModel</code></td><td>根据上下文生成最终回答。</td><td>模型调用被统一成标准接口，方便替换 provider。</td></tr>
-          <tr><td><code>Runnable</code></td><td>把检索、组装 prompt、模型调用串成链。</td><td>同一套协议支持同步、流式、批处理和组合。</td></tr>
+          <tr><td><code>VectorStore.add_texts</code></td><td><code>vectorstores/base.py:46-75</code></td><td>把字符串和 metadata 写入向量库。</td></tr>
+          <tr><td><code>VectorStore.add_documents</code></td><td><code>vectorstores/base.py:234-258</code></td><td>把 Document 转成 page_content + metadata 后写入。</td></tr>
+          <tr><td><code>similarity_search</code></td><td><code>vectorstores/base.py:361-388</code></td><td>按 query 返回最相似 Document。</td></tr>
+          <tr><td><code>BaseRetriever</code></td><td><code>retrievers.py:55-72</code></td><td>字符串查询到相关 Document 列表的抽象，遵循 Runnable 接口。</td></tr>
+          <tr><td><code>Retriever.invoke</code></td><td><code>retrievers.py:179-236</code></td><td>配置 callback、metadata、run_manager，并调用检索核心方法。</td></tr>
+          <tr><td><code>VectorStoreRetriever</code></td><td><code>vectorstores/base.py:964-1058</code></td><td>包装 VectorStore，支持 similarity、score threshold、MMR。</td></tr>
         </tbody>
       </table>
-      <div class="note"><strong>分享讲法：</strong>LangChain 的价值不是“替你写一个 RAG 函数”，而是把 RAG 拆成可替换的协议层。真实项目里最常变的是模型、向量库、检索策略和 prompt；这些都被抽象成组件后，业务代码不用跟每个 provider 绑死。</div>
+      <pre><code class="language-python">splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=120)
+docs = splitter.create_documents([raw_text], metadatas=[{"source": "handbook.md"}])
+vectorstore.add_documents(docs)
+retriever = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": 5})
+context_docs = retriever.invoke("Graphiti 和 mem0 的区别是什么？")</code></pre>
+      <div class="quote">RAG 不是一个大模块，而是 Document、TextSplitter、Embeddings、VectorStore、Retriever、Prompt、ChatModel 的组合。</div>
     </section>
 
-    <section id="route">
-      <h2>6. 推荐阅读路线</h2>
+    <section id="classic">
+      <h2>专题四：classic 迁移关系</h2>
+      <table>
+        <thead><tr><th>包</th><th>目录</th><th>证据</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td><code>langchain</code></td><td><code>libs/langchain_v1</code></td><td><code>pyproject.toml:6</code> 包名是 <code>langchain</code>，<code>:24</code> 版本是 <code>1.3.4</code>。</td><td>当前主包。</td></tr>
+          <tr><td><code>langchain-classic</code></td><td><code>libs/langchain</code></td><td><code>pyproject.toml:6</code> 包名是 <code>langchain-classic</code>，<code>README.md:1</code> 标题是 LangChain Classic。</td><td>经典兼容包。</td></tr>
+          <tr><td><code>langchain-core</code></td><td><code>libs/core</code></td><td><code>README.md:29</code> 说明生态建立在 <code>langchain-core</code> 之上。</td><td>共享协议层。</td></tr>
+        </tbody>
+      </table>
+      <p><code>libs/langchain/README.md:21-23</code> 写明 classic 包包含 legacy chains、<code>langchain-community</code> re-exports、indexing API、deprecated functionality，并建议多数情况下使用主 <code>langchain</code> 包。</p>
+      <div class="diagram"><div class="mermaid">
+flowchart LR
+    New["新项目 / 新 Agent"] --> Main["langchain<br/>create_agent + init_chat_model"]
+    Main --> LG["LangGraph runtime<br/>middleware/checkpoint/interrupt/store"]
+    Old["旧项目 / 旧 chains / memory"] --> Classic["langchain-classic<br/>兼容和迁移缓冲"]
+    Main --> Core["langchain-core<br/>共享协议"]
+    Classic --> Core
+    Core --> Partners["partners<br/>provider packages"]
+      </div></div>
+      <table>
+        <thead><tr><th>如果你现在用的是</th><th>建议迁移方向</th><th>原因</th></tr></thead>
+        <tbody>
+          <tr><td>classic chains</td><td>改成 LCEL/Runnable 或显式函数组合</td><td>新主包更强调 Runnable 与图编排。</td></tr>
+          <tr><td>classic agents</td><td>迁到 <code>create_agent</code></td><td>当前 Agent 基于 LangGraph，支持 middleware、checkpoint、interrupt、store。</td></tr>
+          <tr><td>old memory</td><td>迁到 LangGraph checkpointer/store 或外部 memory 系统</td><td><code>create_agent</code> 参数里已有 <code>checkpointer</code> 和 <code>store</code>。</td></tr>
+          <tr><td>旧 provider import</td><td>使用 partner 包，如 <code>langchain-openai</code></td><td>provider 适配已拆到独立包。</td></tr>
+          <tr><td>旧 RAG helper chain</td><td>拆成 TextSplitter、Embeddings、VectorStore、Retriever、Prompt、Model</td><td>更透明，也更容易替换每个环节。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>真实例子：企业知识库 Agent</h2>
+      <p>一个源码分析知识库助手可以这样串起来：先把 Markdown 分析文档切成 Document，写入向量库；用户提问时由 retriever 召回相关片段；Agent 把 retriever 包成工具；middleware 在模型调用前裁剪历史消息，在工具调用失败时重试；模型通过 <code>init_chat_model("openai:gpt-5.5")</code> 或可配置模型入口创建。</p>
+      <table>
+        <thead><tr><th>部分</th><th>对应源码主线</th></tr></thead>
+        <tbody>
+          <tr><td>模型可替换</td><td><code>init_chat_model</code> + provider adapter</td></tr>
+          <tr><td>RAG 可替换</td><td><code>TextSplitter</code> / <code>Embeddings</code> / <code>VectorStore</code> / <code>Retriever</code></td></tr>
+          <tr><td>Agent 可扩展</td><td><code>create_agent</code> + <code>AgentMiddleware</code></td></tr>
+          <tr><td>旧代码迁移</td><td>classic chains 拆成新协议组合</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="share">
+      <h2>分享建议</h2>
       <ol>
-        <li><code>libs/core/langchain_core/runnables/base.py</code>：先理解统一执行协议。</li>
-        <li><code>libs/core/langchain_core/language_models/chat_models.py</code>：理解 ChatModel 的输入输出和流式调用。</li>
-        <li><code>libs/langchain_v1/langchain/chat_models/base.py</code>：理解 <code>init_chat_model</code> 如何选择供应商模型。</li>
-        <li><code>libs/langchain_v1/langchain/agents/factory.py</code>：理解 <code>create_agent</code> 如何编译 LangGraph。</li>
-        <li><code>libs/langchain_v1/langchain/agents/middleware/types.py</code>：理解中间件扩展点。</li>
-        <li><code>libs/core/langchain_core/tools/base.py</code>：理解工具如何进入 Agent 循环。</li>
-        <li><code>libs/core/langchain_core/retrievers.py</code> 与 <code>vectorstores/base.py</code>：理解 RAG 抽象。</li>
+        <li>先讲包边界：<code>core -> langchain_v1 -> partners -> classic</code>。</li>
+        <li>再讲一条主线：<code>create_agent</code> 编译 LangGraph，不是传统 chain。</li>
+        <li>然后讲 middleware：生命周期 hook 变节点，wrap hook 包调用。</li>
+        <li>再讲 provider adapter：主包不直接绑 SDK，partner 包负责翻译。</li>
+        <li>接着讲 RAG：它不是一个大模块，而是多个 core 协议组合。</li>
+        <li>最后讲 classic：旧 API 仍在，但新项目不应从 classic 开始。</li>
       </ol>
-    </section>
-
-    <section id="evidence">
-      <h2>7. 关键源码证据</h2>
-      <ul>
-        <li><code>libs/core/README.md:21</code>：说明 LangChain Core 包含生态基础抽象。</li>
-        <li><code>libs/core/langchain_core/runnables/base.py:125</code>：定义 <code>Runnable</code>。</li>
-        <li><code>libs/langchain_v1/pyproject.toml:6</code>：当前主包名为 <code>langchain</code>。</li>
-        <li><code>libs/langchain_v1/pyproject.toml:28</code>：当前主包依赖 <code>langgraph</code>。</li>
-        <li><code>libs/langchain_v1/langchain/agents/factory.py:697</code>：定义 <code>create_agent</code>。</li>
-        <li><code>libs/langchain_v1/langchain/agents/factory.py:1671</code>：最终编译 graph。</li>
-        <li><code>libs/langchain/pyproject.toml:6</code>：classic 分支发布为 <code>langchain-classic</code>。</li>
-      </ul>
+      <div class="quote">开场白：现在读 LangChain 源码，最重要的是别把它当成一个大包。它已经分成协议层、应用入口层、供应商适配层和 classic 兼容层。当前 Agent 是基于 LangGraph 编译出来的状态图，middleware 是扩展点；RAG 则是 Document、Embedding、VectorStore、Retriever 和 ChatModel 的组合。</div>
     </section>
   </main>
-
-  <footer class="wrap">
-    产物目录：<code>docs/langchain-source-analysis/</code>。Markdown 版见 <code>index.md</code>。
-  </footer>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose", flowchart: { htmlLabels: true, curve: "basis" } });
+  </script>
 </body>
 </html>

@@ -1,0 +1,22 @@
+flowchart TD
+    A["1 调用 compress(messages)<br/>为什么：应用可不启动代理，直接复用核心能力"] --> B{"messages 为空或 optimize=False?"}
+    B -- "是" --> Z["原样返回 CompressResult<br/>为什么：支持 A/B 测试和安全旁路"]
+    B -- "否" --> C["构建 CompressConfig<br/>compress_user_messages / protect_recent / target_ratio / min_tokens<br/>为什么：默认保护用户输入和最近上下文，按场景再放开"]
+    C --> D["PipelineExtensionManager 发 INPUT_RECEIVED<br/>为什么：插件可在生命周期节点观察或调整 messages"]
+    D --> E["提取 user query 作为 relevance context<br/>为什么：压缩工具结果时要知道用户正在问什么"]
+    E --> F["TransformPipeline.apply 深拷贝 messages<br/>为什么：避免压缩过程污染调用方原始对象"]
+    F --> G["CacheAligner<br/>检测缓存前缀是否稳定，不改写消息<br/>为什么：缓存命中比局部压缩更重要，错误改写会破坏 provider KV cache"]
+    G --> H["ContentRouter<br/>跳过用户消息、系统消息、小内容、强错误输出、近期代码、分析意图代码<br/>为什么：优先保证正确性和可调试性"]
+    H --> I{"内容类型"}
+    I -- "JSON/表格/工具输出" --> J["SmartCrusher<br/>结构化裁剪、去重、CCR 标记"]
+    I -- "代码" --> K["CodeCompressor<br/>AST 解析，保 imports/signatures/types/error handlers"]
+    I -- "日志/搜索/diff/HTML" --> L["专用 compressor<br/>保留错误行、命中文件、变更摘要、正文"]
+    I -- "普通文本" --> M["Kompress/Text<br/>按目标比例压缩"]
+    J --> N["合并 TransformResult<br/>tokens_before/after、markers、warnings、timing"]
+    K --> N
+    L --> N
+    M --> N
+    N --> O{"tokens_after > tokens_before?"}
+    O -- "是" --> P["膨胀保护：回滚原始 messages<br/>为什么：优化不能比原文更贵"]
+    O -- "否" --> Q["返回 compressed messages + metrics<br/>为什么：上层只需要替换请求体和记录节省"]
+    F -. "异常" .-> R["fail-open 原样返回<br/>为什么：压缩失败不能阻断模型调用"]

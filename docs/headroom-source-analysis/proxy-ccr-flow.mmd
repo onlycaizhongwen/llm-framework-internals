@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant Agent as Agent/CLI
+    participant Wrap as headroom wrap
+    participant Proxy as Headroom Proxy
+    participant Pipe as TransformPipeline
+    participant Store as CCR Store
+    participant MCP as MCP headroom_retrieve
+    participant LLM as Upstream LLM
+
+    Agent->>Wrap: headroom wrap codex/claude
+    Wrap->>Proxy: 启动或复用本地代理
+    Wrap->>Agent: 注入 base_url / provider 配置 / MCP 工具
+    Agent->>Proxy: /v1/messages 或 /v1/chat/completions 或 /v1/responses
+    Proxy->>Pipe: 标准化请求，执行压缩
+    Pipe->>Store: 大工具输出被压缩时写入原文和 hash
+    Pipe-->>Proxy: 返回压缩后的 messages + CCR marker
+    Proxy->>LLM: 转发压缩请求
+    LLM-->>Proxy: 模型响应，可能要求调用 headroom_retrieve
+    Agent->>MCP: headroom_retrieve(hash)
+    MCP->>Store: 先查本地，再查 proxy store
+    Store-->>MCP: original_content
+    MCP-->>Agent: 返回原始内容
+
+    Note over Proxy,Store: 为什么这样设计：当前上下文可以短，但原文不能丢；模型需要细节时再按 hash 恢复，避免每轮都携带全部日志/搜索结果。

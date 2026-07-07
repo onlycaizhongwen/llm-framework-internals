@@ -19,3 +19,6 @@
 [submodule "sources/graphiti"]
 	path = sources/graphiti
 	url = https://github.com/getzep/graphiti.git
+[submodule "sources/headroom"]
+	path = sources/headroom
+	url = https://github.com/chopratejas/headroom.git

@@ -1,0 +1,27 @@
+flowchart TB
+    User["使用者 / Agent<br/>Codex、Claude、Cursor、OpenCode、业务后端<br/>为什么：Headroom 不接管任务规划，只接管上下文进入模型前的优化"] --> Entry["入口层<br/>Python API compress() / CLI proxy / wrap / MCP / TS SDK<br/>为什么：不同接入方式共用同一套压缩语义"]
+    Entry --> Proxy["本地代理 HeadroomProxy<br/>FastAPI 路由 / provider handler / 统计面板<br/>为什么：不用改 Agent 主体代码，只改 base_url 或 provider 配置即可插入链路"]
+    Entry --> Lib["库调用 compress()<br/>直接传 messages 返回 CompressResult<br/>为什么：给应用后端、RAG、测试提供最小依赖入口"]
+    Entry --> MCP["MCP Server<br/>headroom_compress / headroom_retrieve / headroom_stats<br/>为什么：让模型看到压缩后的摘要后，还能主动取回原文"]
+    Entry --> SDK["TypeScript SDK<br/>OpenAI / Anthropic / Gemini / Vercel AI 适配<br/>为什么：前端和 Node 应用也能使用相同的压缩能力"]
+
+    Proxy --> Pipeline["TransformPipeline<br/>CacheAligner -> ContentRouter<br/>为什么：先保护缓存热区，再按内容类型选择压缩器"]
+    Lib --> Pipeline
+    MCP --> Pipeline
+    SDK --> Proxy
+
+    Pipeline --> Cache["CacheAligner<br/>检测系统提示词中的时间戳、UUID、JWT、hash 等易变内容<br/>为什么：不随意改 prompt，只提示缓存前缀不稳定"]
+    Pipeline --> Router["ContentRouter<br/>source hint / mixed split / detect / route / reassemble<br/>为什么：日志、代码、JSON、搜索结果不能用同一种压缩策略"]
+
+    Router --> Smart["SmartCrusher<br/>JSON/表格/工具结果压缩 + CCR 标记<br/>为什么：结构化大数组需要保留代表性记录，并可按 hash 找回原始数据"]
+    Router --> Code["CodeCompressor<br/>tree-sitter AST 保语法压缩<br/>为什么：代码不能被普通摘要破坏语法和签名"]
+    Router --> Log["Log/Search/Diff/HTML Compressors<br/>日志、rg 结果、diff、HTML 的专用压缩<br/>为什么：每类工具输出都有不同的高价值片段"]
+    Router --> Kompress["Kompress / Text<br/>普通长文本 ML 压缩<br/>为什么：兜底处理没有强结构的文本"]
+
+    Smart --> Rust["Rust Core + PyO3 headroom._core<br/>SmartCrusher / detector / log/search/diff 桥接<br/>为什么：热路径 CPU 密集，Rust 提供速度，PyO3 保留 Python API"]
+    Log --> Rust
+    Code --> CCR["CCR Store<br/>Compress-Cache-Retrieve<br/>为什么：允许有损缩短当前上下文，但保留按 hash 恢复原文的通道"]
+    Smart --> CCR
+    CCR --> MCP
+
+    Proxy --> Obs["可观测性<br/>/stats / dashboard / metrics / transformations/feed / cost tracker<br/>为什么：压缩系统必须能证明节省了多少、哪里发生了变化"]
