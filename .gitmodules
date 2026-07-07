@@ -16,3 +16,6 @@
 [submodule "sources/zep"]
 	path = sources/zep
 	url = https://github.com/getzep/zep.git
+[submodule "sources/graphiti"]
+	path = sources/graphiti
+	url = https://github.com/getzep/graphiti.git

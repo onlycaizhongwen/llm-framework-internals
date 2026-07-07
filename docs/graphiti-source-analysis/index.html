@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Graphiti 源码架构精读</title>
+  <style>
+    :root { --bg:#f6f8fb; --panel:#fff; --text:#202734; --muted:#667085; --line:#d9dee8; --accent:#2563eb; --accent2:#0f766e; --warn:#b45309; }
+    body { margin:0; font-family:"Segoe UI","Microsoft YaHei",Arial,sans-serif; background:var(--bg); color:var(--text); line-height:1.72; }
+    header { background:#fff; border-bottom:1px solid var(--line); padding:34px 28px 26px; }
+    header .inner, main { max-width:1180px; margin:0 auto; }
+    h1 { margin:0 0 8px; font-size:34px; letter-spacing:0; }
+    h2 { margin:34px 0 14px; font-size:24px; border-left:5px solid var(--accent); padding-left:12px; }
+    h3 { margin:24px 0 10px; font-size:19px; }
+    .lead { margin:0; color:var(--muted); max-width:980px; }
+    main { padding:24px 28px 56px; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:22px 24px; margin:18px 0; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; background:#fff; }
+    th,td { border:1px solid var(--line); padding:10px 12px; vertical-align:top; }
+    th { background:#eef4ff; text-align:left; }
+    code { background:#eef2f7; color:#1f2937; padding:1px 4px; border-radius:4px; }
+    pre { background:#f8fafc; color:#111827; border:1px solid #cbd5e1; padding:16px; overflow:auto; border-radius:8px; line-height:1.62; font-size:15px; }
+    pre code { background:transparent; color:inherit; padding:0; border-radius:0; }
+    .diagram { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px; margin:14px 0; overflow:auto; }
+    .diagram pre { background:#fff; color:#202734; padding:0; margin:0; border:0; }
+    .mermaid svg { background:#fff; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+    .card { border:1px solid var(--line); border-radius:8px; background:#fbfcff; padding:14px; }
+    .card strong { display:block; color:var(--accent); margin-bottom:6px; }
+    .quote,.explain,.warn { border-radius:8px; padding:14px 16px; margin:12px 0; }
+    .quote,.explain { background:#f8fbff; border:1px solid #cfe0ff; }
+    .warn { background:#fff7ed; border:1px solid #fed7aa; }
+    .explain strong { color:var(--accent2); }
+    .warn strong { color:var(--warn); }
+    .evidence { color:var(--muted); font-size:14px; }
+    a { color:var(--accent); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:18px;} table{display:block; overflow-x:auto;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1>Graphiti 源码架构精读</h1>
+      <p class="lead">分析对象：<code>sources/graphiti</code>，固定源码提交 <code>62ff03ac5662d288ebd9f6aafb70d6ae4070c632</code>。参考 mem0 的分析方式，但 Graphiti 的核心是 temporal context graph：episode、entity、fact edge、时间失效和混合检索。</p>
+    </div>
+  </header>
+  <main>
+    <section>
+      <h2>总体结论</h2>
+      <p>Graphiti 是 Zep 背后的开源 temporal context graph engine。它不是只保存一组 memory facts，而是把输入保存成 <code>EpisodicNode</code>，再抽取实体和关系；每条关系边保存 <code>episodes</code>、<code>valid_at</code>、<code>invalid_at</code>、<code>expired_at</code>，所以能表达“事实什么时候成立、什么时候被新事实替代、证据来自哪里”。</p>
+      <div class="quote">分享口径：mem0 更像轻量 memory layer；Graphiti 更像带时间和溯源能力的图谱记忆内核；Zep 则是托管化 context graph 平台。</div>
+    </section>
+
+    <section>
+      <h2>最高层架构</h2>
+      <div class="diagram"><pre class="mermaid">
+flowchart TB
+    App["使用方<br/>Agent 应用 / MCP 客户端 / 后端服务<br/>为什么：Graphiti 不直接做 Agent 编排，只提供长期图谱记忆能力"] --> API["核心 API 层<br/>add_episode 写入 / search 检索 / add_triplet 手工写边<br/>为什么：把记忆读写收敛到少数入口，方便替换上层框架"]
+    API --> Clients["依赖组合层 GraphitiClients<br/>LLMClient + Embedder + CrossEncoder + GraphDriver<br/>为什么：抽取、向量、重排、数据库可以独立替换"]
+    Clients --> LLM["LLM 语义操作<br/>抽实体、抽事实、抽时间、判重、识别矛盾<br/>为什么：这些步骤依赖自然语言理解"]
+    Clients --> Embed["Embedding 向量化<br/>实体名、fact、query vector<br/>为什么：召回语义相近但字面不同的节点和事实"]
+    Clients --> Rerank["Reranker 重排<br/>RRF / MMR / cross encoder / node distance<br/>为什么：多路召回后需要统一排序并控制相关性"]
+    Clients --> Driver["GraphDriver 后端适配<br/>Neo4j / FalkorDB / Neptune / Kuzu deprecated<br/>为什么：核心算法不绑定单一图数据库"]
+    Driver --> Graph["Temporal Context Graph<br/>可增量更新的上下文图谱<br/>为什么：Agent 记忆会随时间变化，不能只做静态 RAG"]
+    Graph --> Episodes["Episodes 原始证据<br/>content / source / valid_at<br/>为什么：所有事实都能追溯来源"]
+    Graph --> Entities["Entity Nodes 实体<br/>name embedding / summary / attributes<br/>为什么：把人物、项目、偏好、规则抽成可连接对象"]
+    Graph --> Facts["Entity Edges 事实关系<br/>fact / episodes / valid_at / invalid_at / expired_at<br/>为什么：事实变化时保留历史而不是覆盖"]
+    Graph --> Communities["Communities 社区摘要<br/>可选聚合视图<br/>为什么：大图中按区域生成摘要，降低检索噪声"]
+    API --> Server["FastAPI server<br/>HTTP ingest / retrieve<br/>为什么：方便把 Graphiti 作为独立服务部署"]
+    API --> MCP["MCP server<br/>add_memory / search_nodes / search_memory_facts<br/>为什么：让 Claude、Cursor 等工具直接使用图谱记忆"]
+      </pre></div>
+      <div class="explain"><strong>为什么这么设计：</strong>Graphiti 把语义抽取、向量化、重排和图数据库访问拆成可替换 client/driver。这样默认可以用 OpenAI + Neo4j，也可以替换成 Gemini、Anthropic、FalkorDB、Neptune 等组合。上层换 Agent 框架，底层换数据库或模型 provider，都不应该改动核心图谱流程。</div>
+      <p>Mermaid 源文件：<a href="architecture.mmd">architecture.mmd</a></p>
+      <p class="evidence">证据：<code>README.md:42-49</code> 定义 temporal context graph；<code>README.md:84-118</code> 区分 Zep 和 Graphiti；<code>graphiti_core/graphiti.py:137</code> 初始化主类依赖。</p>
+    </section>
+
+    <section>
+      <h2>核心数据模型</h2>
+      <table>
+        <thead><tr><th>对象</th><th>源码位置</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td><code>EpisodicNode</code></td><td><code>nodes.py:318</code></td><td>保存原始输入、source、source_description、content、valid_at，是 provenance 根。</td></tr>
+          <tr><td><code>EntityNode</code></td><td><code>nodes.py:499</code></td><td>实体节点，保存 name embedding、summary、attributes。</td></tr>
+          <tr><td><code>EntityEdge</code></td><td><code>edges.py:263</code></td><td>事实/关系边，保存 fact embedding、episodes、valid_at、invalid_at、expired_at。</td></tr>
+        </tbody>
+      </table>
+      <pre><code>class EntityEdge(Edge):
+    fact: str
+    episodes: list[str]
+    expired_at: datetime | None
+    valid_at: datetime | None
+    invalid_at: datetime | None</code></pre>
+      <div class="explain"><strong>讲解重点：</strong>Graphiti 的记忆不只是文本片段，而是“带来源和时间窗口的关系边”。这就是它和普通 vector memory 最大的工程差异。</div>
+      <table>
+        <thead><tr><th>字段</th><th>为什么存在</th><th>源码线索</th></tr></thead>
+        <tbody>
+          <tr><td><code>EpisodicNode.valid_at</code></td><td>表示原始事件发生时间，不是系统写入时间。后续事实时间窗口会参考它。</td><td><code>nodes.py:318-349</code></td></tr>
+          <tr><td><code>EntityNode.name_embedding</code></td><td>让实体去重和搜索能处理“同义不同名”的情况。</td><td><code>nodes.py:499-516</code></td></tr>
+          <tr><td><code>EntityNode.summary</code></td><td>让实体带有局部上下文，不只是一个名字。</td><td><code>nodes.py:499-560</code></td></tr>
+          <tr><td><code>EntityEdge.episodes</code></td><td>记录哪些 episode 支撑这个 fact，便于 provenance 和 episode mention rerank。</td><td><code>edges.py:263-277</code></td></tr>
+          <tr><td><code>EntityEdge.valid_at/invalid_at</code></td><td>表达事实成立和失效时间，是 temporal memory 的核心。</td><td><code>edges.py:271-277</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>主流程一：Episode 写入</h2>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    Start["1 输入 episode<br/>message / text / JSON + reference_time<br/>为什么：reference_time 表示事件发生时间，不等于写入时间"] --> Prev["2 retrieve_episodes<br/>取近期 episode 作为上下文<br/>为什么：新事实要结合最近上下文才能正确抽取和判重"]
+    Prev --> Episode["3 创建 EpisodicNode<br/>保存原始内容、source、valid_at<br/>为什么：先保存证据，再派生实体和事实"]
+    Episode --> Nodes["4 extract_nodes<br/>LLM 抽取实体，可传 entity_types<br/>为什么：业务可用 Pydantic 类型约束实体结构"]
+    Nodes --> NodeDedupe["5 resolve_extracted_nodes<br/>语义候选 + 确定性相似 + LLM 去重<br/>为什么：避免同一实体反复创建多个节点"]
+    NodeDedupe --> Edges["6 extract_edges<br/>抽取 fact / relation / timestamps<br/>为什么：长期记忆真正可检索的是结构化事实边"]
+    Edges --> EdgeDedupe["7 resolve_extracted_edges<br/>重复合并 + 矛盾识别<br/>为什么：新事实可能是旧事实的重复，也可能推翻旧事实"]
+    EdgeDedupe --> Temporal["8 resolve_edge_contradictions<br/>旧 fact 写 invalid_at / expired_at<br/>为什么：保留历史，避免过期事实污染当前答案"]
+    Temporal --> Attr["9 extract_attributes_from_nodes<br/>属性与 summary 更新<br/>为什么：节点需要可读摘要和业务属性，方便后续检索"]
+    Attr --> Save["10 save graph<br/>nodes + episodic edges + entity edges<br/>为什么：同时保存证据链和可检索图结构"]
+    Save --> Searchable["11 可检索图谱<br/>事实保留来源与时间窗口<br/>结果：既能查当前事实，也能追溯历史变化"]
+      </pre></div>
+      <p>Mermaid 源文件：<a href="ingestion-flow.mmd">ingestion-flow.mmd</a></p>
+      <p><code>Graphiti.add_episode()</code> 是写入主流程。它接收 <code>episode_body</code>、<code>reference_time</code>、<code>entity_types</code>、<code>edge_types</code>、<code>saga</code> 等参数，然后完成抽取、去重、失效和保存。</p>
+      <p class="evidence">证据：<code>graphiti.py:980</code> 是入口；<code>:1099-1138</code> 取 previous episodes、创建 episode、抽取/resolve nodes；<code>:1138-1167</code> 抽取/resolve edges 和 invalidated edges；<code>:1168-1221</code> 保存并记录 span。</p>
+      <table>
+        <thead><tr><th>步骤</th><th>细节</th><th>为什么需要</th></tr></thead>
+        <tbody>
+          <tr><td>取 previous episodes</td><td>没有传 <code>previous_episode_uuids</code> 时，按 <code>reference_time</code> 拉近期 episode。</td><td>新输入经常省略主语或上下文，抽取实体/事实需要最近对话补全语义。</td></tr>
+          <tr><td><code>group_id</code> 分区</td><td>为空时用 driver 默认分区；传入时校验并 clone driver 到对应 database。</td><td>多用户、多租户或多业务图要隔离，避免事实串图。</td></tr>
+          <tr><td><code>entity_types</code> / <code>edge_types</code></td><td>业务可以传 Pydantic model 和 edge type map。</td><td>不把 schema 完全交给 LLM 自由发挥，降低抽取漂移。</td></tr>
+          <tr><td><code>saga</code> / <code>NEXT_EPISODE</code></td><td>episode 可关联到 saga，并按时间串起来。</td><td>对连续任务、会话、故事线做时序追踪，方便按链路理解上下文。</td></tr>
+          <tr><td>tracing span</td><td>记录 episode、node、edge、invalidated_count、duration。</td><td>这条链路重且多 LLM 调用，生产上必须可观测。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>主流程二：Temporal Fact Invalidation</h2>
+      <p>Graphiti 最核心的动作不是“覆盖旧记忆”，而是让旧 fact 失效。这样它既能回答现在，也能保留历史。</p>
+      <pre><code>elif edge_valid_at_utc < resolved_edge_valid_at_utc:
+    edge.invalid_at = resolved_edge.valid_at
+    edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
+    invalidated_edges.append(edge)</code></pre>
+      <div class="explain"><strong>为什么这么设计：</strong>用户偏好、企业规则、项目上下文都会变化。旧事实如果直接删除，就失去历史；如果不处理，又会污染当前答案。Graphiti 用 <code>invalid_at</code> 表达“旧事实到此为止”。</div>
+      <p class="evidence">证据：<code>edge_operations.py:545-573</code> 写入 invalid_at/expired_at；<code>edge_operations.py:623-848</code> 用 LLM 判重和识别 contradicted facts。</p>
+      <table>
+        <thead><tr><th>类型</th><th>去重/失效路径</th><th>设计原因</th></tr></thead>
+        <tbody>
+          <tr><td>EntityNode</td><td>语义候选、确定性相似、LLM resolve。</td><td>实体名容易同义、别名、大小写变化，先缩小候选再让 LLM 判断更稳。</td></tr>
+          <tr><td>EntityEdge</td><td>exact fact 快速去重，同端点 related edges，全图 invalidation candidates。</td><td>fact 既可能重复，也可能语义矛盾；只查同端点会漏冲突，只查全图又太贵。</td></tr>
+          <tr><td>Attributes</td><td>只在匹配自定义 schema 时抽结构化属性。</td><td>避免 LLM 生成无约束属性污染实体/关系。</td></tr>
+          <tr><td>Embeddings</td><td>新节点和新边在 resolve 前生成 embedding。</td><td>候选召回、相似度排序和搜索都依赖向量。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>主流程三：Search / Hybrid Retrieval</h2>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    Query["1 用户查询 query<br/>例如：用户现在偏好怎么做源码分享？"] --> Config["2 SearchConfig<br/>选择搜 edges / nodes / episodes / communities<br/>为什么：不同问题需要不同图谱层"]
+    Config --> NeedVec{"3 是否需要向量<br/>cosine 或 MMR 需要 query vector"}
+    NeedVec -->|是| Embed["4 embed query vector<br/>为什么：召回语义相近但字面不同的 facts"]
+    NeedVec -->|否| Zero["4 跳过向量<br/>为什么：纯 BM25/BFS 不需要 embedding，可节省成本"]
+    Embed --> Execute
+    Zero --> Execute
+    Execute["5 并行执行 scope search<br/>为什么：edges/nodes/episodes/communities 可独立召回"] --> BM25["BM25 / fulltext<br/>擅长关键词、专有名词、精确术语"]
+    Execute --> Cosine["cosine similarity<br/>擅长语义相似召回"]
+    Execute --> BFS["graph BFS<br/>从相关节点沿关系扩展邻域"]
+    BM25 --> Merge["6 候选集合合并<br/>为什么：单一路径召回容易漏结果"]
+    Cosine --> Merge
+    BFS --> Merge
+    Merge --> Rerank["7 rerank<br/>RRF / MMR / cross encoder / node distance / episode mentions<br/>为什么：多路候选需要统一排序和去噪"]
+    Rerank --> Results["8 SearchResults<br/>edges + nodes + episodes + communities + scores<br/>结果：可直接组装 Agent 上下文"]
+      </pre></div>
+      <p>基础入口 <code>Graphiti.search()</code> 返回 facts；高级入口 <code>Graphiti.search_()</code> 返回 <code>SearchResults</code>，可同时包含 edges、nodes、episodes、communities。</p>
+      <p class="evidence">证据：<code>graphiti.py:1527</code> 基础 search；<code>:1584</code> 高级 search_；<code>search.py:98-244</code> 并行 scope search；<code>search.py:262-462</code> edge search 的 BM25/cosine/BFS/rerank；<code>search_config_recipes.py:33-109</code> combined hybrid recipes。</p>
+      <table>
+        <thead><tr><th>机制</th><th>适合解决什么</th><th>为什么不是只用向量</th></tr></thead>
+        <tbody>
+          <tr><td>BM25 / fulltext</td><td>代码名、产品名、人名、精确术语。</td><td>embedding 对专有名词和短查询不一定稳定。</td></tr>
+          <tr><td>Cosine similarity</td><td>语义相近但字面不同的问题。</td><td>用户查询和 fact 表述常常不完全一致。</td></tr>
+          <tr><td>BFS</td><td>已有中心节点或候选节点附近的关系扩展。</td><td>图谱记忆的价值在关系，不能只看文本相似度。</td></tr>
+          <tr><td>RRF</td><td>多路召回的轻量融合。</td><td>不需要训练，能把不同召回列表合成稳定排序。</td></tr>
+          <tr><td>MMR</td><td>降低结果重复，保留多样性。</td><td>Agent 上下文窗口有限，重复 facts 会浪费 token。</td></tr>
+          <tr><td>Cross encoder</td><td>更贵但更准的语义重排。</td><td>用于最终候选重排，避免对全库做昂贵 LLM 判断。</td></tr>
+          <tr><td>Node distance</td><td>围绕某个实体找近邻事实。</td><td>个性化或局部上下文检索时比全局相似度更贴近问题。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Server 和 MCP</h2>
+      <table>
+        <thead><tr><th>入口</th><th>作用</th><th>源码证据</th></tr></thead>
+        <tbody>
+          <tr><td>FastAPI server</td><td>HTTP ingest / retrieve</td><td><code>server/graph_service/routers/ingest.py:51</code>、<code>retrieve.py:17</code></td></tr>
+          <tr><td>MCP server</td><td>给 Claude/Cursor 等 MCP client 暴露图谱记忆工具</td><td><code>mcp_server/src/graphiti_mcp_server.py:341</code>、<code>:477</code>、<code>:555</code></td></tr>
+          <tr><td>Queue service</td><td>按 group_id 顺序处理 episode，避免同一图并发写乱序</td><td><code>mcp_server/src/services/queue_service.py:13-84</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>核心设计思想</h2>
+      <div class="grid">
+        <div class="card"><strong>Episode First</strong>先保存原始输入，fact 永远可追溯。</div>
+        <div class="card"><strong>Temporal Edge</strong>事实在边上，边有 valid_at / invalid_at / expired_at。</div>
+        <div class="card"><strong>LLM as Semantic Operator</strong>LLM 做抽取、判重、矛盾识别，系统负责候选、索引、落库。</div>
+        <div class="card"><strong>Hybrid Retrieval</strong>BM25、embedding、BFS、reranker 可组合。</div>
+        <div class="card"><strong>Pluggable Infrastructure</strong>driver、LLM、embedder、reranker 都可替换。</div>
+        <div class="card"><strong>Schema 可控</strong>entity_types / edge_types 用 Pydantic model 约束业务语义。</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>真实例子和边界</h2>
+      <p>用户先说：“源码分析先讲仓库边界，再讲主流程。”后面又说：“分享时别先讲边界了，先讲应用场景。”</p>
+      <pre><code>await graphiti.add_episode(
+    name="preference",
+    episode_body="用户希望源码分析先讲仓库边界，再讲主流程。",
+    source_description="chat message",
+    reference_time=now,
+    group_id="share",
+)</code></pre>
+      <div class="explain"><strong>Graphiti 的处理：</strong>第一句话形成旧偏好 fact；第二句话形成新偏好 fact；旧 fact 可能被写入 <code>invalid_at</code>，从当前事实变成历史事实。</div>
+      <table>
+        <thead><tr><th>局限性</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>依赖 structured output</td><td>小模型或 schema 支持弱的模型可能导致抽取失败。</td></tr>
+          <tr><td>写入链路重</td><td>包含 LLM、embedding、search、dedupe、落库，适合异步队列。</td></tr>
+          <tr><td>运维成本高</td><td>需要图数据库、索引、LLM provider、队列和监控。</td></tr>
+          <tr><td>不是托管 Zep</td><td>用户/线程/dashboard/SLA/治理需要 Zep 或自行建设。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>对比和分享建议</h2>
+      <table>
+        <thead><tr><th>项目</th><th>准确定位</th><th>和 Graphiti 的关系</th></tr></thead>
+        <tbody>
+          <tr><td>Graphiti</td><td>开源 temporal context graph engine</td><td>图谱记忆内核。</td></tr>
+          <tr><td>Zep</td><td>托管 context graph infrastructure</td><td>Graphiti 是开源核心，Zep 提供生产托管和治理。</td></tr>
+          <tr><td>mem0</td><td>轻量 memory layer</td><td>更快落地，Graphiti 更强调图、时间、溯源。</td></tr>
+          <tr><td>LangGraph</td><td>Agent workflow runtime</td><td>LangGraph 管流程，Graphiti 管长期图谱记忆。</td></tr>
+        </tbody>
+      </table>
+      <div class="warn"><strong>分享建议：</strong>不要把 Graphiti 讲成“又一个向量库 memory”。重点讲 episode provenance、temporal edge、fact invalidation、hybrid retrieval，这四点才是它和 mem0/普通 RAG 的差异。</div>
+      <p>分享稿：<a href="share-guide.html">share-guide.html</a>；Markdown：<a href="index.md">index.md</a>。</p>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      securityLevel: "loose",
+      themeVariables: {
+        background: "#ffffff",
+        mainBkg: "#f8fbff",
+        secondaryColor: "#f0fdfa",
+        tertiaryColor: "#f8fafc",
+        primaryBorderColor: "#9bbcf8",
+        secondaryBorderColor: "#8bd2c7",
+        lineColor: "#667085",
+        textColor: "#202734"
+      }
+    });
+  </script>
+</body>
+</html>

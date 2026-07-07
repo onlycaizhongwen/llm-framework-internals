@@ -1,0 +1,15 @@
+flowchart TD
+    Query["1 用户查询 query<br/>例如：用户现在偏好怎么做源码分享？"] --> Config["2 SearchConfig<br/>选择搜 edges / nodes / episodes / communities<br/>为什么：不同问题需要不同图谱层"]
+    Config --> NeedVec{"3 是否需要向量<br/>cosine 或 MMR 需要 query vector"}
+    NeedVec -->|是| Embed["4 embed query vector<br/>为什么：召回语义相近但字面不同的 facts"]
+    NeedVec -->|否| Zero["4 跳过向量<br/>为什么：纯 BM25/BFS 不需要 embedding，可节省成本"]
+    Embed --> Execute
+    Zero --> Execute
+    Execute["5 并行执行 scope search<br/>为什么：edges/nodes/episodes/communities 可独立召回"] --> BM25["BM25 / fulltext<br/>擅长关键词、专有名词、精确术语"]
+    Execute --> Cosine["cosine similarity<br/>擅长语义相似召回"]
+    Execute --> BFS["graph BFS<br/>从相关节点沿关系扩展邻域"]
+    BM25 --> Merge["6 候选集合合并<br/>为什么：单一路径召回容易漏结果"]
+    Cosine --> Merge
+    BFS --> Merge
+    Merge --> Rerank["7 rerank<br/>RRF / MMR / cross encoder / node distance / episode mentions<br/>为什么：多路候选需要统一排序和去噪"]
+    Rerank --> Results["8 SearchResults<br/>edges + nodes + episodes + communities + scores<br/>结果：可直接组装 Agent 上下文"]

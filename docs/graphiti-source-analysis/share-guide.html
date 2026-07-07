@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Graphiti 源码分享讲稿</title>
+  <style>
+    :root { --bg:#f6f8fb; --panel:#fff; --text:#202734; --muted:#667085; --line:#d9dee8; --accent:#2563eb; --accent2:#0f766e; }
+    body { margin:0; font-family:"Segoe UI","Microsoft YaHei",Arial,sans-serif; background:var(--bg); color:var(--text); line-height:1.72; }
+    header { background:#fff; border-bottom:1px solid var(--line); padding:34px 28px 26px; }
+    header .inner, main { max-width:1080px; margin:0 auto; }
+    h1 { margin:0 0 8px; font-size:32px; }
+    h2 { margin:32px 0 14px; font-size:23px; border-left:5px solid var(--accent); padding-left:12px; }
+    h3 { margin:22px 0 10px; font-size:18px; }
+    .lead { margin:0; color:var(--muted); }
+    main { padding:24px 28px 56px; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:22px 24px; margin:18px 0; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; background:#fff; }
+    th,td { border:1px solid var(--line); padding:10px 12px; vertical-align:top; }
+    th { background:#eef4ff; text-align:left; }
+    code { background:#eef2f7; color:#1f2937; padding:1px 4px; border-radius:4px; }
+    pre { background:#f8fafc; color:#111827; border:1px solid #cbd5e1; padding:16px; overflow:auto; border-radius:8px; line-height:1.62; font-size:15px; }
+    pre code { background:transparent; color:inherit; padding:0; border-radius:0; }
+    .talk,.quote { background:#f8fbff; border:1px solid #cfe0ff; border-radius:8px; padding:14px 16px; margin:12px 0; }
+    .diagram { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px; margin:14px 0; overflow:auto; }
+    .diagram pre { background:#fff; color:#202734; padding:0; margin:0; border:0; }
+    .mermaid svg { background:#fff; }
+    .timeline { display:grid; gap:10px; }
+    .item { border:1px solid var(--line); background:#fbfcff; border-radius:8px; padding:12px 14px; }
+    .item strong { color:var(--accent); }
+    a { color:var(--accent); text-decoration:none; }
+    @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:18px;} table{display:block; overflow-x:auto;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1>Graphiti 源码分享讲稿</h1>
+      <p class="lead">面向分享的精读版：先讲仓库边界，再讲 temporal graph memory 主流程，最后和 mem0 / Zep / LangGraph 建立对比。</p>
+    </div>
+  </header>
+  <main>
+    <section>
+      <h2>开场定位</h2>
+      <div class="talk">今天讲 Graphiti。它不是 Zep Cloud adapter，也不是 LangGraph workflow runtime，而是 Zep 背后的开源 temporal context graph engine。最重要的关键词是：episode、entity、fact edge、valid_at、invalid_at、hybrid search。</div>
+      <div class="talk">这句话可以展开成三层：有来源，每条事实能追溯到 episode；有时间窗口，事实有 <code>valid_at</code>、<code>invalid_at</code>、<code>expired_at</code>；可混合检索，不是只靠 embedding，而是 BM25、向量、BFS 和 rerank 组合。</div>
+    </section>
+
+    <section>
+      <h2>一句话主线</h2>
+      <pre><code>add_episode
+  -> 保存 EpisodicNode 作为 provenance
+  -> LLM 抽 entity 和 fact edge
+  -> resolve/dedupe/contradiction
+  -> 旧 fact 写 invalid_at / expired_at
+      -> search/search_ 用 BM25 + vector + BFS + rerank 检索</code></pre>
+      <div class="talk">为什么这么设计：episode 保留证据，entity 抽出对象，fact edge 表达关系和时间窗口。LLM 做语义判断，工程代码负责候选、索引、分区、落库和可观测性。</div>
+    </section>
+
+    <section>
+      <h2>仓库边界</h2>
+      <table>
+        <thead><tr><th>目录</th><th>分享口径</th></tr></thead>
+        <tbody>
+          <tr><td><code>graphiti_core/</code></td><td>核心引擎，重点精读。</td></tr>
+          <tr><td><code>server/</code></td><td>FastAPI 服务包装。</td></tr>
+          <tr><td><code>mcp_server/</code></td><td>MCP 工具服务，暴露 add_memory/search_nodes/search_memory_facts。</td></tr>
+          <tr><td><code>examples/</code></td><td>Neo4j、FalkorDB、Neptune、LangGraph agent 等示例。</td></tr>
+          <tr><td><code>tests/</code></td><td>核心、driver、LLM client、MCP 测试。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>架构图和流程图</h2>
+      <h3>最高层架构</h3>
+      <div class="diagram"><pre class="mermaid">
+flowchart TB
+    App["Agent / 应用 / MCP 客户端"] --> API["Graphiti API"]
+    API --> Clients["LLMClient + Embedder + CrossEncoder + GraphDriver"]
+    Clients --> Graph["Temporal Context Graph"]
+    Graph --> Episodes["Episodes<br/>原始证据"]
+    Graph --> Entities["Entity Nodes<br/>实体"]
+    Graph --> Facts["Fact Edges<br/>valid_at / invalid_at"]
+    API --> Server["FastAPI server"]
+    API --> MCP["MCP server"]
+      </pre></div>
+      <div class="talk">架构图讲解重点：把 LLM 抽取、embedding、rerank、GraphDriver 拆开，是为了降低 provider 绑定；把 FastAPI/MCP 放在外层，是为了让 <code>graphiti_core</code> 能被服务、工具和应用多种入口复用。</div>
+      <h3>写入流程</h3>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    Start["add_episode"] --> Episode["EpisodicNode"]
+    Episode --> Nodes["extract_nodes + resolve"]
+    Nodes --> Edges["extract_edges + resolve"]
+    Edges --> Temporal["contradiction -> invalid_at"]
+    Temporal --> Save["save graph"]
+      </pre></div>
+      <div class="talk">写入流程讲解重点：previous episodes 补上下文，<code>group_id</code> 做图分区，<code>entity_types</code>/<code>edge_types</code> 做 schema 约束，<code>saga</code>/<code>NEXT_EPISODE</code> 做连续事件链。</div>
+      <h3>检索流程</h3>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    Query["query"] --> Methods["BM25 + cosine + BFS"]
+    Methods --> Rerank["RRF / MMR / cross encoder / node distance"]
+    Rerank --> Results["edges / nodes / episodes / communities"]
+      </pre></div>
+      <div class="talk">检索流程讲解重点：BM25 适合专有名词，向量适合语义近似，BFS 利用图关系扩展，RRF/MMR/cross encoder/node distance 负责多路候选排序和去噪。</div>
+    </section>
+
+    <section>
+      <h2>源码精读口径</h2>
+      <div class="talk"><strong>Graphiti 主类：</strong><code>graphiti_core/graphiti.py:137</code> 初始化 driver、LLM、embedder、cross_encoder；<code>:980</code> 是 <code>add_episode()</code>；<code>:1527</code> 是基础 <code>search()</code>；<code>:1584</code> 是高级 <code>search_()</code>。</div>
+      <div class="talk"><strong>数据模型：</strong><code>nodes.py:318</code> 是 episode；<code>nodes.py:499</code> 是 entity；<code>edges.py:263</code> 是 fact edge。</div>
+      <div class="talk"><strong>时间失效：</strong><code>edge_operations.py:545-573</code> 给旧 fact 写 <code>invalid_at</code> 和 <code>expired_at</code>。</div>
+      <div class="talk"><strong>混合检索：</strong><code>search.py:98-244</code> 并行搜多个 scope；<code>search.py:262-462</code> 展示 edge search 的 BM25、cosine、BFS 和 rerank。</div>
+      <div class="talk"><strong>去重细节：</strong>EntityNode 先语义候选再确定性相似/LLM resolve；EntityEdge 先 exact fact 快速去重，再查 related edges 和 invalidation candidates，因为 fact 既可能重复，也可能推翻旧事实。</div>
+    </section>
+
+    <section>
+      <h2>代码片段作证</h2>
+      <pre><code>class EntityEdge(Edge):
+    fact: str
+    episodes: list[str]
+    expired_at: datetime | None
+    valid_at: datetime | None
+    invalid_at: datetime | None</code></pre>
+      <pre><code>edge.invalid_at = resolved_edge.valid_at
+edge.expired_at = edge.expired_at if edge.expired_at is not None else utc_now()
+invalidated_edges.append(edge)</code></pre>
+      <div class="talk">这两段足够支撑一个核心判断：Graphiti 的 memory fact 不是普通文本，而是“带来源 episode 和时间窗口的图边”。</div>
+    </section>
+
+    <section>
+      <h2>真实例子</h2>
+      <div class="talk">用户先说：“源码分析先讲仓库边界，再讲主流程。”后面又说：“分享时别先讲边界了，先讲应用场景。”Graphiti 会把旧偏好变成历史事实，而不是直接覆盖或永久保留为当前事实。</div>
+      <pre><code>await graphiti.add_episode(
+    name="preference",
+    episode_body="用户希望源码分析先讲仓库边界，再讲主流程。",
+    source_description="chat message",
+    reference_time=now,
+    group_id="share",
+)</code></pre>
+    </section>
+
+    <section>
+      <h2>对比讲法</h2>
+      <table>
+        <thead><tr><th>项目</th><th>一句话定位</th></tr></thead>
+        <tbody>
+          <tr><td>Graphiti</td><td>开源 temporal graph memory engine。</td></tr>
+          <tr><td>Zep</td><td>托管 context graph infrastructure，Graphiti 是开源核心之一。</td></tr>
+          <tr><td>mem0</td><td>轻量 memory layer，更快接入长期记忆。</td></tr>
+          <tr><td>LangGraph</td><td>Agent workflow runtime，可和 Graphiti 组合。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>局限性</h2>
+      <ul>
+        <li>依赖 LLM structured output，小模型或弱 schema 支持会影响抽取。</li>
+        <li>写入链路重，适合异步队列，不适合阻塞用户请求。</li>
+        <li>自托管需要图数据库、索引、LLM provider、监控和队列。</li>
+        <li>Graphiti 不等于 Zep 托管平台能力。</li>
+        <li>Kuzu 已 deprecated，新项目优先 Neo4j/FalkorDB。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>建议演讲结构</h2>
+      <div class="timeline">
+        <div class="item"><strong>10 分钟：边界澄清。</strong>Graphiti、Zep、mem0、LangGraph 各是什么。</div>
+        <div class="item"><strong>15 分钟：数据模型。</strong>episode、entity、fact edge。</div>
+        <div class="item"><strong>25 分钟：写入主流程。</strong><code>add_episode()</code> 从输入到图谱。</div>
+        <div class="item"><strong>20 分钟：时间失效。</strong>为什么旧 fact 不删除，而是 invalidated。</div>
+        <div class="item"><strong>15 分钟：混合检索。</strong>BM25、vector、BFS、rerank。</div>
+        <div class="item"><strong>10 分钟：真实例子和选型。</strong>什么时候用 Graphiti，什么时候用 mem0/Zep。</div>
+      </div>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      securityLevel: "loose",
+      themeVariables: {
+        background: "#ffffff",
+        mainBkg: "#f8fbff",
+        secondaryColor: "#f0fdfa",
+        tertiaryColor: "#f8fafc",
+        primaryBorderColor: "#9bbcf8",
+        secondaryBorderColor: "#8bd2c7",
+        lineColor: "#667085",
+        textColor: "#202734"
+      }
+    });
+  </script>
+</body>
+</html>

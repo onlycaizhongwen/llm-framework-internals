@@ -1,0 +1,11 @@
+flowchart TD
+    Start["1 输入 episode<br/>message / text / JSON + reference_time<br/>为什么：reference_time 表示事件发生时间，不等于写入时间"] --> Prev["2 retrieve_episodes<br/>取近期 episode 作为上下文<br/>为什么：新事实要结合最近上下文才能正确抽取和判重"]
+    Prev --> Episode["3 创建 EpisodicNode<br/>保存原始内容、source、valid_at<br/>为什么：先保存证据，再派生实体和事实"]
+    Episode --> Nodes["4 extract_nodes<br/>LLM 抽取实体，可传 entity_types<br/>为什么：业务可用 Pydantic 类型约束实体结构"]
+    Nodes --> NodeDedupe["5 resolve_extracted_nodes<br/>语义候选 + 确定性相似 + LLM 去重<br/>为什么：避免同一实体反复创建多个节点"]
+    NodeDedupe --> Edges["6 extract_edges<br/>抽取 fact / relation / timestamps<br/>为什么：长期记忆真正可检索的是结构化事实边"]
+    Edges --> EdgeDedupe["7 resolve_extracted_edges<br/>重复合并 + 矛盾识别<br/>为什么：新事实可能是旧事实的重复，也可能推翻旧事实"]
+    EdgeDedupe --> Temporal["8 resolve_edge_contradictions<br/>旧 fact 写 invalid_at / expired_at<br/>为什么：保留历史，避免过期事实污染当前答案"]
+    Temporal --> Attr["9 extract_attributes_from_nodes<br/>属性与 summary 更新<br/>为什么：节点需要可读摘要和业务属性，方便后续检索"]
+    Attr --> Save["10 save graph<br/>nodes + episodic edges + entity edges<br/>为什么：同时保存证据链和可检索图结构"]
+    Save --> Searchable["11 可检索图谱<br/>事实保留来源与时间窗口<br/>结果：既能查当前事实，也能追溯历史变化"]
