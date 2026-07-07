@@ -13,3 +13,6 @@
 [submodule "sources/mem0"]
 	path = sources/mem0
 	url = https://github.com/mem0ai/mem0.git
+[submodule "sources/zep"]
+	path = sources/zep
+	url = https://github.com/getzep/zep.git

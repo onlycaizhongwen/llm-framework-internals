@@ -1,0 +1,16 @@
+flowchart TD
+    Tool["Agent 调用 search_memory / zepSearch"] --> Target{"选择搜索目标"}
+    Target -->|user_id| UserGraph["用户个人 graph<br/>适合偏好、历史、客户上下文"]
+    Target -->|graph_id| SharedGraph["共享 graph<br/>适合文档、知识库、业务资料"]
+    UserGraph --> Search["graph.search(query, scope, limit, filters)"]
+    SharedGraph --> Search
+    Search --> Scope{"scope"}
+    Scope --> Edges["edges<br/>事实/关系，最常用"]
+    Scope --> Nodes["nodes<br/>实体和 summary"]
+    Scope --> Episodes["episodes<br/>原始 source data"]
+    Scope --> Auto["auto<br/>Zep 组装 context string"]
+    Edges --> Format["格式化成模型可读文本"]
+    Nodes --> Format
+    Episodes --> Format
+    Auto --> Format
+    Format --> Return["返回给 Agent<br/>作为工具结果或 context"]

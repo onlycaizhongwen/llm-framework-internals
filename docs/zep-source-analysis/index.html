@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zep 源码架构精读</title>
+  <style>
+    :root { --bg:#f6f8fb; --panel:#fff; --text:#202734; --muted:#667085; --line:#d9dee8; --accent:#2563eb; --accent2:#0f766e; }
+    body { margin:0; font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif; background:var(--bg); color:var(--text); line-height:1.72; }
+    header { background:#fff; border-bottom:1px solid var(--line); padding:34px 28px 26px; }
+    header .inner, main { max-width:1180px; margin:0 auto; }
+    h1 { margin:0 0 8px; font-size:34px; letter-spacing:0; }
+    h2 { margin:34px 0 14px; font-size:24px; border-left:5px solid var(--accent); padding-left:12px; }
+    h3 { margin:24px 0 10px; font-size:19px; }
+    .lead { margin:0; color:var(--muted); max-width:980px; }
+    main { padding:24px 28px 56px; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:22px 24px; margin:18px 0; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; background:#fff; }
+    th,td { border:1px solid var(--line); padding:10px 12px; vertical-align:top; }
+    th { background:#eef4ff; text-align:left; }
+    code { background:#eef2f7; color:#1f2937; padding:1px 4px; border-radius:4px; }
+    pre { background:#f8fafc; color:#111827; border:1px solid #cbd5e1; padding:16px; overflow:auto; border-radius:8px; line-height:1.62; font-size:15px; }
+    pre code { background:transparent; color:inherit; padding:0; border-radius:0; }
+    .diagram { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px; margin:14px 0; }
+    .diagram pre { background:#fff; color:#202734; padding:0; margin:0; }
+    .mermaid svg { background:#fff; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; }
+    .card { border:1px solid var(--line); border-radius:8px; background:#fbfcff; padding:14px; }
+    .card strong { display:block; color:var(--accent); margin-bottom:6px; }
+    .quote,.explain { background:#f8fbff; border:1px solid #cfe0ff; border-radius:8px; padding:14px 16px; margin:12px 0; }
+    .explain strong { color:var(--accent2); }
+    .evidence { color:var(--muted); font-size:14px; }
+    a { color:var(--accent); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    @media (max-width:720px){ header{padding:28px 18px 22px;} main{padding:18px;} table{display:block; overflow-x:auto;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1>Zep 源码架构精读</h1>
+      <p class="lead">分析对象：<code>sources/zep</code>，固定源码提交 <code>826c5492d9cc3a7caf92a9870529f29b5a8546e3</code>。这份分析参考 mem0，但会先澄清：当前仓库主要是 Zep Cloud 的 examples、integrations、MCP server、eval harness，不是 Zep Cloud 服务端核心源码。</p>
+    </div>
+  </header>
+  <main>
+    <section>
+      <h2>总体结论</h2>
+      <p>Zep 和 mem0 都在解决 Agent memory，但源码形态不同。mem0 仓库里有本地 Memory core，可以精读 <code>Memory.add/search</code>；当前 <code>getzep/zep</code> 仓库主要是 Zep Cloud 接入层，重点是不同 Agent 框架如何调用 <code>thread.get_user_context</code>、<code>thread.add_messages</code>、<code>graph.add/search</code>。</p>
+      <div class="quote">分享口径：mem0 更像本地 memory layer；当前 Zep 仓库更像 Zep Cloud memory service 的生态接入层集合。</div>
+    </section>
+
+    <section>
+      <h2>最高层架构</h2>
+      <table>
+        <thead><tr><th>层级</th><th>源码位置</th><th>精读重点</th></tr></thead>
+        <tbody>
+          <tr><td>仓库定位</td><td><code>README.md</code></td><td>examples/integrations/tools，不是产品服务端源码。</td></tr>
+          <tr><td>Integration Index</td><td><code>integrations/README.md</code>、<code>integrations/CLAUDE.md</code></td><td>多框架、多语言包组织和质量要求。</td></tr>
+          <tr><td>LangGraph Python</td><td><code>integrations/langgraph/python/src/zep_langgraph</code></td><td>Context Block、BaseStore、persistence、graph search tool。</td></tr>
+          <tr><td>AutoGen / CrewAI</td><td><code>integrations/autogen</code>、<code>integrations/crewai</code></td><td>Memory / Storage / Tool 接入。</td></tr>
+          <tr><td>Vercel AI SDK</td><td><code>integrations/vercel-ai/typescript/src</code></td><td>middleware 注入 context，onFinish 持久化。</td></tr>
+          <tr><td>MCP / Eval</td><td><code>mcp/zep-mcp-server</code>、<code>zep-eval-harness</code></td><td>MCP tools、批量导入、评测检索质量。</td></tr>
+        </tbody>
+      </table>
+      <div class="diagram"><pre class="mermaid">
+flowchart TB
+    Repo["getzep/zep 仓库<br/>Zep Cloud examples + integrations + tools"] --> Boundary["边界说明<br/>不是 Zep Cloud 服务端核心源码"]
+    Boundary --> Graphiti["Graphiti<br/>README 指向的开源 temporal knowledge graph engine"]
+    Repo --> Integrations["integrations/&lt;framework&gt;/&lt;language&gt;<br/>框架接入包"]
+    Repo --> Examples["examples/&lt;language&gt;/&lt;scenario&gt;<br/>示例应用和 snippets"]
+    Repo --> MCP["mcp/zep-mcp-server<br/>把 Zep graph/thread 能力暴露成 MCP tools"]
+    Repo --> Eval["zep-eval-harness<br/>批量导入、搜索、评测 memory 效果"]
+    Repo --> Ontology["ontology/default_ontology.py<br/>默认实体/关系类型示例"]
+    Integrations --> LangGraph["zep_langgraph<br/>Context Block + BaseStore + persistence + tool"]
+    Integrations --> AutoGen["zep_autogen<br/>实现 AutoGen Memory 接口"]
+    Integrations --> CrewAI["zep_crewai<br/>storage + tools 适配 CrewAI"]
+    Integrations --> Vercel["zep-vercel-ai<br/>middleware + onFinish + tools"]
+      </pre></div>
+      <div class="explain"><strong>读图说明：</strong>这张图展示的是当前仓库可读到的工程边界。真正的 Zep Cloud memory engine 不在这条主线里；各 integration 调的是 Zep Cloud SDK。</div>
+      <p>Mermaid 源文件：<a href="architecture.mmd">architecture.mmd</a></p>
+      <p class="evidence">证据：<code>README.md:20</code> 说明仓库是 examples/integrations/tools；<code>README.md:31</code> 指向 Graphiti；<code>README.md:43</code> 标记 legacy CE 已 deprecated。</p>
+    </section>
+
+    <section>
+      <h2>主流程一：Context Block 注入</h2>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    Start["Agent 新一轮对话<br/>用户输入 + 当前 thread_id"] --> Ensure["确保 user/thread 已存在<br/>为什么：Zep thread 绑定 user graph"]
+    Ensure --> Fetch["thread.get_user_context<br/>获取 Context Block"]
+    Fetch --> Inject["注入 system message / model context<br/>为什么：让模型看到长期记忆"]
+    Inject --> Model["LLM 推理 / 工具调用"]
+    Model --> Finish["本轮结束<br/>拿到最终 assistant 回复"]
+    Finish --> Persist["thread.add_messages<br/>保存 user + assistant turn"]
+    Persist --> Graph["Zep 异步更新 user graph<br/>为什么：对话变成长期图谱记忆"]
+    Graph --> Next["下一轮 get_user_context<br/>再取回相关 facts / entities / summary"]
+      </pre></div>
+      <p>Mermaid 源文件：<a href="context-flow.mmd">context-flow.mmd</a></p>
+      <p class="evidence">证据：<code>zep_langgraph/context.py:48</code> 的 <code>get_zep_context()</code> 调 <code>thread.get_user_context</code>；<code>:155</code> 的 <code>build_system_message()</code> 组装 system message；<code>middleware.ts:126</code> 在 Vercel AI SDK 的 <code>transformParams</code> 里注入 context。</p>
+    </section>
+
+    <section>
+      <h2>主流程二：回合持久化</h2>
+      <p>本轮对话结束后，Zep 接入层会把 user/assistant turn 写入 thread。Vercel AI SDK 里尤其强调：middleware 只注入 context，<code>onFinish</code> 才保存最终 turn，避免 tool loop 中间态污染长期记忆。</p>
+      <table>
+        <thead><tr><th>源码证据</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>zep_langgraph/persistence.py:44</code>、<code>:48</code></td><td>定义 message 长度和单次批量数量限制。</td></tr>
+          <tr><td><code>zep_langgraph/persistence.py:98</code></td><td>把 LangChain message 转成 Zep Message。</td></tr>
+          <tr><td><code>zep_langgraph/persistence.py:145</code></td><td>超过批量上限时拆 chunk。</td></tr>
+          <tr><td><code>zep_langgraph/persistence.py:197</code></td><td><code>persist_messages()</code> 调 <code>thread.add_messages</code>。</td></tr>
+          <tr><td><code>vercel-ai/typescript/src/helpers.ts:97</code>、<code>:215</code></td><td><code>persistZepTurn()</code> 和 <code>createZepOnFinish()</code>。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>主流程三：Graph Search 工具</h2>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+    Tool["Agent 调用 search_memory / zepSearch"] --> Target{"选择搜索目标"}
+    Target -->|user_id| UserGraph["用户个人 graph<br/>适合偏好、历史、客户上下文"]
+    Target -->|graph_id| SharedGraph["共享 graph<br/>适合文档、知识库、业务资料"]
+    UserGraph --> Search["graph.search(query, scope, limit, filters)"]
+    SharedGraph --> Search
+    Search --> Scope{"scope"}
+    Scope --> Edges["edges<br/>事实/关系，最常用"]
+    Scope --> Nodes["nodes<br/>实体和 summary"]
+    Scope --> Episodes["episodes<br/>原始 source data"]
+    Scope --> Auto["auto<br/>Zep 组装 context string"]
+    Edges --> Format["格式化成模型可读文本"]
+    Nodes --> Format
+    Episodes --> Format
+    Auto --> Format
+    Format --> Return["返回给 Agent<br/>作为工具结果或 context"]
+      </pre></div>
+      <p>Mermaid 源文件：<a href="graph-search-flow.mmd">graph-search-flow.mmd</a></p>
+      <p class="evidence">证据：<code>zep_langgraph/tools.py:94</code>、<code>autogen/tools.py:17</code>、<code>crewai/tools.py:36</code>、<code>vercel-ai/typescript/src/tools.ts:155</code> 都在包装 <code>graph.search</code>。</p>
+    </section>
+
+    <section>
+      <h2>LangGraph 集成精读</h2>
+      <p>LangGraph Python 是最完整的接入包，覆盖 Context Block、message persistence、<code>ZepStore</code> 和 graph search tool。</p>
+      <div class="grid">
+        <div class="card"><strong>context.py</strong><code>get_zep_context()</code> / <code>build_system_message()</code>：取回 Context Block 并组装 system message。</div>
+        <div class="card"><strong>persistence.py</strong><code>persist_messages()</code>：把本轮消息写入 Zep thread。</div>
+        <div class="card"><strong>store.py</strong><code>ZepStore(BaseStore)</code>：backing store 管 KV，Zep graph 管 semantic search。</div>
+        <div class="card"><strong>tools.py</strong><code>create_graph_search_tool()</code>：生成 LangGraph/LangChain 可用工具。</div>
+      </div>
+      <div class="explain"><strong>为什么 ZepStore 要 hybrid-delegate：</strong>LangGraph Store 有 exact get/put/delete 语义，但 Zep 是 temporal knowledge graph，不是强一致 KV。源码用 backing store 保证 KV 行为，同时把 search 路由到 Zep graph。</div>
+      <p class="evidence">证据：<code>store.py:86</code> 定义 <code>ZepStore</code>；<code>:147</code> 分流 op；<code>:159</code> 序列化 put payload；<code>:191</code> 转成 <code>SearchItem</code>；<code>:323</code> / <code>:348</code> 实现 batch/abatch。</p>
+    </section>
+
+    <section>
+      <h2>AutoGen / CrewAI / Vercel 接入</h2>
+      <table>
+        <thead><tr><th>框架</th><th>接入点</th><th>源码证据</th><th>讲解口径</th></tr></thead>
+        <tbody>
+          <tr><td>AutoGen</td><td><code>Memory</code> 接口</td><td><code>zep_autogen/memory.py:25</code>、<code>graph_memory.py:26</code></td><td>实现 user memory 和 graph memory，<code>update_context()</code> 注入模型上下文。</td></tr>
+          <tr><td>CrewAI</td><td>storage + tools</td><td><code>zep_crewai/user_storage.py:18</code>、<code>graph_storage.py:17</code>、<code>tools.py:36</code></td><td>保留 <code>save/search/reset</code> contract，同时提供 search/add tools。</td></tr>
+          <tr><td>Vercel AI SDK</td><td>middleware + onFinish + tools</td><td><code>middleware.ts:116</code>、<code>helpers.ts:215</code>、<code>tools.ts:155</code></td><td>context injection 和 turn persistence 分离，避免工具循环污染记忆。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>MCP Server 和 Eval Harness</h2>
+      <p>MCP server 把 Zep 记忆能力变成 13 个 MCP tools，Eval Harness 用于批量导入 conversations/documents 并评估检索上下文质量。</p>
+      <p class="evidence">证据：<code>mcp/zep-mcp-server/internal/server/server.go:68-89</code> 注册 13 个工具；<code>handlers/search.go:15</code> 处理 <code>search_graph</code>；<code>handlers/context.go:15</code> 处理 <code>get_user_context</code>；<code>zep_ingest_users.py:223</code> 批量写 conversations；<code>zep_evaluate.py:180</code> 执行 parallel graph search。</p>
+    </section>
+
+    <section>
+      <h2>核心设计思想和范式</h2>
+      <table>
+        <thead><tr><th>设计思想</th><th>源码证据</th><th>解释</th></tr></thead>
+        <tbody>
+          <tr><td>Cloud Memory Adapter</td><td><code>README.md:20</code></td><td>仓库主线是接入 Zep Cloud，不是本地 memory engine。</td></tr>
+          <tr><td>Context Block 优先</td><td><code>context.py:48</code>、<code>middleware.ts:126</code></td><td>把长期记忆组装成 prompt-ready system context。</td></tr>
+          <tr><td>Tool-based Retrieval</td><td><code>tools.py:94</code>、<code>tools.ts:155</code></td><td>把 <code>graph.search</code> 暴露成模型主动查询工具。</td></tr>
+          <tr><td>Hybrid Delegate</td><td><code>ZepStore</code></td><td>backing store 负责 KV，Zep graph 负责 semantic search。</td></tr>
+          <tr><td>Framework-native Hook</td><td>AutoGen/CrewAI/Vercel 包</td><td>按每个框架原生扩展点接入。</td></tr>
+          <tr><td>Graceful Degradation</td><td>多处 try/except / catch</td><td>Zep 失败返回空 context/空结果，不让宿主 Agent 崩溃。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>真实例子和边界</h2>
+      <p>用户说：“以后源码分析请用中文，先讲仓库边界，再讲主流程。我正在比较 mem0、Zep 和 LangGraph。”</p>
+      <pre><code>新一轮对话开始:
+  thread.get_user_context(thread_id)
+  -> 取回用户长期偏好、项目背景、相关 facts
+  -> 注入 system message
+
+本轮对话结束:
+  thread.add_messages(thread_id, user + assistant)
+  -> Zep Cloud 异步更新 user graph
+  -> 下轮 Context Block 可引用这些 facts</code></pre>
+      <div class="explain"><strong>和 mem0 的差异：</strong>mem0 示例重点是本地 facts 抽取、embedding、去重和 hybrid scoring；Zep 当前仓库示例重点是 framework adapter 如何调用云端 Context Block、graph search 和 thread persistence。</div>
+      <table>
+        <thead><tr><th>边界</th><th>讲法</th></tr></thead>
+        <tbody>
+          <tr><td>不是服务端核心源码</td><td>不能从这里证明云端图谱算法细节。</td></tr>
+          <tr><td>Context Block 组装在云端</td><td>本仓库能看到调用点，看不到服务端组装算法。</td></tr>
+          <tr><td>异步 ingestion</td><td>不要假设同一 turn 写后立刻能查。</td></tr>
+          <tr><td>API 限制</td><td>源码有 truncate、chunk、limit clamp 等工程防线。</td></tr>
+          <tr><td>隐私治理</td><td>长期 memory 需要 user/thread 隔离、删除、脱敏和审计。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>和 mem0 / LangGraph 对比</h2>
+      <table>
+        <thead><tr><th>维度</th><th>Zep 当前仓库</th><th>mem0</th><th>LangGraph</th></tr></thead>
+        <tbody>
+          <tr><td>源码形态</td><td>Cloud integrations + examples + tools</td><td>本地 memory core + provider adapters</td><td>状态图 runtime</td></tr>
+          <tr><td>核心问题</td><td>如何把 Zep Cloud memory 接进各框架</td><td>Agent/App 应该记住什么、怎么检索</td><td>Agent 流程状态怎么流转</td></tr>
+          <tr><td>写入路径</td><td><code>thread.add_messages</code> / <code>graph.add</code></td><td><code>Memory.add -> LLM facts -> vector insert</code></td><td>节点更新 state/checkpoint</td></tr>
+          <tr><td>读取路径</td><td><code>thread.get_user_context</code> / <code>graph.search</code></td><td><code>Memory.search -> hybrid scoring</code></td><td>节点读取 state/store</td></tr>
+        </tbody>
+      </table>
+      <div class="quote">一句话选型：想读 memory engine 内核，看 mem0 或 Graphiti；想看 Zep 如何接入各种 Agent 框架，看当前 getzep/zep；想看状态流程编排，看 LangGraph。</div>
+    </section>
+
+    <section class="panel">
+      <h2>分享收束</h2>
+      <p>Zep 当前仓库最值得看的不是一个本地 memory class，而是它如何把云端图谱记忆能力包装成各框架可理解的扩展点：LangGraph 的 Store 和 SystemMessage，AutoGen 的 Memory，CrewAI 的 Storage/Tool，Vercel AI SDK 的 middleware/onFinish，以及 MCP tools。</p>
+      <p>分享讲稿：<a href="share-guide.html">share-guide.html</a> / <a href="share-guide.md">share-guide.md</a></p>
+    </section>
+  </main>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      securityLevel: "loose",
+      themeVariables: {
+        background: "#ffffff",
+        mainBkg: "#f8fbff",
+        secondaryColor: "#f0fdfa",
+        tertiaryColor: "#f8fafc",
+        primaryBorderColor: "#9bbcf8",
+        secondaryBorderColor: "#8bd2c7",
+        lineColor: "#667085",
+        textColor: "#202734"
+      }
+    });
+  </script>
+</body>
+</html>

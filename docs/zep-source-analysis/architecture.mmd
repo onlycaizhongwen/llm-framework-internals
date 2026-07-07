@@ -1,0 +1,20 @@
+flowchart TB
+    Repo["getzep/zep 仓库<br/>Zep Cloud examples + integrations + tools"] --> Boundary["边界说明<br/>不是 Zep Cloud 服务端核心源码"]
+    Boundary --> Graphiti["Graphiti<br/>README 指向的开源 temporal knowledge graph engine"]
+    Repo --> Integrations["integrations/<framework>/<language><br/>框架接入包"]
+    Repo --> Examples["examples/<language>/<scenario><br/>示例应用和 snippets"]
+    Repo --> MCP["mcp/zep-mcp-server<br/>把 Zep graph/thread 能力暴露成 MCP tools"]
+    Repo --> Eval["zep-eval-harness<br/>批量导入、搜索、评测 memory 效果"]
+    Repo --> Ontology["ontology/default_ontology.py<br/>默认实体/关系类型示例"]
+
+    Integrations --> LangGraph["zep_langgraph<br/>Context Block + BaseStore + persistence + tool"]
+    Integrations --> AutoGen["zep_autogen<br/>实现 AutoGen Memory 接口"]
+    Integrations --> CrewAI["zep_crewai<br/>storage + tools 适配 CrewAI"]
+    Integrations --> Vercel["zep-vercel-ai<br/>middleware + onFinish + tools"]
+
+    LangGraph --> ZepCloud["Zep Cloud SDK<br/>thread.get_user_context<br/>thread.add_messages<br/>graph.add / graph.search"]
+    AutoGen --> ZepCloud
+    CrewAI --> ZepCloud
+    Vercel --> ZepCloud
+    MCP --> ZepCloud
+    Eval --> ZepCloud

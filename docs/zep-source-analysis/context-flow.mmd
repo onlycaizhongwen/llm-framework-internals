@@ -1,0 +1,9 @@
+flowchart TD
+    Start["Agent 新一轮对话<br/>用户输入 + 当前 thread_id"] --> Ensure["确保 user/thread 已存在<br/>为什么：Zep thread 绑定 user graph"]
+    Ensure --> Fetch["thread.get_user_context<br/>获取 Context Block"]
+    Fetch --> Inject["注入 system message / model context<br/>为什么：让模型看到长期记忆"]
+    Inject --> Model["LLM 推理 / 工具调用"]
+    Model --> Finish["本轮结束<br/>拿到最终 assistant 回复"]
+    Finish --> Persist["thread.add_messages<br/>保存 user + assistant turn"]
+    Persist --> Graph["Zep 异步更新 user graph<br/>为什么：对话变成长期图谱记忆"]
+    Graph --> Next["下一轮 get_user_context<br/>再取回相关 facts / entities / summary"]
