@@ -286,7 +286,33 @@ flowchart LR
 
 RAG 不是一个单独巨型模块，而是多个 core 协议的组合：Document -> TextSplitter -> Embeddings -> VectorStore -> Retriever -> Prompt/Model。不同供应商只替换某个协议实现。
 
-## 4. 阅读路线建议
+## 4. 真实例子：企业知识库问答助手
+
+场景：用户问“我们源码分享文档里，Graphiti 和 mem0 的区别是什么？”系统需要从已有文档中检索相关内容，再让模型生成回答。
+
+最小链路可以这样理解：
+
+```python
+loader -> text_splitter -> embeddings -> vectorstore
+retriever = vectorstore.as_retriever()
+docs = retriever.invoke("Graphiti 和 mem0 的区别")
+answer = chat_model.invoke([
+    ("system", "你是源码分析助手，只基于检索内容回答。"),
+    ("human", f"问题：Graphiti 和 mem0 的区别？\n资料：{docs}")
+])
+```
+
+| 业务动作 | LangChain 抽象 | 为什么便于理解源码 |
+| --- | --- | --- |
+| 文档切块 | `libs/text-splitters` | 长文档先变成适合 embedding 和上下文窗口的小块。 |
+| 向量化与存储 | `Embeddings` / `VectorStore` | provider 可替换，OpenAI、Qdrant、Chroma 等只实现统一接口。 |
+| 检索 | `Retriever.invoke()` | 应用层不关心底层是相似度、BM25 还是向量库 API。 |
+| 模型生成 | `BaseChatModel` / messages | 统一 chat model 输入输出，便于换模型。 |
+| Agent 加工具 | `create_agent` + tools | 当问题不能一次回答时，模型可以选择检索、搜索、计算等工具。 |
+
+分享时这样讲：LangChain 的真实价值不是某个 RAG 函数，而是把“模型、prompt、retriever、tool、provider”都抽成可组合接口。它更像应用层胶水框架，让不同模型和数据源快速拼成可运行应用。
+
+## 5. 阅读路线建议
 
 如果你主要做源码分析，建议按这个顺序看：
 
@@ -309,7 +335,7 @@ RAG 不是一个单独巨型模块，而是多个 core 协议的组合：Documen
 9. `libs/langchain/langchain_classic/*`
    最后再看 classic，主要用于理解旧 API 和迁移背景。
 
-## 5. 高置信结论与限制
+## 6. 高置信结论与限制
 
 ### 高置信结论
 

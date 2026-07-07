@@ -276,6 +276,28 @@ flowchart TD
       <div class="explain">
         <strong>为什么这个例子重要：</strong>它能把写入和检索两条源码链路讲活。后续用户问“我上次准备的框架分享讲到哪了？”时，semantic search 召回语义相关 memory，BM25 强化 <code>mem0</code>、<code>LangGraph</code> 这类精确词，entity boost 把同一项目或框架相关记忆往前推。
       </div>
+      <h3>更真实的产品例子：源码分享偏好记忆</h3>
+      <p>在一个代码助手产品里，用户连续表达偏好：“源码分析要中文说明”“先讲仓库边界，再讲主流程”“HTML 背景不要黑色”“图里要写为什么这么设计”。这些不是一次性聊天内容，而是跨项目都应该复用的长期偏好。</p>
+      <pre><code>memory.add(
+    messages=[
+        {"role": "user", "content": "以后源码分析请用中文，HTML 背景不要黑色。"},
+        {"role": "user", "content": "图里要补中文说明和为什么这么设计。"},
+    ],
+    user_id="source-share-user",
+)</code></pre>
+      <table>
+        <thead><tr><th>抽取后的 memory</th><th>后续怎么用</th><th>源码链路</th></tr></thead>
+        <tbody>
+          <tr><td>用户偏好中文源码说明。</td><td>生成 LangChain、Graphiti、Zep 文档时默认中文。</td><td>LLM facts extraction -> vector insert。</td></tr>
+          <tr><td>用户偏好浅色 HTML 页面。</td><td>新页面不再使用黑色背景。</td><td>history 记录可追踪这条偏好来源。</td></tr>
+          <tr><td>用户希望架构图和流程图有中文解释。</td><td>图下方补“为什么这么设计”。</td><td>entity linking 把“架构图/流程图/源码分享”关联起来。</td></tr>
+        </tbody>
+      </table>
+      <pre><code>memory.search(
+    query="这次分析 Zep 文档要注意什么？",
+    user_id="source-share-user",
+)</code></pre>
+      <div class="explain"><strong>为什么适合 mem0：</strong>这个例子里要记住的是用户偏好和项目上下文，不是某一次工作流状态。mem0 的价值在于把偏好抽成可检索 facts，后续任意 Agent 或文档生成链路都能查出来复用。</div>
     </section>
 
     <section>

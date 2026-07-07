@@ -255,7 +255,34 @@ AutoGen 更适合：
 | 状态管理 | Agent 自身有状态，Team/Manager 可保存状态，但全局状态不是第一入口 | 全局状态是第一等概念，节点读写状态，checkpoint 可持久化 | 业务状态强约束时选 LangGraph |
 | 项目建议 | 适合源码学习、原型、存量维护 | 更适合新项目里的复杂 Agent Runtime | 新项目优先评估 LangGraph 或 Microsoft Agent Framework |
 
-## 10. 分享建议
+## 10. 真实例子：两个 Agent 协作做源码审查
+
+场景：一个 Assistant 负责解释源码，另一个 Reviewer 负责挑问题；它们围绕“Graphiti 的 `add_episode()` 是否适合同步请求里直接调用？”进行多轮讨论。
+
+AutoGen 可以这样理解：
+
+```python
+assistant = AssistantAgent(
+    name="source_reader",
+    model_client=model_client,
+    tools=[read_file, search_code],
+)
+reviewer = AssistantAgent(name="reviewer", model_client=model_client)
+team = RoundRobinGroupChat([assistant, reviewer], termination_condition=MaxMessageTermination(6))
+await team.run(task="分析 Graphiti.add_episode 的调用成本和使用边界")
+```
+
+| 业务动作 | AutoGen 机制 | 为什么便于理解源码 |
+| --- | --- | --- |
+| Agent 之间发消息 | Core runtime message delivery | AutoGen 底层是消息运行时，不只是聊天循环。 |
+| Agent 响应特定消息 | `RoutedAgent` / handler | 不同消息类型可以路由到不同处理函数。 |
+| 单 Agent 调工具 | `AssistantAgent` tool loop | 模型决定是否调用工具，再把工具结果放回上下文。 |
+| 多 Agent 协作 | `GroupChat` | 把成员、发言顺序和终止条件组合成团队运行。 |
+| 模型/工具隔离 | Model / Tool / Workbench contract | 运行时不绑定某个模型供应商或工具实现。 |
+
+分享时这样讲：AutoGen 更像“多 Agent 消息系统”。如果 LangGraph 是状态图，CrewAI 是角色任务团队，那么 AutoGen 的强项是消息投递、Agent handler 和多 Agent 对话协议。
+
+## 11. 分享建议
 
 建议分享顺序：
 

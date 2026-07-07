@@ -289,6 +289,39 @@ return workflow.compile(...)</code></pre>
       </div>
     </section>
 
+    <section>
+      <h2>真实例子：源码分析工作流</h2>
+      <p>把你前面做的源码分析流程抽象成 LangGraph：输入一个 GitHub 仓库地址，系统要自动拉取代码、扫描目录、识别入口、生成架构图、写 Markdown/HTML，最后等待人工复核。</p>
+      <pre><code>class AnalysisState(TypedDict):
+    repo_url: str
+    local_path: str
+    architecture: dict
+    main_flow: list[str]
+    docs: dict
+    review_status: str
+
+graph.add_node("clone_repo", clone_repo)
+graph.add_node("scan_architecture", scan_architecture)
+graph.add_node("trace_main_flow", trace_main_flow)
+graph.add_node("write_docs", write_docs)
+graph.add_node("human_review", human_review)
+graph.add_edge("clone_repo", "scan_architecture")
+graph.add_edge("scan_architecture", "trace_main_flow")
+graph.add_edge("trace_main_flow", "write_docs")
+graph.add_edge("write_docs", "human_review")</code></pre>
+      <table>
+        <thead><tr><th>LangGraph 概念</th><th>例子里的含义</th><th>为什么这么设计</th></tr></thead>
+        <tbody>
+          <tr><td><code>State</code></td><td>保存 repo、架构、流程、文档、复核状态。</td><td>所有节点围绕同一份任务状态读写，方便恢复和审计。</td></tr>
+          <tr><td><code>Node</code></td><td>每一步是独立函数：拉代码、扫目录、写文档。</td><td>把复杂任务拆成可测试、可重试的小单元。</td></tr>
+          <tr><td><code>Edge</code></td><td>定义源码分析的推进顺序。</td><td>流程结构显式化，分享时可以直接画图讲清楚。</td></tr>
+          <tr><td><code>Checkpoint</code></td><td>写完 HTML 后暂停等待人工看。</td><td>长任务中断后能从上次状态继续，不必重跑全部步骤。</td></tr>
+          <tr><td><code>Conditional edge</code></td><td>复核不通过则回到写文档或补扫描。</td><td>把“人工反馈后返工”的业务分支变成可控流程。</td></tr>
+        </tbody>
+      </table>
+      <div class="quote">分享讲法：LangGraph 适合讲“任务状态怎么一步步演化”。它不是让 Agent 自由聊天，而是把 Agent 能力放进节点里，再用图、状态和 checkpoint 控制整个长流程。</div>
+    </section>
+
     <section class="panel">
       <h2>分享收束</h2>
       <p>LangGraph 的源码主线其实很清楚：上层用 <code>StateGraph</code> 声明状态图，中间 compile 成可运行图，底层 Pregel 按 step 调度节点，checkpoint 把每一步状态固化下来。Agent 只是这个运行框架上的一种图。</p>

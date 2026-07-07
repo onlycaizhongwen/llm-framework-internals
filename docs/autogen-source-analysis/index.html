@@ -265,6 +265,34 @@ class BaseTool(ABC, Tool, Generic[ArgsT, ReturnT], ComponentBase[BaseModel]):
       </table>
     </section>
 
+    <section>
+      <h2>真实例子：两个 Agent 协作做源码审查</h2>
+      <p>假设要审查一个问题：“Graphiti 的 <code>add_episode()</code> 是否适合在用户请求里同步执行？”可以让一个 AssistantAgent 负责读源码和提出结论，另一个 reviewer 负责追问风险、边界和证据。</p>
+      <pre><code>reader = AssistantAgent(
+    name="source_reader",
+    model_client=model,
+    system_message="阅读源码并给出带文件证据的结论",
+)
+reviewer = AssistantAgent(
+    name="reviewer",
+    model_client=model,
+    system_message="质疑结论，检查异步、性能、失败恢复和证据是否充分",
+)
+team = RoundRobinGroupChat([reader, reviewer], termination_condition=MaxMessageTermination(6))
+await team.run(task="审查 graphiti.add_episode 是否应该同步调用")</code></pre>
+      <table>
+        <thead><tr><th>AutoGen 概念</th><th>例子里的含义</th><th>为什么这么设计</th></tr></thead>
+        <tbody>
+          <tr><td><code>AssistantAgent</code></td><td>每个专家都是独立消息处理单元。</td><td>让不同角色保留自己的 system message、工具和上下文。</td></tr>
+          <tr><td><code>RoundRobinGroupChat</code></td><td>reader 和 reviewer 轮流发言。</td><td>适合需要多轮讨论、互相补充和质疑的任务。</td></tr>
+          <tr><td><code>TerminationCondition</code></td><td>限制最多讨论 6 条消息。</td><td>聊天式多 Agent 必须有终止条件，否则容易无限循环。</td></tr>
+          <tr><td><code>AgentRuntime</code></td><td>底层负责消息投递、topic 和 handler。</td><td>上层看起来是群聊，底层其实是事件/消息运行时。</td></tr>
+          <tr><td><code>Tool / Workbench</code></td><td>可给 reader 接入文件搜索或代码执行工具。</td><td>外部能力通过抽象接口接入，AgentChat 不直接绑定具体工具实现。</td></tr>
+        </tbody>
+      </table>
+      <div class="quote">分享讲法：AutoGen 的真实优势是“多 Agent 通过消息讨论”。它很适合审查、辩论、研究协作这类对话型任务；但如果要把流程状态、分支和恢复做成一套严格工作流，LangGraph 的状态图会更稳。</div>
+    </section>
+
     <section class="panel">
       <h2>分享收束</h2>
       <p>AutoGen 源码最值得看的不是某个 prompt，而是它如何把多 Agent 系统拆成 Runtime、Agent、Message、Team、Model、Tool 几层。底层消息运行时提供通用能力，上层 AgentChat 提供好用入口，Extensions 把外部模型和工具接进来。</p>

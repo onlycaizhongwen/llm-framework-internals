@@ -257,7 +257,40 @@ Checkpoint 保存 channel 快照和版本关系，所以图可以按 `thread_id`
 
 > 如果要理解 LangGraph，不要从 prebuilt 停住。prebuilt 只是示范“如何用 StateGraph 搭一个 Agent 循环”。
 
-## 5. 分享建议
+## 5. 真实例子：源码分析工作流
+
+场景：你要分析一个新 LLM 框架源码，希望流程固定为“拉源码 -> 扫目录 -> 找入口 -> 生成架构图 -> 写 HTML -> 人工复核”。这不是一次 LLM 调用，而是一个可恢复、有状态、有分支的工作流。
+
+可以把它建成状态图：
+
+```python
+class State(TypedDict):
+    repo_url: str
+    source_path: str
+    findings: list[str]
+    diagrams: list[str]
+    docs: list[str]
+
+builder.add_node("clone_repo", clone_repo)
+builder.add_node("map_architecture", map_architecture)
+builder.add_node("write_docs", write_docs)
+builder.add_node("review", review)
+builder.add_edge("clone_repo", "map_architecture")
+builder.add_edge("map_architecture", "write_docs")
+builder.add_conditional_edges("review", route_fix_or_finish)
+```
+
+| 业务动作 | LangGraph 机制 | 为什么便于理解源码 |
+| --- | --- | --- |
+| 每一步共享上下文 | State / Channel | 节点不直接互相传参，而是读写状态。 |
+| 固定步骤执行 | `StateGraph.compile()` 后的 runtime | 编译前声明图，编译后才是可运行对象。 |
+| 失败后继续 | Checkpoint | 长任务中断后可以按 `thread_id` 恢复。 |
+| 审查后返工 | Conditional edge | review 发现图不清楚时，路由回画图或写文档节点。 |
+| 常见 Agent 循环 | `libs/prebuilt` | ReAct/tool loop 是用 StateGraph 组合出来的模板。 |
+
+分享时这样讲：LangGraph 不是 memory 框架，而是 Agent 工作流运行时。它适合把复杂任务拆成可恢复的状态机；长期记忆可以接 mem0、Zep 或 Graphiti。
+
+## 6. 分享建议
 
 建议分享时按这个顺序讲：
 

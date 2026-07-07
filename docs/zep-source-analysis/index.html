@@ -196,6 +196,24 @@ flowchart TD
   -> Zep Cloud 异步更新 user graph
   -> 下轮 Context Block 可引用这些 facts</code></pre>
       <div class="explain"><strong>和 mem0 的差异：</strong>mem0 示例重点是本地 facts 抽取、embedding、去重和 hybrid scoring；Zep 当前仓库示例重点是 framework adapter 如何调用云端 Context Block、graph search 和 thread persistence。</div>
+      <h3>更真实的接入例子：客服 Agent 记住客户偏好</h3>
+      <p>一个电商客服 Agent 中，客户说：“我想给爸爸买鞋，他脚宽，最好防滑，颜色别太花。”本轮回答前，接入层先取 Context Block；本轮结束后，再把 user/assistant turn 写回 thread。</p>
+      <pre><code>context = zep_client.thread.get_user_context(thread_id=thread_id)
+messages = [
+    {"role": "system", "content": context.context},
+    {"role": "user", "content": "帮我挑一双适合爸爸走路的鞋"},
+]
+answer = model.generate(messages)
+zep_client.thread.add_messages(thread_id=thread_id, messages=[user_msg, answer_msg])</code></pre>
+      <table>
+        <thead><tr><th>客户事实</th><th>Zep 接入点</th><th>产品价值</th></tr></thead>
+        <tbody>
+          <tr><td>爸爸脚宽。</td><td><code>thread.add_messages</code> 后进入云端图谱处理。</td><td>下次推荐鞋时自动优先宽楦。</td></tr>
+          <tr><td>偏好防滑。</td><td><code>thread.get_user_context</code> 注入系统上下文。</td><td>回答不需要用户每次重复说明。</td></tr>
+          <tr><td>颜色不要太花。</td><td><code>graph.search</code> 可作为工具按事实检索。</td><td>客服 Agent 能解释推荐理由。</td></tr>
+        </tbody>
+      </table>
+      <div class="explain"><strong>为什么适合 Zep：</strong>应用侧不用自己维护图谱写入、事实更新和 Context Block 组装，只要在框架扩展点接入读取、写回和搜索。源码分析时要讲清楚：本仓库展示的是这些接入点，不是 Zep Cloud 服务端算法本体。</div>
       <table>
         <thead><tr><th>边界</th><th>讲法</th></tr></thead>
         <tbody>

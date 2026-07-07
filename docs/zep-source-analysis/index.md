@@ -300,6 +300,34 @@ Zep 风格的接入可以拆成两类动作：
 - mem0 示例重点是“LLM 如何抽 facts、embedding、hash 去重、score_and_rank”。
 - Zep 当前仓库示例重点是“框架如何调用云端 Context Block / graph search / thread persistence”。
 
+### 10.1 更真实的接入例子：客服 Agent 记住客户偏好
+
+场景：电商客服 Agent 和用户对话。用户说：
+
+> 我给父亲买鞋，优先要防滑、宽脚、黑色，不要太花。
+
+Zep 接入层通常做三件事：
+
+```python
+context = client.thread.get_user_context(thread_id=thread_id)
+messages = [system_with(context), user_message]
+answer = model.invoke(messages)
+client.thread.add_messages(thread_id=thread_id, messages=[user_message, answer])
+```
+
+下一轮用户只说“再推荐一双”，Agent 可以先拿 Context Block，里面已经有偏好事实，例如“给父亲买鞋、偏好防滑、宽脚、黑色”。如果模型还需要主动查图谱，可以调用 graph search tool：
+
+```python
+client.graph.search(user_id=user_id, query="用户给父亲买鞋的偏好")
+```
+
+| 动作 | Zep 仓库里的源码关注点 | 为什么便于接入 |
+| --- | --- | --- |
+| 自动拿 Context Block | LangGraph/Vercel middleware 调 `thread.get_user_context` | 应用不用自己拼长期记忆 prompt。 |
+| 对话后写回 | `thread.add_messages` / `persistZepTurn` | 让云端异步更新 user graph。 |
+| 主动查事实 | `graph.search` tools | 复杂问题可以让模型按需检索，而不是一次塞满上下文。 |
+| 多框架接入 | LangGraph、AutoGen、CrewAI、Vercel 包 | 每个框架用自己的扩展点接 Zep。 |
+
 ## 11. 局限性和使用边界
 
 | 边界 | 为什么重要 | 分享时怎么讲 |

@@ -236,6 +236,33 @@ def router(condition=None, *, emit=None): ...</code></pre>
     </section>
 
     <section>
+      <h2>真实例子：多角色源码分享准备</h2>
+      <p>假设你要准备一场 Graphiti 源码分享，可以把任务拆成三个角色：Researcher 负责读仓库和找证据，Architect 负责整理架构和流程，Speaker 负责把内容改成适合讲给人的稿子。</p>
+      <pre><code>researcher = Agent(role="源码研究员", goal="找出 Graphiti 的核心模块和源码证据")
+architect = Agent(role="架构梳理者", goal="把 episode、entity、edge、search 串成主流程")
+speaker = Agent(role="分享讲师", goal="把分析改成中文演讲稿和 HTML 页面")
+
+tasks = [
+    Task(description="扫描 graphiti_core 目录并列出核心文件", agent=researcher),
+    Task(description="画出写入和检索流程图", agent=architect),
+    Task(description="生成分享文档，补充真实业务例子", agent=speaker),
+]
+crew = Crew(agents=[researcher, architect, speaker], tasks=tasks, process=Process.sequential)
+crew.kickoff()</code></pre>
+      <table>
+        <thead><tr><th>CrewAI 概念</th><th>例子里的含义</th><th>为什么这么设计</th></tr></thead>
+        <tbody>
+          <tr><td><code>Agent</code></td><td>把“研究、架构、讲稿”拆成不同角色。</td><td>角色目标明确后，prompt 和工具权限更容易控制。</td></tr>
+          <tr><td><code>Task</code></td><td>每个角色拿到具体交付物。</td><td>比让一个 Agent 自由发挥更容易检查结果。</td></tr>
+          <tr><td><code>Crew</code></td><td>组织角色和任务的协作团队。</td><td>业务视角直观，适合产品/运营/研究类自动化。</td></tr>
+          <tr><td><code>Process</code></td><td>先研究，再梳理，再成稿。</td><td>顺序流程能减少后续角色基于不完整信息写作。</td></tr>
+          <tr><td><code>Flow</code></td><td>如果还要加“人工审核 -> 返工 -> 发布”，用 Flow 固定流程。</td><td>Crew 管多角色协作，Flow 管确定性业务流转。</td></tr>
+        </tbody>
+      </table>
+      <div class="quote">分享讲法：CrewAI 最容易被理解成“给 AI 组一个项目小队”。它的抽象很贴近业务分工，但如果你要精确控制状态、回滚、恢复和复杂分支，就要和 LangGraph 区分开讲。</div>
+    </section>
+
+    <section>
       <h2>核心设计思想</h2>
       <div class="grid">
         <div class="card"><strong>业务语义优先</strong>顶层就是 Agent、Task、Crew、Flow，贴近自动化业务表达。</div>

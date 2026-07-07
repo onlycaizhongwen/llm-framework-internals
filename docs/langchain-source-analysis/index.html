@@ -253,8 +253,30 @@
       </div>
     </section>
 
+    <section id="real-example">
+      <h2>5. 真实例子：企业知识库问答助手</h2>
+      <p>假设产品要做一个“内部源码知识库问答助手”，用户问：“Graphiti 和 mem0 的区别是什么？帮我用中文说明，最好能引用源码分析文档。”</p>
+      <pre><code>用户问题
+  -> Retriever 检索 docs/mem0-source-analysis 与 docs/graphiti-source-analysis
+  -> Prompt 把问题、检索片段、回答格式约束组装成 messages
+  -> ChatModel 生成中文答案
+  -> Runnable 链路统一支持 invoke / stream / batch</code></pre>
+      <table>
+        <thead><tr><th>源码抽象</th><th>在例子里的角色</th><th>为什么这么设计</th></tr></thead>
+        <tbody>
+          <tr><td><code>Document</code></td><td>保存 Markdown/HTML 切片和 metadata。</td><td>把“内容”和“来源”一起传递，答案才能引用出处。</td></tr>
+          <tr><td><code>TextSplitter</code></td><td>把长文档切成适合 embedding 的 chunks。</td><td>避免整篇文档过长，也让检索粒度更细。</td></tr>
+          <tr><td><code>Embeddings</code></td><td>把 chunk 和 query 转成向量。</td><td>把自然语言问题变成可做相似度搜索的数据结构。</td></tr>
+          <tr><td><code>VectorStoreRetriever</code></td><td>按语义找回相关文档片段。</td><td>让上层链路不关心具体向量库是 FAISS、Chroma 还是云服务。</td></tr>
+          <tr><td><code>ChatModel</code></td><td>根据上下文生成最终回答。</td><td>模型调用被统一成标准接口，方便替换 provider。</td></tr>
+          <tr><td><code>Runnable</code></td><td>把检索、组装 prompt、模型调用串成链。</td><td>同一套协议支持同步、流式、批处理和组合。</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><strong>分享讲法：</strong>LangChain 的价值不是“替你写一个 RAG 函数”，而是把 RAG 拆成可替换的协议层。真实项目里最常变的是模型、向量库、检索策略和 prompt；这些都被抽象成组件后，业务代码不用跟每个 provider 绑死。</div>
+    </section>
+
     <section id="route">
-      <h2>5. 推荐阅读路线</h2>
+      <h2>6. 推荐阅读路线</h2>
       <ol>
         <li><code>libs/core/langchain_core/runnables/base.py</code>：先理解统一执行协议。</li>
         <li><code>libs/core/langchain_core/language_models/chat_models.py</code>：理解 ChatModel 的输入输出和流式调用。</li>
@@ -267,7 +289,7 @@
     </section>
 
     <section id="evidence">
-      <h2>6. 关键源码证据</h2>
+      <h2>7. 关键源码证据</h2>
       <ul>
         <li><code>libs/core/README.md:21</code>：说明 LangChain Core 包含生态基础抽象。</li>
         <li><code>libs/core/langchain_core/runnables/base.py:125</code>：定义 <code>Runnable</code>。</li>

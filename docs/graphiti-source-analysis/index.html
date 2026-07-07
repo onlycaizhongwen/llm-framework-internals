@@ -224,6 +224,30 @@ flowchart TD
     group_id="share",
 )</code></pre>
       <div class="explain"><strong>Graphiti 的处理：</strong>第一句话形成旧偏好 fact；第二句话形成新偏好 fact；旧 fact 可能被写入 <code>invalid_at</code>，从当前事实变成历史事实。</div>
+      <h3>更真实的业务例子：客户偏好随时间变化</h3>
+      <p>旅行助手里，用户 3 月说：“我喜欢行程排满一点，酒店便宜就行。”6 月又说：“这次带孩子，行程别太赶，酒店要安静。”这不是简单覆盖，因为系统既要知道当前偏好，也要保留历史变化原因。</p>
+      <pre><code>await graphiti.add_episode(
+    name="travel-preference-march",
+    episode_body="用户喜欢紧凑行程，酒店优先便宜。",
+    reference_time=datetime(2026, 3, 10),
+    group_id="travel-user-42",
+)
+
+await graphiti.add_episode(
+    name="travel-preference-june",
+    episode_body="用户这次带孩子旅行，偏好轻松行程和安静酒店。",
+    reference_time=datetime(2026, 6, 18),
+    group_id="travel-user-42",
+)</code></pre>
+      <table>
+        <thead><tr><th>事实变化</th><th>Graphiti 表达</th><th>为什么这么设计</th></tr></thead>
+        <tbody>
+          <tr><td>“酒店便宜优先”变成历史偏好。</td><td>旧 edge 写入 <code>invalid_at</code> 或被新事实替代。</td><td>回答当前问题时不误用过期偏好。</td></tr>
+          <tr><td>“安静酒店”成为当前偏好。</td><td>新 edge 带 <code>valid_at</code> 和 episode 证据。</td><td>能解释推荐依据来自哪次对话。</td></tr>
+          <tr><td>“带孩子”是本次旅行上下文。</td><td>实体和关系连接到同一 <code>group_id</code>。</td><td>检索时能把人物、偏好、时间和证据一起召回。</td></tr>
+        </tbody>
+      </table>
+      <div class="explain"><strong>为什么适合 Graphiti：</strong>Graphiti 的核心不是记一条 memory，而是把 episode、entity、relation 和时间有效性一起建模。它适合“事实会变化、还要解释历史依据”的场景。</div>
       <table>
         <thead><tr><th>局限性</th><th>说明</th></tr></thead>
         <tbody>
