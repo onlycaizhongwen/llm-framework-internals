@@ -9,6 +9,7 @@ flowchart TB
     Code -->|"多 Agent 对话协作"| AutoCrew["AutoGen 或 CrewAI<br/>AutoGen 偏消息运行时，CrewAI 偏角色/任务/流程"]
     Code -->|"RAG 数据接入 / 索引工程"| Llama["优先 LlamaIndex<br/>ingestion、index、retriever、query engine"]
     Code -->|"生产级可调试 RAG Pipeline"| Haystack["优先 Haystack<br/>Component Pipeline、typed sockets、Hybrid RAG、snapshot/tracing"]
+    Code -->|"Python typed 业务 Agent / 结构化输出"| PydanticAI["优先 PydanticAI<br/>deps_type、RunContext、Pydantic output、tool schema、evals"]
     Code -->|"模型/工具生态适配"| LangChain["优先 LangChain<br/>provider adapter、tool、middleware、Runnable"]
     Code -->|"长期记忆 / 用户画像"| Memory["mem0 / Zep / Graphiti / Letta<br/>按记忆形态选择"]
     Code -->|"上下文成本与代理网关"| Headroom["Headroom<br/>压缩上下文、代理网关、MCP/CCR 适配"]

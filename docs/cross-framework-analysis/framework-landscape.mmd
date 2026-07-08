@@ -11,6 +11,7 @@ flowchart TB
     Runtime --> Letta["Letta<br/>状态化 Agent、core/archival memory、tool-first loop"]
     Goal --> Component["组件与数据层<br/>给应用提供 LLM/RAG/记忆基础能力"]
     Component --> LangChain["LangChain<br/>模型适配、Runnable、Agent middleware、工具和生态集成"]
+    Component --> PydanticAI["PydanticAI<br/>typed Agent、Pydantic schema、工具和结构化输出、evals"]
     Component --> LlamaIndex["LlamaIndex<br/>Ingestion、Index、Retriever、QueryEngine、RAG 数据框架"]
     Component --> Haystack["Haystack<br/>Component Pipeline、typed sockets、DocumentStore、Hybrid RAG、调试观测"]
     Component --> Memory["记忆 / 知识图谱"]

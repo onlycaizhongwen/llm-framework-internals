@@ -1,0 +1,12 @@
+flowchart TB
+    Dev["Python 开发者<br/>用类型和 Pydantic 模型描述 Agent 契约"] --> API["pydantic_ai public API<br/>Agent RunContext ToolOutput NativeOutput<br/>为什么这么设计：入口要像写普通 Python 代码"]
+    API --> Agent["pydantic_ai_slim Agent<br/>deps_type output_type instructions tools toolsets<br/>为什么这么设计：把依赖 输出 工具都变成可类型检查的契约"]
+    Agent --> Graph["内部 Agent Graph<br/>UserPromptNode ModelRequestNode CallToolsNode End<br/>为什么这么设计：Agent loop 本质是状态图 便于流式 中断 重试和复用"]
+    Agent --> Tools["Tool and Toolset<br/>函数签名转 JSON Schema approval prepare<br/>为什么这么设计：工具要既能给模型看 也能在本地安全执行"]
+    Agent --> Output["Structured Output<br/>ToolOutput NativeOutput PromptedOutput TextOutput<br/>为什么这么设计：不同模型支持不同结构化输出能力 需要统一抽象"]
+    Agent --> Models["Model abstraction<br/>ModelRequestParameters request request_stream StreamedResponse<br/>为什么这么设计：Agent 不直接依赖 OpenAI Anthropic Google SDK"]
+    Models --> Providers["Provider abstraction<br/>认证客户端 base_url profile gateway<br/>为什么这么设计：同一模型协议下仍有不同供应商和网关"]
+    Agent --> MCP["MCP and Native Tools<br/>MCPServer ToolSearch WebSearch CodeExecution<br/>为什么这么设计：外部工具生态和模型原生工具都要纳入同一能力层"]
+    Graph --> PGraph["pydantic_graph<br/>Graph GraphBuilder BaseNode Step Join Decision<br/>为什么这么设计：把通用 typed workflow runtime 从 Agent 中拆出来"]
+    Agent --> Evals["pydantic_evals<br/>Dataset Case Evaluator LLMJudge ToolCorrectness<br/>为什么这么设计：Agent 不是只跑通 还要可回归评估"]
+    Agent --> Obs["Instrumentation and Logfire<br/>OpenTelemetry span metrics traceparent<br/>为什么这么设计：生产 Agent 需要看见每次模型请求 工具调用和成本"]

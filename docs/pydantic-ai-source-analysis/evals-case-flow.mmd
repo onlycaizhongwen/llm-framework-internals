@@ -1,0 +1,15 @@
+flowchart TB
+    Dataset["Dataset<br/>航班或客服回归 case"] --> Case["Case<br/>输入 期望输出 metadata case evaluators"]
+    Case --> Task["task function<br/>调用 flight_agent.run 或 support_agent.run"]
+    Task --> Trace["Instrumentation spans<br/>记录模型请求 工具调用 参数和结果"]
+    Task --> Output["typed output<br/>FlightDetails NoFlightFound SupportOutput"]
+    Output --> Eval["EvaluatorContext<br/>包含 inputs output expected_output metadata spans"]
+    Trace --> Eval
+    Eval --> Exact["业务 evaluator<br/>检查航班日期 价格 风险等级 是否符合预期"]
+    Eval --> ToolCorrect["ToolCorrectness<br/>检查是否调用 search_flights 或 customer_balance"]
+    Eval --> Traj["TrajectoryMatch<br/>检查 search rerank reserve 等轨迹顺序"]
+    Eval --> MaxCalls["MaxToolCalls<br/>限制工具调用次数和成本"]
+    Exact --> Report["EvaluationReport<br/>汇总通过率 原因 失败 case"]
+    ToolCorrect --> Report
+    Traj --> Report
+    MaxCalls --> Report

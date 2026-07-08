@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PydanticAI 源码架构精读</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true, curve: "basis" } });
+  </script>
+  <style>
+    :root { color-scheme: light; --bg:#f6f8fb; --panel:#ffffff; --ink:#1f2937; --muted:#607086; --line:#d8e1ee; --brand:#2563eb; --brand2:#0f766e; --soft:#edf4ff; --soft2:#ecfdf5; --warm:#fff7ed; --code:#172033; --codeink:#eef5ff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); line-height:1.72; }
+    header { background:linear-gradient(180deg,#ffffff 0%,#edf4ff 100%); border-bottom:1px solid var(--line); padding:42px 24px 30px; }
+    .hero, main { max-width:1180px; margin:0 auto; }
+    main { padding:28px 20px 60px; }
+    h1 { margin:0 0 12px; font-size:clamp(32px,5vw,54px); line-height:1.12; letter-spacing:0; }
+    h2 { margin:38px 0 14px; font-size:27px; border-left:5px solid var(--brand); padding-left:12px; }
+    h3 { margin:24px 0 10px; font-size:20px; }
+    p { margin:10px 0; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:24px; margin:18px 0; }
+    .lead { max-width:980px; color:var(--muted); font-size:18px; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:22px; }
+    .metric { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px; min-height:112px; }
+    .metric strong { display:block; color:var(--muted); font-size:14px; }
+    .metric span { display:block; margin-top:8px; font-weight:800; font-size:17px; }
+    .toc { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:14px; }
+    .toc a { display:block; background:#f8fafc; border:1px solid var(--line); border-radius:6px; padding:8px 10px; text-decoration:none; color:var(--ink); }
+    .note { background:var(--soft); border-left:5px solid var(--brand); border-radius:6px; padding:14px 16px; margin:16px 0; }
+    .green { background:var(--soft2); border-left:5px solid var(--brand2); border-radius:6px; padding:14px 16px; margin:16px 0; }
+    .case { background:var(--warm); border-left:5px solid #f59e0b; border-radius:6px; padding:14px 16px; margin:16px 0; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; font-size:14px; }
+    th,td { border:1px solid var(--line); padding:10px 12px; vertical-align:top; text-align:left; }
+    th { background:#edf4ff; color:#1d4ed8; }
+    code { background:#f3f6fb; border:1px solid #e3e9f3; border-radius:5px; padding:1px 5px; font-family:Consolas,"SFMono-Regular",monospace; font-size:.92em; }
+    pre { background:var(--code); color:var(--codeink); border-radius:8px; padding:14px; overflow-x:auto; line-height:1.55; font-size:13px; }
+    pre code { background:transparent; border:0; color:inherit; padding:0; }
+    pre.mermaid { background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:14px; margin:16px 0; overflow-x:auto; }
+    #architecture pre.mermaid { min-height:430px; }
+    #architecture pre.mermaid svg { max-width:none !important; width:135% !important; height:auto !important; }
+    .grid2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .card { border:1px solid var(--line); border-radius:8px; padding:14px; background:#fbfdff; }
+    .card h3 { margin-top:0; }
+    ul,ol { padding-left:22px; }
+    li { margin:6px 0; }
+    @media (max-width:900px) { .summary,.toc,.grid2 { grid-template-columns:1fr; } section { padding:18px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>PydanticAI 源码架构精读</h1>
+      <p class="lead">PydanticAI 是 Pydantic 风格的 typed Agent framework。本文按“架构边界 -> Agent 主流程 -> 工具和结构化输出 -> provider adapter -> graph/evals -> 真实例子 -> 横向对比 -> 专题细节”展开。</p>
+      <div class="summary">
+        <div class="metric"><strong>源码版本</strong><span>6a6d83d / 2026-07-08</span></div>
+        <div class="metric"><strong>核心定位</strong><span>typed Agent framework</span></div>
+        <div class="metric"><strong>核心抽象</strong><span>Agent + Tool + Output + Model</span></div>
+        <div class="metric"><strong>横向位置</strong><span>代码优先 Agent 控制层</span></div>
+      </div>
+      <div class="toc">
+        <a href="#summary">总体结论</a>
+        <a href="#architecture">架构</a>
+        <a href="#run">主流程</a>
+        <a href="#tools">工具输出</a>
+        <a href="#provider">模型适配</a>
+        <a href="#graph">Graph/Evals</a>
+        <a href="#examples">真实例子</a>
+        <a href="#deep-dive">专题细节</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="summary">
+      <h2>1. 总体结论</h2>
+      <p>PydanticAI 的核心不是“又封装了一个 <code>agent.run()</code>”，而是把 Agent 工程里最容易失控的三件事类型化：依赖从哪里来、工具怎么被模型调用、最终输出怎么被业务消费。</p>
+      <div class="note">一句话分享：PydanticAI 更像“Pydantic-native 的业务 Agent 内核”。它比 LangChain 更收敛，比 LangGraph 更强调类型契约，比 Haystack 更偏 Agent 控制层，而不是完整 RAG pipeline。</div>
+      <table>
+        <tr><th>主线</th><th>源码锚点</th><th>解释</th></tr>
+        <tr><td>typed Agent</td><td><code>agent/__init__.py</code></td><td><code>Agent</code> 用 <code>deps_type</code> 和 <code>output_type</code> 约束业务边界。</td></tr>
+        <tr><td>内部 Agent Graph</td><td><code>_agent_graph.py</code></td><td>运行被拆成 UserPrompt、ModelRequest、CallTools、End 节点。</td></tr>
+        <tr><td>工具 schema</td><td><code>tools.py</code>、<code>_function_schema.py</code></td><td>Python 函数签名转成模型可读的 <code>ToolDefinition</code>。</td></tr>
+        <tr><td>结构化输出</td><td><code>output.py</code>、<code>_output.py</code></td><td>统一 tool、native、prompted、text 多种输出路径。</td></tr>
+        <tr><td>模型适配</td><td><code>models/__init__.py</code>、<code>providers/__init__.py</code></td><td><code>Model</code> 管协议映射，<code>Provider</code> 管认证客户端。</td></tr>
+      </table>
+    </section>
+
+    <section id="architecture">
+      <h2>2. 最高层架构</h2>
+      <pre class="mermaid">
+flowchart TB
+    Dev["Python 开发者&lt;br/&gt;用类型和 Pydantic 模型描述 Agent 契约"] --> API["pydantic_ai public API&lt;br/&gt;Agent RunContext ToolOutput NativeOutput&lt;br/&gt;为什么这么设计：入口要像写普通 Python 代码"]
+    API --> Agent["pydantic_ai_slim Agent&lt;br/&gt;deps_type output_type instructions tools toolsets&lt;br/&gt;为什么这么设计：把依赖 输出 工具都变成可类型检查的契约"]
+    Agent --> Graph["内部 Agent Graph&lt;br/&gt;UserPromptNode ModelRequestNode CallToolsNode End&lt;br/&gt;为什么这么设计：Agent loop 本质是状态图 便于流式 中断 重试和复用"]
+    Agent --> Tools["Tool and Toolset&lt;br/&gt;函数签名转 JSON Schema approval prepare&lt;br/&gt;为什么这么设计：工具既要给模型看 也要在本地安全执行"]
+    Agent --> Output["Structured Output&lt;br/&gt;ToolOutput NativeOutput PromptedOutput TextOutput&lt;br/&gt;为什么这么设计：不同模型支持不同结构化输出能力 需要统一抽象"]
+    Agent --> Models["Model abstraction&lt;br/&gt;ModelRequestParameters request request_stream StreamedResponse&lt;br/&gt;为什么这么设计：Agent 不直接依赖具体 SDK"]
+    Models --> Providers["Provider abstraction&lt;br/&gt;认证客户端 base_url profile gateway&lt;br/&gt;为什么这么设计：同一模型协议下仍有不同供应商和网关"]
+    Agent --> MCP["MCP and Native Tools&lt;br/&gt;MCPServer ToolSearch WebSearch CodeExecution&lt;br/&gt;为什么这么设计：外部工具生态和模型原生工具都要纳入能力层"]
+    Graph --> PGraph["pydantic_graph&lt;br/&gt;Graph GraphBuilder BaseNode Step Join Decision&lt;br/&gt;为什么这么设计：把通用 typed workflow runtime 从 Agent 中拆出来"]
+    Agent --> Evals["pydantic_evals&lt;br/&gt;Dataset Case Evaluator LLMJudge ToolCorrectness&lt;br/&gt;为什么这么设计：Agent 不是只跑通 还要可回归评估"]
+    Agent --> Obs["Instrumentation and Logfire&lt;br/&gt;OpenTelemetry span metrics traceparent&lt;br/&gt;为什么这么设计：生产 Agent 需要看见每次模型请求 工具调用和成本"]
+      </pre>
+      <p>包结构上，<code>pydantic_ai_slim</code> 是 Agent 内核，<code>pydantic_graph</code> 是独立 typed graph runtime，<code>pydantic_evals</code> 是评测闭环，<code>examples</code> 展示真实业务写法。</p>
+    </section>
+
+    <section id="run">
+      <h2>3. Agent 主流程</h2>
+      <pre class="mermaid">
+flowchart TB
+    Start["调用 agent.run / run_sync / run_stream&lt;br/&gt;传入 user_prompt deps model_settings usage_limits"] --> Iter["Agent.iter 创建一次 GraphRun&lt;br/&gt;准备模型 输出模式 工具集 消息历史"]
+    Iter --> UserNode["UserPromptNode&lt;br/&gt;组装 system prompt instructions user prompt&lt;br/&gt;为什么这么设计：提示词和依赖上下文在进入模型前统一固化"]
+    UserNode --> ModelNode["ModelRequestNode&lt;br/&gt;调用 Model.request 或 request_stream"]
+    ModelNode --> Params["ModelRequestParameters&lt;br/&gt;function_tools native_tools output_mode output_object&lt;br/&gt;为什么这么设计：工具和输出策略作为模型请求参数传递"]
+    Params --> Adapter["具体模型适配器&lt;br/&gt;OpenAI Anthropic Google Bedrock 等"]
+    Adapter --> Response["ModelResponse&lt;br/&gt;text parts tool calls native tool calls usage"]
+    Response --> CallTools["CallToolsNode&lt;br/&gt;判断最终输出或执行工具"]
+    CallTools --> Final{"是否得到最终输出"}
+    Final -->|"是"| Validate["OutputSchema validate&lt;br/&gt;Pydantic 校验和 output_validator"]
+    Validate --> End["End FinalResult&lt;br/&gt;返回 output usage messages"]
+    Final -->|"否"| Execute["执行 function tools 或 toolsets&lt;br/&gt;收集 ToolReturnPart RetryPromptPart"]
+    Execute --> Retry{"需要重试或继续模型请求"}
+    Retry -->|"继续"| ModelNode
+    Retry -->|"失败"| Error["UsageLimit 或 AgentRunError&lt;br/&gt;为什么这么设计：把不可靠模型输出约束在显式边界内"]
+      </pre>
+    </section>
+
+    <section id="tools">
+      <h2>4. 工具和结构化输出</h2>
+      <pre class="mermaid">
+flowchart TB
+    Func["普通 Python 函数&lt;br/&gt;可选 RunContext 参数和类型注解"] --> Schema["function_schema&lt;br/&gt;inspect signature 生成 Pydantic schema"]
+    Schema --> Tool["Tool&lt;br/&gt;保存 function takes_ctx max_retries prepare"]
+    Tool --> Def["ToolDefinition&lt;br/&gt;name description parameters_json_schema kind metadata"]
+    Def --> ModelParams["ModelRequestParameters.function_tools&lt;br/&gt;传给模型适配器"]
+    ModelParams --> LLM["模型产生 tool call&lt;br/&gt;name args call_id"]
+    LLM --> Execute["本地 tool execution&lt;br/&gt;解析 args 调用函数"]
+    Execute --> Result["ToolReturnPart 或 RetryPromptPart&lt;br/&gt;为什么这么设计：工具失败可以反馈给模型重试"]
+    Result --> Loop["写回 message_history&lt;br/&gt;进入下一轮 ModelRequestNode"]
+    OutputSpec["output_type&lt;br/&gt;BaseModel dataclass list union str"] --> OutputSchema["OutputSchema.build&lt;br/&gt;选择 Tool Native Prompted Text 模式"]
+    OutputSchema --> Validate["validate&lt;br/&gt;Pydantic 校验 处理 ModelRetry"]
+    Validate --> Typed["typed output&lt;br/&gt;业务代码拿到确定类型"]
+      </pre>
+      <pre><code class="language-python">from dataclasses import dataclass
+from pydantic import BaseModel
+from pydantic_ai import Agent, RunContext
+
+@dataclass
+class SupportDeps:
+    customer_id: int
+    db: object
+
+class SupportOutput(BaseModel):
+    support_advice: str
+    block_card: bool
+    risk: int
+
+agent = Agent("openai:gpt-5.2", deps_type=SupportDeps, output_type=SupportOutput)
+
+@agent.tool
+async def customer_balance(ctx: RunContext[SupportDeps]) -> str:
+    return await ctx.deps.db.customer_balance(ctx.deps.customer_id)</code></pre>
+    </section>
+
+    <section id="provider">
+      <h2>5. Model / Provider Adapter</h2>
+      <pre class="mermaid">
+flowchart LR
+    Agent["Agent"] --> Model["Model 抽象&lt;br/&gt;request request_stream prepare_request"]
+    Model --> Params["ModelRequestParameters&lt;br/&gt;工具 输出模式 原生能力"]
+    Model --> Profile["ModelProfile&lt;br/&gt;默认结构化输出模式 JSON schema transformer 原生工具能力"]
+    Model --> Provider["Provider 抽象&lt;br/&gt;提供 authenticated client"]
+    Provider --> Infer["infer_provider&lt;br/&gt;openai anthropic google bedrock gateway 等"]
+    Infer --> Client["Async SDK client&lt;br/&gt;API key base_url http client"]
+    Params --> Concrete["具体 Model&lt;br/&gt;OpenAIChatModel OpenAIResponsesModel AnthropicModel GoogleModel"]
+    Profile --> Concrete
+    Client --> Concrete
+    Concrete --> Wire["供应商 wire format&lt;br/&gt;messages tools response events"]
+    Wire --> Unified["统一 ModelResponse 和 StreamEvent&lt;br/&gt;为什么这么设计：上层 Agent 不关心各家 SDK 差异"]
+      </pre>
+    </section>
+
+    <section id="graph">
+      <h2>6. pydantic_graph 与 pydantic_evals</h2>
+      <pre class="mermaid">
+flowchart TB
+    PGraph["pydantic_graph&lt;br/&gt;独立 typed graph runtime"] --> BaseNode["BaseNode.run&lt;br/&gt;返回下一个节点或 End"]
+    PGraph --> Builder["GraphBuilder&lt;br/&gt;typed state deps input output"]
+    PGraph --> Runtime["GraphRun&lt;br/&gt;任务调度 fork join result tracking"]
+    Runtime --> AgentGraph["PydanticAI Agent Graph&lt;br/&gt;UserPrompt ModelRequest CallTools"]
+    Dataset["pydantic_evals Dataset&lt;br/&gt;cases evaluators metadata"] --> Task["task function&lt;br/&gt;通常调用 Agent.run"]
+    Task --> Report["EvaluationReport&lt;br/&gt;每个 case 的 output metrics trace"]
+    Dataset --> Eval["Evaluator&lt;br/&gt;Equals LLMJudge ToolCorrectness TrajectoryMatch MaxToolCalls"]
+    Eval --> OTel["OpenTelemetry span tree&lt;br/&gt;为什么这么设计：Agent 质量不只看最终答案 还要看工具路径和成本"]
+    OTel --> Report
+      </pre>
+      <div class="green">这里能体现 PydanticAI 的工程化野心：<code>pydantic_graph</code> 管状态推进，<code>pydantic_evals</code> 管质量回归。Agent 不是只要跑通，还要能被测试、评估和观测。</div>
+    </section>
+
+    <section id="examples">
+      <h2>7. 真实例子</h2>
+      <div class="grid2">
+        <div class="card"><h3>银行客服 Agent</h3><p><code>bank_support.py</code> 用 <code>SupportDependencies</code> 注入数据库和客户 id，用 <code>SupportOutput</code> 固定最终字段，用 tool 查询余额。</p></div>
+        <div class="card"><h3>航班预订 Agent</h3><p><code>flight_booking.py</code> 展示 agent-as-tool、Pydantic 输出联合类型、<code>output_validator</code> 和 Logfire instrumentation。</p></div>
+        <div class="card"><h3>RAG 示例</h3><p><code>rag.py</code> 把 asyncpg 检索作为 tool 接入 Agent，说明 PydanticAI 更适合做 typed 控制层。</p></div>
+        <div class="card"><h3>评测闭环</h3><p><code>pydantic_evals</code> 通过 Dataset、Evaluator、ToolCorrectness、TrajectoryMatch、MaxToolCalls，把答案和工具路径纳入回归测试。</p></div>
+      </div>
+    </section>
+
+    <section id="compare">
+      <h2>8. 横向对比和选型</h2>
+      <table>
+        <tr><th>维度</th><th>PydanticAI</th><th>LangGraph</th><th>LangChain</th><th>Haystack</th><th>CrewAI / AutoGen</th></tr>
+        <tr><td>核心定位</td><td>typed Agent framework</td><td>状态图 Agent runtime</td><td>LLM 组件生态</td><td>生产级 RAG pipeline</td><td>多 Agent 协作编排</td></tr>
+        <tr><td>最强点</td><td>Pydantic 类型契约和结构化输出</td><td>复杂状态、恢复、中断</td><td>生态集成和组合</td><td>RAG 组件图和调试</td><td>角色协作或多 Agent 对话</td></tr>
+        <tr><td>适合场景</td><td>Python 业务 Agent</td><td>长任务状态机</td><td>快速接生态</td><td>高质量 RAG 后端</td><td>研究协作和角色分工</td></tr>
+      </table>
+      <div class="case">选型口径：Python 业务 Agent 且最关心“输出可信、工具入参可信、评测可回归”，PydanticAI 值得看。长流程用 LangGraph，重 RAG 用 Haystack/LlamaIndex，低代码运营用 Dify，多 Agent 讨论用 AutoGen/CrewAI。</div>
+    </section>
+
+    <section id="deep-dive">
+      <h2>9. Agent capability / middleware 链路</h2>
+      <pre class="mermaid">
+flowchart TB
+    Run["一次 Agent run&lt;br/&gt;输入 prompt deps settings history"] --> Build["构建运行期上下文&lt;br/&gt;RunContext 持有 deps model usage messages metadata"]
+    Build --> Cap["CombinedCapability&lt;br/&gt;把用户 capability 和自动 capability 合并"]
+    Cap --> Auto["自动注入基础能力&lt;br/&gt;ToolSearch 和 PendingMessageDrain&lt;br/&gt;为什么这么做：避免用户忘记接入运行时基础能力"]
+    Cap --> Inst["Instrumentation capability&lt;br/&gt;包装模型请求 工具调用 stream 事件&lt;br/&gt;为什么这么做：观测不能散落在每个 provider adapter 里"]
+    Cap --> Toolsets["Capability 提供 toolsets native_tools model_settings instructions&lt;br/&gt;为什么这么做：能力包可以同时改变提示词 工具和模型参数"]
+    Toolsets --> Manager["ToolManager 和 CombinedToolset&lt;br/&gt;合并 function tools user toolsets capability toolsets"]
+    Manager --> Step["for_run 与 for_run_step&lt;br/&gt;按 run 和 step 动态准备工具"]
+    Step --> History["before_model_request&lt;br/&gt;可处理 message history settings request parameters"]
+    History --> Model["Model.request 或 request_stream"]
+    Model --> After["on_model_request_error wrap_run_event_stream output hooks"]
+    After --> Result["FinalResult 或下一轮工具调用"]
+      </pre>
+      <table>
+        <tr><th>源码证据</th><th>说明</th></tr>
+        <tr><td><code>agent/__init__.py:421-425</code></td><td>包装 capability 函数、注入自动 capability，再合并成 <code>CombinedCapability</code>。</td></tr>
+        <tr><td><code>agent/__init__.py:460-487</code></td><td>capability 可以贡献 native tools、model settings、toolset。</td></tr>
+        <tr><td><code>toolsets/abstract.py:110-126</code></td><td><code>for_run</code> 与 <code>for_run_step</code> 支持动态准备工具。</td></tr>
+        <tr><td><code>_agent_graph.py:956-993</code></td><td>模型请求前调用 <code>before_model_request</code> 处理 history。</td></tr>
+      </table>
+      <div class="note">分享口径：PydanticAI 的 middleware 更像 Agent 运行时能力包，能改 prompt/history、补工具、包裹 stream、接观测。</div>
+    </section>
+
+    <section id="streaming-details">
+      <h2>10. Streaming 细节</h2>
+      <pre class="mermaid">
+flowchart TB
+    UI["调用 run_stream 或 run_stream_events&lt;br/&gt;页面或 CLI 希望边生成边消费"] --> Iter["Agent.iter 进入内部 graph"]
+    Iter --> MRN["ModelRequestNode.stream&lt;br/&gt;准备 request context"]
+    MRN --> CapWrap["root_capability.wrap_model_request&lt;br/&gt;middleware 可包裹请求"]
+    CapWrap --> Provider["provider model.request_stream&lt;br/&gt;OpenAI Anthropic Google 等各自返回增量"]
+    Provider --> Parts["ModelResponsePartsManager&lt;br/&gt;按 vendor id 维护 TextPart ToolCallPart ThinkingPart"]
+    Parts --> Start["PartStartEvent&lt;br/&gt;新 part 出现"]
+    Parts --> Delta["PartDeltaEvent&lt;br/&gt;已有 part 增量更新"]
+    Start --> AgentStream["AgentStream&lt;br/&gt;stream_text stream_output stream_events"]
+    Delta --> AgentStream
+    AgentStream --> FinalEvent["FinalResultEvent&lt;br/&gt;找到满足 output_type 的最终输出"]
+    FinalEvent --> Complete["on_complete&lt;br/&gt;补齐 tool returns message history usage"]
+    Complete --> Final["StreamedRunResult.get_output&lt;br/&gt;返回最终 typed output"]
+      </pre>
+      <p>streaming 分两层：provider stream 从模型 SDK 拿增量；agent stream 把增量归一化成 part/event，再给 <code>stream_text</code>、<code>stream_output</code>、<code>run_stream_events</code> 消费。</p>
+      <table>
+        <tr><th>源码证据</th><th>说明</th></tr>
+        <tr><td><code>agent/abstract.py:741-774</code></td><td><code>run_stream</code> 找到第一个满足 <code>output_type</code> 的输出后产出结果。</td></tr>
+        <tr><td><code>_agent_graph.py:633-690</code></td><td><code>ModelRequestNode.stream</code> 调用 provider 的 <code>request_stream</code>。</td></tr>
+        <tr><td><code>_parts_manager.py:121-207</code></td><td>文本增量生成 <code>PartStartEvent</code> 或 <code>PartDeltaEvent</code>。</td></tr>
+        <tr><td><code>agent/abstract.py:879-950</code></td><td>遇到 <code>FinalResultEvent</code> 后补齐 history 和 usage。</td></tr>
+      </table>
+      <pre><code class="language-python">async with agent.run_stream("帮我查明天上海到北京的航班") as result:
+    async for chunk in result.stream_output(debounce_by=None):
+        print(chunk)
+    final = await result.get_output()</code></pre>
+    </section>
+
+    <section id="mcp-details">
+      <h2>11. MCP 细节</h2>
+      <pre class="mermaid">
+flowchart TB
+    Config["MCP 配置&lt;br/&gt;url stdio script FastMCP client mcpServers JSON"] --> Toolset["MCPToolset&lt;br/&gt;统一成 AbstractToolset"]
+    Toolset --> Client["FastMCP Client&lt;br/&gt;负责协议连接 生命周期 OAuth sampling logs"]
+    Client --> ListTools["list_tools&lt;br/&gt;读取 server 暴露的 MCP tools"]
+    ListTools --> ToolDef["ToolDefinition&lt;br/&gt;name description inputSchema outputSchema metadata"]
+    ToolDef --> AgentTools["Agent function_tools&lt;br/&gt;模型看到的是普通工具定义"]
+    AgentTools --> ToolCall["模型发起 tool call"]
+    ToolCall --> Call["MCPToolset.call_tool&lt;br/&gt;转成 MCP call_tool 请求"]
+    Call --> Retry["tool_error_behavior&lt;br/&gt;retry 转 ModelRetry error 直接抛出"]
+    Client --> Resources["list_resources read_resource&lt;br/&gt;资源仍保持 MCP 资源语义"]
+    Client --> Prompts["list_prompts get_prompt&lt;br/&gt;prompt 仍保持 MCP prompt 语义"]
+    Native["MCPServerTool native tool&lt;br/&gt;provider 侧原生工具"] --> Boundary["边界&lt;br/&gt;MCPToolset 是框架本地工具&lt;br/&gt;native tool 是模型服务端工具"]
+    Boundary --> Profile["ModelProfile 检查 provider 是否支持 native tool"]
+      </pre>
+      <p><code>MCPToolset</code> 是框架本地 toolset；provider native tool 里的 <code>MCPServerTool</code> 是模型服务端直接调用 MCP server。两者鉴权、计费、观测边界不同。</p>
+      <table>
+        <tr><th>源码证据</th><th>说明</th></tr>
+        <tr><td><code>mcp.py:671-677</code></td><td><code>MCPToolset</code> 基于 FastMCP Client，支持 tools、resources、sampling、OAuth。</td></tr>
+        <tr><td><code>mcp.py:1137-1159</code></td><td><code>get_tools</code> 把 MCP tool 映射成 PydanticAI <code>ToolDefinition</code>。</td></tr>
+        <tr><td><code>mcp.py:1646-1699</code></td><td><code>load_mcp_toolsets</code> 读取 <code>mcpServers</code> 配置并自动 prefix。</td></tr>
+      </table>
+    </section>
+
+    <section id="provider-profile-matrix">
+      <h2>12. Provider profile / capability matrix</h2>
+      <pre class="mermaid">
+flowchart TB
+    Agent["Agent output_type tools native_tools"] --> Params["ModelRequestParameters&lt;br/&gt;function_tools output_tools output_object native_tools"]
+    Params --> Profile["Model.profile&lt;br/&gt;DEFAULT_PROFILE + provider profile + user override"]
+    Profile --> Schema["json_schema_transformer&lt;br/&gt;把 Pydantic schema 改成 provider 可接受形状"]
+    Profile --> Mode["default_structured_output_mode&lt;br/&gt;决定 tool native prompted 的默认选择"]
+    Profile --> Native["supported_native_tools&lt;br/&gt;和 model class 已实现能力取交集"]
+    Profile --> Checks["prepare_request 能力检查&lt;br/&gt;supports_tools supports_json_schema_output supports_tool_return_schema"]
+    Checks --> OpenAI["OpenAI profile&lt;br/&gt;JSON schema output native tools tool search"]
+    Checks --> Anthropic["Anthropic profile&lt;br/&gt;工具版本 thinking JSON schema 条件支持"]
+    Checks --> Google["Google profile&lt;br/&gt;工具组合 server-side invocation return schema"]
+    Checks --> Grok["Grok profile&lt;br/&gt;builtin tools 和 required tool choice"]
+    OpenAI --> Wire["provider wire format"]
+    Anthropic --> Wire
+    Google --> Wire
+    Grok --> Wire
+    Wire --> Unified["统一 ModelResponse&lt;br/&gt;上层 Agent 不感知差异"]
+      </pre>
+      <p><code>ModelProfile</code> 把 provider 差异前置成能力矩阵：结构化输出模式、schema transformer、native tools、tool return schema、thinking 等。</p>
+      <table>
+        <tr><th>源码证据</th><th>说明</th></tr>
+        <tr><td><code>models/__init__.py:300-312</code></td><td>用 <code>json_schema_transformer</code> 改写 tools 和 output object schema。</td></tr>
+        <tr><td><code>models/__init__.py:315-393</code></td><td><code>prepare_request</code> 设置 output mode、处理 return schema、检查模型能力。</td></tr>
+        <tr><td><code>models/__init__.py:562-608</code></td><td>profile 合并默认值、provider profile、用户 override，并和 model class 能力取交集。</td></tr>
+      </table>
+    </section>
+
+    <section id="evals-case">
+      <h2>13. pydantic_evals 评测闭环案例</h2>
+      <pre class="mermaid">
+flowchart TB
+    Dataset["Dataset&lt;br/&gt;航班或客服回归 case"] --> Case["Case&lt;br/&gt;输入 期望输出 metadata case evaluators"]
+    Case --> Task["task function&lt;br/&gt;调用 flight_agent.run 或 support_agent.run"]
+    Task --> Trace["Instrumentation spans&lt;br/&gt;记录模型请求 工具调用 参数和结果"]
+    Task --> Output["typed output&lt;br/&gt;FlightDetails NoFlightFound SupportOutput"]
+    Output --> Eval["EvaluatorContext&lt;br/&gt;包含 inputs output expected_output metadata spans"]
+    Trace --> Eval
+    Eval --> Exact["业务 evaluator&lt;br/&gt;检查航班日期 价格 风险等级 是否符合预期"]
+    Eval --> ToolCorrect["ToolCorrectness&lt;br/&gt;检查是否调用 search_flights 或 customer_balance"]
+    Eval --> Traj["TrajectoryMatch&lt;br/&gt;检查 search rerank reserve 等轨迹顺序"]
+    Eval --> MaxCalls["MaxToolCalls&lt;br/&gt;限制工具调用次数和成本"]
+    Exact --> Report["EvaluationReport&lt;br/&gt;汇总通过率 原因 失败 case"]
+    ToolCorrect --> Report
+    Traj --> Report
+    MaxCalls --> Report
+      </pre>
+      <pre><code class="language-python">dataset = Dataset(
+    cases=[Case(name="上海到北京明早航班", inputs={"from": "SHA", "to": "BJS"})],
+    evaluators=[
+        ToolCorrectness(expected_tools=["search_flights"]),
+        MaxToolCalls(max_calls=2),
+    ],
+)
+
+report = dataset.evaluate_sync(lambda case: flight_agent.run_sync(case).output)</code></pre>
+      <div class="case">评测不只看答案像不像，还要看工具路径是否正确、有没有过度调用工具、失败 case 能否沉淀成回归集。</div>
+    </section>
+
+    <section id="langgraph-boundary">
+      <h2>14. 和 LangGraph 的组合边界图</h2>
+      <pre class="mermaid">
+flowchart LR
+    Product["产品入口&lt;br/&gt;Web API 工单系统 定时任务"] --> LG["LangGraph outer workflow&lt;br/&gt;长流程状态 checkpoint interrupt human approval"]
+    LG --> Classify["节点一&lt;br/&gt;识别意图和任务阶段"]
+    Classify --> Human["节点二&lt;br/&gt;需要时人工确认或审批"]
+    Human --> PA["PydanticAI typed inner agent&lt;br/&gt;deps_type output_type tools validators"]
+    PA --> Tools["业务工具或 RAG&lt;br/&gt;订单 CRM 检索 支付 审批系统"]
+    Tools --> Typed["Pydantic typed result&lt;br/&gt;结构化字段 可校验 可分支"]
+    Typed --> Branch["LangGraph 根据 typed result 分支&lt;br/&gt;重试 升级 结束 下一节点"]
+    Branch --> Checkpoint["checkpoint 和恢复&lt;br/&gt;保存 outer workflow state"]
+    Checkpoint --> LG
+    PA --> Boundary["边界说明&lt;br/&gt;PydanticAI 管单步可靠 Agent&lt;br/&gt;LangGraph 管跨步骤状态机"]
+      </pre>
+      <table>
+        <tr><th>层次</th><th>建议由谁负责</th><th>原因</th></tr>
+        <tr><td>单步业务 Agent</td><td>PydanticAI</td><td>依赖、工具入参、结构化输出、output validator、evals 都是 typed-first。</td></tr>
+        <tr><td>长流程状态机</td><td>LangGraph</td><td>checkpoint、interrupt、人工审批、多节点恢复、跨步骤状态更成熟。</td></tr>
+        <tr><td>RAG 检索内核</td><td>Haystack / LlamaIndex / 自研</td><td>PydanticAI 可以把检索作为 tool，但不主打 ingestion、索引和 rerank pipeline。</td></tr>
+      </table>
+      <div class="green">真实场景：理赔处理助手中，LangGraph 管收集材料、人工审批、失败恢复；每个 LLM 判断节点内部调用 PydanticAI Agent 返回 <code>ClaimDecision</code>。</div>
+    </section>
+  </main>
+</body>
+</html>

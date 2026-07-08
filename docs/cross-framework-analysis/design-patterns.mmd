@@ -6,6 +6,7 @@ flowchart TB
     Graph --> DifyG["Dify：Workflow.graph + graphon + DifyNodeFactory"]
     Graph --> N8NG["n8n：Workflow JSON + WorkflowExecute + runData"]
     Pattern --> AgentLoop["Agent Loop 范式<br/>模型输出动作，工具执行，状态回写"]
+    AgentLoop --> PAI["PydanticAI：typed deps + tool schema + structured output"]
     AgentLoop --> Auto["AutoGen：消息驱动、多 Agent runtime"]
     AgentLoop --> Crew["CrewAI：角色、任务、流程、工具"]
     AgentLoop --> LettaP["Letta：AgentState、Memory、tool-first loop"]

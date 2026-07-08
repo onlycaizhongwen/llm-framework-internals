@@ -1,0 +1,12 @@
+flowchart TB
+    Run["一次 Agent run<br/>输入 prompt deps settings history"] --> Build["构建运行期上下文<br/>RunContext 持有 deps model usage messages metadata"]
+    Build --> Cap["CombinedCapability<br/>把用户 capability 和自动 capability 合并"]
+    Cap --> Auto["自动注入基础能力<br/>ToolSearch 和 PendingMessageDrain<br/>为什么这么做：避免用户忘记接入运行时基础能力"]
+    Cap --> Inst["Instrumentation capability<br/>包装模型请求 工具调用 stream 事件<br/>为什么这么做：观测不能散落在每个 provider adapter 里"]
+    Cap --> Toolsets["Capability 提供 toolsets native_tools model_settings instructions<br/>为什么这么做：能力包可以同时改变提示词 工具和模型参数"]
+    Toolsets --> Manager["ToolManager 和 CombinedToolset<br/>合并 function tools user toolsets capability toolsets"]
+    Manager --> Step["for_run 与 for_run_step<br/>按 run 和 step 动态准备工具"]
+    Step --> History["before_model_request<br/>可处理 message history settings request parameters"]
+    History --> Model["Model.request 或 request_stream"]
+    Model --> After["on_model_request_error wrap_run_event_stream output hooks"]
+    After --> Result["FinalResult 或下一轮工具调用"]

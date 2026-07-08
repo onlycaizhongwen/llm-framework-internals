@@ -28,6 +28,7 @@ flowchart TB
     Runtime --> Letta["Letta<br/>状态化 Agent、core/archival memory、tool-first loop"]
     Goal --> Component["组件与数据层<br/>给应用提供 LLM/RAG/记忆基础能力"]
     Component --> LangChain["LangChain<br/>模型适配、Runnable、Agent middleware、工具和生态集成"]
+    Component --> PydanticAI["PydanticAI<br/>typed Agent、Pydantic schema、工具和结构化输出、evals"]
     Component --> LlamaIndex["LlamaIndex<br/>Ingestion、Index、Retriever、QueryEngine、RAG 数据框架"]
     Component --> Haystack["Haystack<br/>Component Pipeline、typed sockets、DocumentStore、Hybrid RAG、调试观测"]
     Component --> Memory["记忆 / 知识图谱"]
@@ -41,6 +42,7 @@ flowchart TB
 | 框架 | 一句话定位 | 核心抽象 | 强项 | 局限 | 最适合讲的源码主线 |
 | --- | --- | --- | --- | --- | --- |
 | LangChain | LLM 应用组件和集成生态 | Runnable、Tool、Agent middleware、Provider adapter | 模型/工具生态、组合式调用、迁移兼容 | 不是完整产品平台，复杂状态恢复要靠 LangGraph | provider adapter、middleware、classic 迁移 |
+| PydanticAI | Pydantic 风格 typed Agent framework | Agent、RunContext、Tool、OutputSchema、Model、Provider | typed deps、Pydantic 结构化输出、tool schema、evals、Logfire/OTel | 不是低代码平台，也不是完整 RAG 数据管线或 checkpoint-first runtime | Agent graph、tool/function schema、structured output、provider adapter、pydantic_evals |
 | LangGraph | 代码级 Agent 状态图运行时 | StateGraph、Pregel、checkpoint、interrupt | 复杂状态机、可恢复、人类中断、可测试 | 需要自己做 UI、权限、运营平台 | Pregel 执行、checkpoint、中断恢复 |
 | Spring AI Alibaba | Java / Spring Boot 生态 Agentic AI 框架 | StateGraph、CompiledGraph、ReactAgent、FlowAgent、Hook、ToolCallback | 企业 Java 服务落地、Nacos/A2A/MCP、checkpoint、Observation、多 Agent flow | Java/Spring 学习和部署门槛较高，低代码平台能力需 Admin/Studio 配合 | Graph Core、ReactAgent、AgentToolNode、FlowAgent、Nacos/A2A starters |
 | Dify | LLM 应用开发与运营平台 | App、Workflow、Dataset、Plugin、dify-agent | 可视化配置、RAG、Agent、发布、观测、权限 | 超复杂代码状态机不适合全塞画布 | WorkflowAppGenerator、DifyNodeFactory、RAG、Agent v2 |
@@ -71,6 +73,7 @@ flowchart TB
     Code -->|"多 Agent 对话协作"| AutoCrew["AutoGen 或 CrewAI<br/>AutoGen 偏消息运行时，CrewAI 偏角色/任务/流程"]
     Code -->|"RAG 数据接入 / 索引工程"| Llama["优先 LlamaIndex<br/>ingestion、index、retriever、query engine"]
     Code -->|"生产级可调试 RAG Pipeline"| Haystack["优先 Haystack<br/>Component Pipeline、typed sockets、Hybrid RAG、snapshot/tracing"]
+    Code -->|"Python typed 业务 Agent / 结构化输出"| PydanticAI["优先 PydanticAI<br/>deps_type、RunContext、Pydantic output、tool schema、evals"]
     Code -->|"模型/工具生态适配"| LangChain["优先 LangChain<br/>provider adapter、tool、middleware、Runnable"]
     Code -->|"长期记忆 / 用户画像"| Memory["mem0 / Zep / Graphiti / Letta<br/>按记忆形态选择"]
     Code -->|"上下文成本与代理网关"| Headroom["Headroom<br/>压缩上下文、代理网关、MCP/CCR 适配"]
@@ -100,7 +103,11 @@ flowchart TB
 
 优先在 LlamaIndex 和 Haystack 之间区分：如果项目重点在数据接入、切分、索引、检索、query engine、评估和不同向量库连接，LlamaIndex 更像“RAG 数据工程框架”；如果项目重点是把检索、融合、重排、prompt、生成、调试、序列化、观测做成一条生产级可复现 Pipeline，Haystack 更合适。Dify 的 RAG 更产品化，LangChain 的 RAG 更生态组件化。
 
-### 2.5 如果要做长期记忆
+### 2.5 如果要做 Python typed 业务 Agent
+
+优先看 PydanticAI。它适合“业务依赖、工具调用和最终输出都需要类型约束”的 Agent：用 `deps_type` 管运行依赖，用 `RunContext[T]` 把依赖传给工具和动态 instructions，用 Pydantic `BaseModel` 或 dataclass 固定最终输出。它不负责完整产品平台，也不负责复杂 RAG ingestion；更像 typed Agent 控制层，可以组合 Haystack、LlamaIndex、LangGraph 或 Dify。
+
+### 2.6 如果要做长期记忆
 
 按记忆形态选：
 
@@ -118,7 +125,7 @@ flowchart LR
     UI["产品入口<br/>Dify / n8n / Spring Boot / 自研 Web"] --> Orchestrator["编排核心<br/>LangGraph / Spring AI Alibaba Graph / Dify Workflow / n8n WorkflowExecute"]
     Orchestrator --> RAG["RAG 数据层<br/>Haystack Pipeline / LlamaIndex / Dify Dataset / LangChain retriever"]
     Orchestrator --> Memory["记忆层<br/>mem0 / Zep / Graphiti / Letta memory"]
-    Orchestrator --> Tools["工具与系统集成<br/>Spring AI ToolCallback / LangChain Tools / n8n Nodes / Dify Plugin / 自研 API"]
+    Orchestrator --> Tools["工具与系统集成<br/>PydanticAI Tools / Spring AI ToolCallback / LangChain Tools / n8n Nodes / Dify Plugin / 自研 API"]
     Orchestrator --> Agent["多 Agent 协作<br/>AutoGen / CrewAI / Letta / LangGraph subgraph"]
     RAG --> LLM["模型适配层<br/>Haystack Generator / LangChain provider adapter / Dify model provider / 直接 SDK"]
     Memory --> LLM
@@ -159,11 +166,17 @@ flowchart LR
 
 典型做法：LangGraph 的某个节点调用 Haystack Pipeline 完成“检索 + 重排 + 生成 + 返回证据”，LangGraph 根据结构化结果决定是否继续查工具、升级人工、写回系统。
 
-### 3.7 Haystack + Dify / n8n
+### 3.7 PydanticAI + LangGraph / Haystack
+
+适合“单个业务 Agent 要强类型、强结构化输出，同时又需要复杂状态机或重 RAG”的项目。PydanticAI 负责 typed deps、tool schema、output schema 和 evals；LangGraph 负责 checkpoint、人类中断和长流程状态；Haystack 或 LlamaIndex 负责复杂 RAG 检索管线。
+
+典型做法：LangGraph 的节点调用 PydanticAI Agent，Agent 内部工具再调用 Haystack Pipeline；PydanticAI 返回 Pydantic 结构化结果，LangGraph 根据结果决定下一步。
+
+### 3.8 Haystack + Dify / n8n
 
 适合“外层需要产品化或自动化入口，内层需要工程团队维护 RAG 内核”的项目。Dify 可以做应用入口、知识库运营、权限、人审和观测面；n8n 可以做 Webhook、CRM、IM、工单和审批流；Haystack 放在后端服务里承接可测试、可序列化、可追踪的 RAG Pipeline。
 
-### 3.8 mem0 / Zep / Graphiti + Agent 框架
+### 3.9 mem0 / Zep / Graphiti + Agent 框架
 
 适合长期个性化助手或企业知识沉淀。Agent 框架负责当下任务，记忆系统负责跨会话事实、偏好、关系和历史上下文。记忆不要只塞 prompt，要有抽取、更新、冲突处理和检索策略。
 
@@ -180,6 +193,7 @@ flowchart TB
     Graph --> DifyG["Dify：Workflow.graph + graphon + DifyNodeFactory"]
     Graph --> N8NG["n8n：Workflow JSON + WorkflowExecute + runData"]
     Pattern --> AgentLoop["Agent Loop 范式<br/>模型输出动作，工具执行，状态回写"]
+    AgentLoop --> PAI["PydanticAI：typed deps + tool schema + structured output"]
     AgentLoop --> Auto["AutoGen：消息驱动、多 Agent runtime"]
     AgentLoop --> Crew["CrewAI：角色、任务、流程、工具"]
     AgentLoop --> LettaP["Letta：AgentState、Memory、tool-first loop"]
@@ -210,7 +224,7 @@ flowchart TB
 
 ### 4.2 Agent Loop 范式
 
-代表项目：AutoGen、CrewAI、Letta、Dify Agent v2、LangGraph prebuilt Agent。
+代表项目：PydanticAI、AutoGen、CrewAI、Letta、Dify Agent v2、LangGraph prebuilt Agent。
 
 核心循环是：模型读取状态 -> 决定动作 -> 工具执行 -> 结果写回状态 -> 继续或结束。不同框架改变的是“状态放在哪里、谁来调度、如何多人协作、是否能暂停恢复”。
 
@@ -219,6 +233,7 @@ flowchart TB
 - Letta 把 Agent 状态和记忆持久化。
 - Dify Agent v2 用 dify-agent 和 Agenton layers 处理工具、知识、人审和 session snapshot。
 - LangGraph 用状态图让 Agent loop 可控、可恢复。
+- PydanticAI 用 `deps_type`、`RunContext`、`ToolDefinition`、`OutputSchema` 把 Agent loop 的输入、动作和输出都类型化。
 
 ### 4.3 RAG Pipeline 范式
 

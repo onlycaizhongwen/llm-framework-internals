@@ -1,0 +1,16 @@
+flowchart TB
+    Agent["Agent output_type tools native_tools"] --> Params["ModelRequestParameters<br/>function_tools output_tools output_object native_tools"]
+    Params --> Profile["Model.profile<br/>DEFAULT_PROFILE + provider profile + user override"]
+    Profile --> Schema["json_schema_transformer<br/>把 Pydantic schema 改成 provider 可接受形状"]
+    Profile --> Mode["default_structured_output_mode<br/>决定 tool native prompted 的默认选择"]
+    Profile --> Native["supported_native_tools<br/>和 model class 已实现能力取交集"]
+    Profile --> Checks["prepare_request 能力检查<br/>supports_tools supports_json_schema_output supports_tool_return_schema"]
+    Checks --> OpenAI["OpenAI profile<br/>JSON schema output native tools tool search"]
+    Checks --> Anthropic["Anthropic profile<br/>工具版本 thinking JSON schema 条件支持"]
+    Checks --> Google["Google profile<br/>工具组合 server-side invocation return schema"]
+    Checks --> Grok["Grok profile<br/>builtin tools 和 required tool choice"]
+    OpenAI --> Wire["provider wire format"]
+    Anthropic --> Wire
+    Google --> Wire
+    Grok --> Wire
+    Wire --> Unified["统一 ModelResponse<br/>上层 Agent 不感知差异"]

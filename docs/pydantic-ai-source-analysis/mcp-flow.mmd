@@ -1,0 +1,13 @@
+flowchart TB
+    Config["MCP 配置<br/>url stdio script FastMCP client mcpServers JSON"] --> Toolset["MCPToolset<br/>统一成 AbstractToolset"]
+    Toolset --> Client["FastMCP Client<br/>负责协议连接 生命周期 OAuth sampling logs"]
+    Client --> ListTools["list_tools<br/>读取 server 暴露的 MCP tools"]
+    ListTools --> ToolDef["ToolDefinition<br/>name description inputSchema outputSchema metadata"]
+    ToolDef --> AgentTools["Agent function_tools<br/>模型看到的是普通工具定义"]
+    AgentTools --> ToolCall["模型发起 tool call"]
+    ToolCall --> Call["MCPToolset.call_tool<br/>转成 MCP call_tool 请求"]
+    Call --> Retry["tool_error_behavior<br/>retry 转 ModelRetry error 直接抛出"]
+    Client --> Resources["list_resources read_resource<br/>资源仍保持 MCP 资源语义"]
+    Client --> Prompts["list_prompts get_prompt<br/>prompt 仍保持 MCP prompt 语义"]
+    Native["MCPServerTool native tool<br/>provider 侧原生工具"] --> Boundary["边界<br/>MCPToolset 是框架本地工具<br/>native tool 是模型服务端工具"]
+    Boundary --> Profile["ModelProfile 检查 provider 是否支持 native tool"]

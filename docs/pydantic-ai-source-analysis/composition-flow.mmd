@@ -1,0 +1,11 @@
+flowchart LR
+    UI["产品入口<br/>Web API CLI Dify n8n"] --> App["业务服务<br/>Python FastAPI 或后台任务"]
+    App --> PA["PydanticAI Agent<br/>typed deps typed output tools"]
+    PA --> RAG["RAG 工具<br/>Haystack LlamaIndex LangChain retriever 自研检索"]
+    PA --> Workflow["复杂状态机<br/>LangGraph 或 pydantic_graph"]
+    PA --> Memory["长期记忆<br/>mem0 Zep Graphiti Letta"]
+    PA --> Systems["业务系统工具<br/>订单 CRM 数据库 支付 审批"]
+    PA --> Evals["pydantic_evals<br/>回归集 工具轨迹 质量门禁"]
+    Evals --> Obs["Logfire OpenTelemetry<br/>生产观测与评估闭环"]
+    Workflow --> PA
+    RAG --> PA

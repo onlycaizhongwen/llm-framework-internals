@@ -1,0 +1,11 @@
+flowchart LR
+    Product["产品入口<br/>Web API 工单系统 定时任务"] --> LG["LangGraph outer workflow<br/>长流程状态 checkpoint interrupt human approval"]
+    LG --> Classify["节点一<br/>识别意图和任务阶段"]
+    Classify --> Human["节点二<br/>需要时人工确认或审批"]
+    Human --> PA["PydanticAI typed inner agent<br/>deps_type output_type tools validators"]
+    PA --> Tools["业务工具或 RAG<br/>订单 CRM 检索 支付 审批系统"]
+    Tools --> Typed["Pydantic typed result<br/>结构化字段 可校验 可分支"]
+    Typed --> Branch["LangGraph 根据 typed result 分支<br/>重试 升级 结束 下一节点"]
+    Branch --> Checkpoint["checkpoint 和恢复<br/>保存 outer workflow state"]
+    Checkpoint --> LG
+    PA --> Boundary["边界说明<br/>PydanticAI 管单步可靠 Agent<br/>LangGraph 管跨步骤状态机"]

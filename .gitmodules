@@ -25,3 +25,6 @@
 [submodule "sources/hermes-agent"]
 	path = sources/hermes-agent
 	url = https://github.com/NousResearch/hermes-agent.git
+[submodule "sources/pydantic-ai"]
+	path = sources/pydantic-ai
+	url = https://github.com/pydantic/pydantic-ai.git

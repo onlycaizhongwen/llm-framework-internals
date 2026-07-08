@@ -1,0 +1,10 @@
+flowchart TB
+    PGraph["pydantic_graph<br/>独立 typed graph runtime"] --> BaseNode["BaseNode.run<br/>返回下一个节点或 End"]
+    PGraph --> Builder["GraphBuilder<br/>typed state deps input output"]
+    PGraph --> Runtime["GraphRun<br/>任务调度 fork join result tracking"]
+    Runtime --> AgentGraph["PydanticAI Agent Graph<br/>UserPrompt ModelRequest CallTools"]
+    Dataset["pydantic_evals Dataset<br/>cases evaluators metadata"] --> Task["task function<br/>通常调用 Agent.run"]
+    Task --> Report["EvaluationReport<br/>每个 case 的 output metrics trace"]
+    Dataset --> Eval["Evaluator<br/>Equals LLMJudge ToolCorrectness TrajectoryMatch MaxToolCalls"]
+    Eval --> OTel["OpenTelemetry span tree<br/>为什么这么设计：Agent 质量不只看最终答案 还要看工具路径和成本"]
+    OTel --> Report

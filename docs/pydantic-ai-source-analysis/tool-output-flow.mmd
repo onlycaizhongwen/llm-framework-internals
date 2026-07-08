@@ -1,0 +1,12 @@
+flowchart TB
+    Func["普通 Python 函数<br/>可选 RunContext 参数和类型注解"] --> Schema["function_schema<br/>inspect signature 生成 Pydantic schema"]
+    Schema --> Tool["Tool<br/>保存 function takes_ctx max_retries prepare"]
+    Tool --> Def["ToolDefinition<br/>name description parameters_json_schema kind metadata"]
+    Def --> ModelParams["ModelRequestParameters.function_tools<br/>传给模型适配器"]
+    ModelParams --> LLM["模型产生 tool call<br/>name args call_id"]
+    LLM --> Execute["本地 tool execution<br/>解析 args 调用函数"]
+    Execute --> Result["ToolReturnPart 或 RetryPromptPart<br/>为什么这么设计：工具失败可以反馈给模型重试"]
+    Result --> Loop["写回 message_history<br/>进入下一轮 ModelRequestNode"]
+    OutputSpec["output_type<br/>BaseModel dataclass list union str"] --> OutputSchema["OutputSchema.build<br/>选择 Tool Native Prompted Text 模式"]
+    OutputSchema --> Validate["validate<br/>Pydantic 校验 处理 ModelRetry"]
+    Validate --> Typed["typed output<br/>业务代码拿到确定类型"]

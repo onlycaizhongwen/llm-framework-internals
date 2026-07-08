@@ -1,0 +1,13 @@
+flowchart TB
+    UI["调用 run_stream 或 run_stream_events<br/>页面或 CLI 希望边生成边消费"] --> Iter["Agent.iter 进入内部 graph"]
+    Iter --> MRN["ModelRequestNode.stream<br/>准备 request context"]
+    MRN --> CapWrap["root_capability.wrap_model_request<br/>middleware 可包裹请求"]
+    CapWrap --> Provider["provider model.request_stream<br/>OpenAI Anthropic Google 等各自返回增量"]
+    Provider --> Parts["ModelResponsePartsManager<br/>按 vendor id 维护 TextPart ToolCallPart ThinkingPart"]
+    Parts --> Start["PartStartEvent<br/>新 part 出现"]
+    Parts --> Delta["PartDeltaEvent<br/>已有 part 增量更新"]
+    Start --> AgentStream["AgentStream<br/>stream_text stream_output stream_events"]
+    Delta --> AgentStream
+    AgentStream --> FinalEvent["FinalResultEvent<br/>找到满足 output_type 的最终输出"]
+    FinalEvent --> Complete["on_complete<br/>补齐 tool returns message history usage"]
+    Complete --> Final["StreamedRunResult.get_output<br/>返回最终 typed output"]

@@ -1,0 +1,15 @@
+flowchart TB
+    Start["调用 agent.run 或 run_sync 或 run_stream<br/>传入 user_prompt deps model_settings usage_limits"] --> Iter["Agent.iter 创建一次 GraphRun<br/>准备模型 输出模式 工具集 消息历史"]
+    Iter --> UserNode["UserPromptNode<br/>组装 system prompt instructions user prompt<br/>为什么这么设计：提示词和依赖上下文在进入模型前统一固化"]
+    UserNode --> ModelNode["ModelRequestNode<br/>调用 Model.request 或 request_stream"]
+    ModelNode --> Params["ModelRequestParameters<br/>function_tools native_tools output_mode output_object allow_text_output<br/>为什么这么设计：把工具和输出策略作为模型请求参数传递"]
+    Params --> Adapter["具体模型适配器<br/>OpenAI Anthropic Google Bedrock 等"]
+    Adapter --> Response["ModelResponse<br/>text parts tool calls native tool calls usage"]
+    Response --> CallTools["CallToolsNode<br/>判断是最终输出 还是要执行工具"]
+    CallTools --> Final{"是否得到最终输出"}
+    Final -->|"是"| Validate["OutputSchema validate<br/>Pydantic 校验和 output_validator"]
+    Validate --> End["End FinalResult<br/>返回 output usage messages"]
+    Final -->|"否"| Execute["执行 function tools 或 toolsets<br/>收集 ToolReturnPart RetryPromptPart"]
+    Execute --> Retry{"需要重试或继续模型请求"}
+    Retry -->|"继续"| ModelNode
+    Retry -->|"达到限制或错误"| Error["UsageLimit 或 AgentRunError<br/>为什么这么设计：把不可靠模型输出约束在显式边界内"]

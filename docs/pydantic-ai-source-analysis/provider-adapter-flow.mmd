@@ -1,0 +1,12 @@
+flowchart LR
+    Agent["Agent"] --> Model["Model 抽象<br/>request request_stream prepare_request"]
+    Model --> Params["ModelRequestParameters<br/>工具 输出模式 原生能力"]
+    Model --> Profile["ModelProfile<br/>默认结构化输出模式 JSON schema transformer 原生工具能力"]
+    Model --> Provider["Provider 抽象<br/>提供 authenticated client"]
+    Provider --> Infer["infer_provider<br/>openai anthropic google bedrock gateway 等"]
+    Infer --> Client["Async SDK client<br/>API key base_url http client"]
+    Params --> Concrete["具体 Model<br/>OpenAIChatModel OpenAIResponsesModel AnthropicModel GoogleModel"]
+    Profile --> Concrete
+    Client --> Concrete
+    Concrete --> Wire["供应商 wire format<br/>messages tools response events"]
+    Wire --> Unified["统一 ModelResponse 和 StreamEvent<br/>为什么这么设计：上层 Agent 不关心各家 SDK 的差异"]
