@@ -1,0 +1,9 @@
+flowchart LR
+    App["产品入口<br/>Dify / n8n / 自研 Web / Hayhooks"] --> Haystack["Haystack Pipeline<br/>代码级 RAG / Agent orchestration"]
+    Haystack --> Store["DocumentStore<br/>Elasticsearch / Qdrant / Pinecone / Weaviate / InMemory"]
+    Haystack --> Model["Generator / Embedder<br/>OpenAI / HF / Azure / Bedrock / local models"]
+    Haystack --> Agent["Agent + Tools<br/>ToolInvoker、ComponentTool、PipelineTool"]
+    Agent --> LangGraph["可选 LangGraph<br/>更复杂的长期状态机和 checkpoint"]
+    Haystack --> Eval["Evaluators / Tracing / Snapshots<br/>生产调试与质量评估"]
+    App --> Govern["权限、用户、运营、审批<br/>由外层平台负责"]
+    Govern --> Haystack

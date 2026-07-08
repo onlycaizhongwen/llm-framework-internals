@@ -1,0 +1,17 @@
+flowchart TB
+    Files["文件 / 网页 / JSON / PDF / 多模态内容"] --> Converter["Converters<br/>TextFile、PDF、HTML、Markdown、Docx 等转 Document"]
+    Converter --> Cleaner["Preprocessors<br/>DocumentCleaner、DocumentSplitter、metadata 处理"]
+    Cleaner --> Embedder["DocumentEmbedder<br/>SentenceTransformers / OpenAI / HF / Azure 等"]
+    Embedder --> Writer["DocumentWriter<br/>写入 DocumentStore，处理 DuplicatePolicy"]
+    Writer --> Store["DocumentStore<br/>InMemory、Elasticsearch、Qdrant、Pinecone、Weaviate 等"]
+    Query["用户问题"] --> TextEmbedder["TextEmbedder<br/>生成 query embedding"]
+    Query --> BM25["BM25 Retriever<br/>关键词召回"]
+    TextEmbedder --> Vector["Embedding Retriever<br/>向量召回"]
+    Store --> BM25
+    Store --> Vector
+    BM25 --> Joiner["DocumentJoiner<br/>concat / merge / RRF / distribution fusion"]
+    Vector --> Joiner
+    Joiner --> Ranker["Rankers<br/>LostInTheMiddle、Similarity、LLM ranker"]
+    Ranker --> Prompt["PromptBuilder / ChatPromptBuilder<br/>把 documents 注入 prompt"]
+    Prompt --> Generator["Generator / ChatGenerator<br/>调用 LLM 生成答案"]
+    Generator --> Answer["AnswerBuilder / 输出结构<br/>返回 answer + source documents"]

@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dify 源码架构精读</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true }, sequence: { mirrorActors: false } });
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f9fc;
+      --panel: #ffffff;
+      --ink: #1f2937;
+      --muted: #5f6b7a;
+      --line: #dbe3ee;
+      --brand: #0e8f74;
+      --brand2: #2f66c8;
+      --soft: #eaf8f4;
+      --soft2: #edf3ff;
+      --warm: #fff7ed;
+      --code: #172033;
+      --codeink: #edf4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.74;
+    }
+    header {
+      background: linear-gradient(180deg, #ffffff 0%, #eaf8f4 100%);
+      border-bottom: 1px solid var(--line);
+      padding: 42px 24px 30px;
+    }
+    main, .hero { max-width: 1200px; margin: 0 auto; }
+    main { padding: 28px 20px 60px; }
+    h1 { margin: 0 0 12px; font-size: clamp(32px, 5vw, 54px); line-height: 1.12; letter-spacing: 0; }
+    h2 { margin: 38px 0 14px; font-size: 27px; border-left: 5px solid var(--brand); padding-left: 12px; }
+    h3 { margin: 24px 0 10px; font-size: 20px; }
+    p { margin: 10px 0; }
+    a { color: var(--brand2); }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 18px 0;
+    }
+    .lead { max-width: 980px; color: var(--muted); font-size: 18px; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .metric {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 112px;
+    }
+    .metric strong { display: block; color: var(--muted); font-size: 14px; }
+    .metric span { display: block; margin-top: 8px; font-weight: 800; font-size: 18px; }
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .toc a {
+      display: block;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      text-decoration: none;
+      color: var(--ink);
+    }
+    .note {
+      background: var(--soft);
+      border-left: 5px solid var(--brand);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    .warn {
+      background: var(--soft2);
+      border-left: 5px solid var(--brand2);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    .example {
+      background: var(--warm);
+      border-left: 5px solid #f59e0b;
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; vertical-align: top; text-align: left; }
+    th { background: #eaf8f4; color: #065f46; }
+    code {
+      background: #f3f6fb;
+      border: 1px solid #e3e9f3;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      background: var(--code);
+      color: var(--codeink);
+      border-radius: 8px;
+      padding: 14px;
+      overflow-x: auto;
+      line-height: 1.55;
+      font-size: 13px;
+    }
+    pre code { background: transparent; border: 0; color: inherit; padding: 0; }
+    .mermaid {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      margin: 16px 0;
+      overflow-x: auto;
+    }
+    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .card { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fbfdff; }
+    .card h3 { margin-top: 0; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    @media (max-width: 900px) {
+      .summary, .toc, .grid2 { grid-template-columns: 1fr; }
+      section { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>Dify 源码架构精读</h1>
+      <p class="lead">参考前面 LangChain、LangGraph、CrewAI、AutoGen、mem0、Zep、LlamaIndex、n8n 的分析方式：先讲架构，再讲主流程，然后展开 RAG、Agent、Plugin、前端事件和真实例子。本文以 HTML 阅读为主，配套 Markdown 与 Mermaid 图保存在同目录。</p>
+      <div class="summary">
+        <div class="metric"><strong>源码来源</strong><span>langgenius/dify main codeload 快照</span></div>
+        <div class="metric"><strong>版本证据</strong><span>api/web 均为 1.15.0</span></div>
+        <div class="metric"><strong>核心定位</strong><span>LLM 应用开发与运营平台</span></div>
+        <div class="metric"><strong>阅读主线</strong><span>Workflow + RAG + Agent + Plugin</span></div>
+      </div>
+      <div class="toc">
+        <a href="#summary">总体结论</a>
+        <a href="#architecture">最高层架构</a>
+        <a href="#run-flow">主运行流程</a>
+        <a href="#graph">Workflow Graph</a>
+        <a href="#rag">RAG Pipeline</a>
+        <a href="#agent">Agent v2</a>
+        <a href="#plugin">Plugin / Provider</a>
+        <a href="#example">真实例子</a>
+        <a href="#compare">对比与组合</a>
+        <a href="#limits">局限性</a>
+        <a href="#share">分享建议</a>
+        <a href="#route">精读路线</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="summary">
+      <h2>1. 总体结论</h2>
+      <p>Dify 的核心不是某一个 Agent loop，而是 <strong>可产品化的 LLM 应用运行平台</strong>。用户在 Web 控制台配置应用、工作流、知识库、模型和插件；Flask API 负责多租户、权限、配置、运行入口和 SSE；Celery/Redis 承担后台执行与事件流；<code>graphon</code> 承担 workflow graph runtime；RAG、Plugin、dify-agent 是被平台托管的专业子系统。</p>
+      <div class="note">一句话分享：LangGraph 解决“代码里复杂 Agent 状态机如何可靠运行”，n8n 解决“通用业务自动化如何可视化编排”，Dify 解决“企业如何把 LLM 应用、RAG、Agent、模型、插件、权限和观测封装成可配置、可发布、可运营的平台”。</div>
+      <ol>
+        <li>Monorepo 分层：<code>api</code> 是平台后端，<code>web</code> 是产品控制台，<code>dify-agent</code> 是 Agent v2 运行时。</li>
+        <li>App 运行主线：<code>WorkflowAppGenerator.generate()</code> 创建任务和队列，后台 worker 调 <code>WorkflowAppRunner.run()</code>，前台通过队列/SSE 接收事件。</li>
+        <li>Workflow graph：<code>Workflow.graph</code> JSON 被 <code>WorkflowGraphTopology</code> 和 <code>DifyNodeFactory</code> 转成 graphon runtime 中的节点对象。</li>
+        <li>RAG Pipeline：文档索引由 Celery 异步构建；查询由 <code>KnowledgeRetrievalNode</code> 和 <code>DatasetRetrieval</code> 完成多知识库检索、metadata filter、rerank 和上下文注入。</li>
+        <li>Agent v2：Workflow 的 Agent 节点调用 <code>dify-agent</code>，由 <code>RunScheduler</code>、<code>AgentRunRunner</code> 和 Agenton <code>Compositor</code> 管理层式运行、工具、知识、人审和 session snapshot。</li>
+      </ol>
+      <div class="warn">本次源码是 codeload main 快照，不是 git clone 固定提交。由于当前环境 GitHub Git TCP 与 API SHA 查询受限，未能取得精确 commit SHA；文档中只声明版本证据 <code>1.15.0</code>。</div>
+    </section>
+
+    <section id="architecture">
+      <h2>2. 最高层架构</h2>
+      <div class="mermaid">
+flowchart TB
+    User["用户 / 业务运营 / 开发者<br/>用浏览器配置 AI 应用、知识库和工作流"] --> Web["web：Next/React 控制台<br/>画布、应用配置、知识库、插件、模型供应商<br/>为什么：Dify 是产品平台，先服务可视化配置"]
+    Web --> API["api：Flask REST/SSE 后端<br/>App、Workflow、Dataset、Plugin、Model Provider<br/>为什么：统一承载多租户、权限、配置和运行入口"]
+    API --> DB["PostgreSQL / SQLAlchemy Models<br/>App、Workflow、Conversation、Dataset、Document、PluginInstallation<br/>为什么：应用配置和运行历史必须可审计、可恢复"]
+    API --> Redis["Redis<br/>队列事件、停止标记、缓存、Celery broker/result<br/>为什么：流式输出和异步任务需要进程间通信"]
+    API --> Worker["Celery workers<br/>Workflow 后台执行、文档索引、异步任务<br/>为什么：LLM/RAG/索引耗时，不能阻塞 Web 请求"]
+    API --> Graphon["graphon workflow runtime<br/>GraphRuntimeState、NodeFactory、NodeRunResult、PauseRequestedEvent<br/>为什么：把可视化图转成可恢复、可暂停的运行时"]
+    Graphon --> Nodes["Workflow Nodes<br/>LLM、Knowledge Retrieval、Tool、Agent、HTTP、Code、Human Input<br/>为什么：节点是业务能力的插件化边界"]
+    Nodes --> Model["Model Provider / Plugin daemon<br/>模型、工具、Agent 扩展、凭证治理<br/>为什么：模型和工具生态变化快，需要从核心平台外置"]
+    Nodes --> Rag["RAG 子系统<br/>DatasetRetrieval、IndexProcessor、Vector DB、Rerank<br/>为什么：知识库是平台级能力，不只是某个节点"]
+    Nodes --> Agent["dify-agent：FastAPI + Agenton compositor<br/>RunScheduler、AgentRunRunner、Layers、Ask Human<br/>为什么：Agent v2 需要独立运行时承载工具、知识和人审"]
+      </div>
+      <table>
+        <tr><th>主题</th><th>源码位置</th><th>说明</th></tr>
+        <tr><td>项目定位</td><td><code>sources/dify/README.md</code></td><td>README 说明 Dify 是 open-source LLM app development platform，组合 AI workflow、RAG pipeline、agent capabilities、model management、observability。</td></tr>
+        <tr><td>后端版本和依赖</td><td><code>sources/dify/api/pyproject.toml:1</code>、<code>:2</code>、<code>:16</code>、<code>:56</code></td><td>后端名为 <code>dify-api</code>，版本 <code>1.15.0</code>，依赖 Flask、Celery、Redis、graphon、dify-agent。</td></tr>
+        <tr><td>前端版本</td><td><code>sources/dify/web/package.json:1</code>、<code>:3</code></td><td>前端包名 <code>dify-web</code>，版本 <code>1.15.0</code>。</td></tr>
+        <tr><td>Workflow runtime</td><td><code>api/core/app/apps/workflow/app_runner.py:25</code>、<code>:70</code></td><td><code>WorkflowAppRunner</code> 引入 graphon，<code>run()</code> 构建并运行 workflow。</td></tr>
+        <tr><td>Node factory</td><td><code>api/core/workflow/node_factory.py:279</code>、<code>:377</code></td><td><code>DifyNodeFactory</code> 负责把 graph node config 解析为实际节点实例。</td></tr>
+        <tr><td>Agent runtime</td><td><code>dify-agent/.../run_scheduler.py:55</code>、<code>runner.py:111</code></td><td><code>RunScheduler</code> 和 <code>AgentRunRunner</code> 管理 agent run。</td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h2>3. Monorepo 分层</h2>
+      <table>
+        <tr><th>目录</th><th>职责</th><th>分享时怎么讲</th></tr>
+        <tr><td><code>api</code></td><td>Flask API、Celery、App/Workflow/RAG/Plugin/Model Provider、SQLAlchemy models、任务队列</td><td>Dify 的平台后端和运行控制面。</td></tr>
+        <tr><td><code>web</code></td><td>Next/React 控制台、workflow canvas、dataset/plugin/model UI、SSE 事件处理</td><td>Dify 的产品入口，用户主要通过它编排 AI 应用。</td></tr>
+        <tr><td><code>dify-agent</code></td><td>Agent v2 独立运行时，FastAPI/SSE、RunScheduler、Agenton compositor、layers</td><td>把复杂 Agent loop 从平台后端拆出去。</td></tr>
+        <tr><td><code>packages</code></td><td>前端 UI/contracts 等 monorepo 包</td><td>给 Web 和 API contract 复用的横向包。</td></tr>
+        <tr><td><code>sdks</code></td><td>API client SDK</td><td>把已发布的 Dify 应用给外部系统调用。</td></tr>
+        <tr><td><code>docker</code></td><td>Docker Compose、环境变量和部署配置</td><td>Dify 是可自部署平台，不只是源码库。</td></tr>
+      </table>
+      <p>设计含义：Dify 的分层是产品平台式的。<code>api</code> 负责业务资源和运行入口；<code>web</code> 负责低代码/可视化体验；<code>dify-agent</code> 专门承载 Agent v2；RAG 和 Plugin 作为平台能力被 workflow node 调用，而不是只属于某个 demo。</p>
+    </section>
+
+    <section id="run-flow">
+      <h2>4. 主流程一：一次 Workflow App 运行</h2>
+      <div class="mermaid">
+sequenceDiagram
+    participant Client as Web/API 调用方
+    participant Flask as Flask Controller / App Service
+    participant Gen as WorkflowAppGenerator
+    participant Queue as WorkflowAppQueueManager / Redis
+    participant Thread as 后台 worker thread
+    participant Runner as WorkflowAppRunner
+    participant Graph as graphon WorkflowEntry
+    participant Node as Workflow Node
+    participant SSE as SSE / blocking response
+
+    Client->>Flask: 提交 app/workflow 运行请求
+    Flask->>Gen: generate(application_generate_entity)
+    Gen->>Queue: 创建 task queue + task_id
+    Gen->>Thread: 启动 _generate_worker()
+    Gen->>SSE: _handle_response()<br/>监听队列事件并返回流式/阻塞响应
+    Thread->>Runner: runner.run()
+    Runner->>Graph: 构建 GraphRuntimeState、VariablePool、CommandChannel
+    Graph->>Node: 逐节点执行 LLM/RAG/Tool/Agent/Code/Human Input
+    Node-->>Graph: NodeRunResult / StreamCompletedEvent / PauseRequestedEvent
+    Graph-->>Runner: workflow event stream
+    Runner-->>Queue: publish 节点事件、文本片段、完成/失败
+    Queue-->>SSE: listen() 推送给前端或 API 调用方
+      </div>
+      <table>
+        <tr><th>源码证据</th><th>说明</th></tr>
+        <tr><td><code>app_generator.py:96</code> 到 <code>:257</code></td><td><code>generate()</code> 构建 <code>WorkflowAppGenerateEntity</code>，准备应用配置、trace、extras，然后进入 <code>_generate()</code>。</td></tr>
+        <tr><td><code>app_generator.py:316</code> 到 <code>:397</code></td><td><code>_generate()</code> 创建 queue manager，启动 <code>_generate_worker</code>，并调用 <code>_handle_response()</code>。</td></tr>
+        <tr><td><code>app_generator.py:582</code> 到 <code>:646</code></td><td><code>_generate_worker()</code> 重新加载 workflow，构建 runner，并执行 <code>runner.run()</code>。</td></tr>
+        <tr><td><code>app_runner.py:70</code> 到 <code>:200</code></td><td><code>WorkflowAppRunner.run()</code> 创建 graph runtime state、变量池、command channel 和 workflow entry，再运行 <code>workflow_entry.run()</code>。</td></tr>
+      </table>
+      <div class="grid2">
+        <div class="card"><h3>为什么 Generator 和 Runner 分开</h3><p>Generator 面向请求生命周期：鉴权、配置、trace、队列、响应；Runner 面向 workflow runtime：变量池、节点执行、事件流。这样 API 层和图执行层不会缠在一起。</p></div>
+        <div class="card"><h3>为什么要后台 worker + SSE</h3><p>LLM、RAG、工具调用时间不可控，前端需要实时看到节点进度、文本片段和失败原因；阻塞 HTTP 不适合产品体验。</p></div>
+      </div>
+    </section>
+
+    <section id="graph">
+      <h2>5. 主流程二：Workflow Graph 如何变成可执行节点</h2>
+      <div class="mermaid">
+flowchart LR
+    Draft["前端画布 Draft Graph<br/>nodes + edges + features + variables"] --> Persist["syncWorkflowDraft()<br/>保存 Workflow.graph JSON"]
+    Persist --> Topology["WorkflowGraphTopology<br/>读取 nodes/edges，判断上下游关系"]
+    Topology --> Factory["DifyNodeFactory<br/>按 node type/version 解析节点类<br/>注入模型、记忆、RAG、工具、代码执行器、人审回调"]
+    Factory --> Runtime["graphon GraphRuntimeState<br/>变量池、文件、conversation、execution id"]
+    Runtime --> Execute["Graph engine 执行<br/>节点事件 + 状态推进"]
+    Execute --> Pause{"需要暂停？"}
+    Pause -->|"Human Input / Scheduling"| Save["保存 session snapshot / pause reason<br/>等待 resume"]
+    Save --> Resume["WorkflowAppGenerator.resume()<br/>带 resume 数据继续执行"]
+    Pause -->|"否"| Continue["继续下游节点"]
+    Continue --> Result["NodeRunResult / Workflow finished<br/>写运行记录、事件、观测数据"]
+      </div>
+      <p>关键证据：<code>web/service/workflow.ts:18</code> 到 <code>:29</code> 说明前端同步 draft graph；<code>use-workflow-run.ts:196</code> 到 <code>:319</code> 注册运行和事件处理；<code>node_factory.py:113</code> 到 <code>:145</code> 注册节点；<code>node_factory.py:377</code> 到 <code>:660</code> 创建节点并注入模型、记忆、RAG、工具、代码执行器和人审回调。</p>
+      <pre><code class="language-python">class DifyNodeFactory(NodeFactory):
+    def create_node(self, node_config: dict[str, Any] | NodeConfigDict) -> Node:
+        node_data = NodeConfigDictAdapter.validate_python(node_config).data
+        node_class = self._resolve_node_class(
+            node_type=node_data.type,
+            node_version=str(node_data.version),
+        )
+        # 后续按节点类型注入 model、memory、agent backend、tool runtime 等依赖</code></pre>
+      <p>这个片段能证明一个核心设计思想：画布保存的是声明式 graph config，真正运行时由服务端按租户、会话和节点类型做依赖注入。这比把模型凭证、工具 runtime、RAG loader 都塞进前端配置安全得多，也更容易兼容旧版本节点。</p>
+    </section>
+
+    <section id="rag">
+      <h2>6. RAG Pipeline：知识库不是一个简单 Retriever</h2>
+      <div class="mermaid">
+flowchart TB
+    Upload["上传文档 / 外部知识源<br/>DatasetDocument + Segment"] --> IndexTask["Celery dataset queue<br/>deal_dataset_vector_index_task"]
+    IndexTask --> Processor["IndexProcessorFactory<br/>load / clean / save vector index"]
+    Processor --> Segment["DocumentSegment<br/>文本、向量、关键词、metadata"]
+    Segment --> Store["Vector DB / full-text index<br/>语义检索、全文检索、混合检索"]
+    Query["用户问题 / 工作流变量 / 附件"] --> KR["KnowledgeRetrievalNode<br/>从 variable_pool 取 query 和 metadata 条件"]
+    KR --> DatasetRetrieval["DatasetRetrieval.knowledge_retrieval()<br/>single/multiple dataset retrieval"]
+    DatasetRetrieval --> Filter["metadata filtering<br/>manual 或 automatic LLM 生成过滤条件"]
+    Filter --> Store
+    Store --> Merge["合并多知识库结果<br/>score threshold、top_k、source metadata"]
+    Merge --> Rerank["Rerank / weighted score<br/>reranking_model 或 vector/keyword 权重"]
+    Rerank --> Context["返回 Source 列表<br/>给 LLM 节点、Agent 或最终回答注入上下文"]
+      </div>
+      <table>
+        <tr><th>源码证据</th><th>说明</th></tr>
+        <tr><td><code>deal_dataset_vector_index_task.py:20</code> 到 <code>:201</code></td><td>异步处理 add/update/clean/save vector index，并更新 <code>indexing_status</code>。</td></tr>
+        <tr><td><code>knowledge_retrieval_node.py:100</code> 到 <code>:173</code></td><td>从变量池取 query，调用检索器，返回 <code>NodeRunResult</code> 和 token/cost metadata。</td></tr>
+        <tr><td><code>knowledge_retrieval_node.py:184</code> 到 <code>:282</code></td><td>根据 single/multiple retrieval 组装 top_k、score_threshold、reranking_model、metadata filtering、vector/keyword 权重。</td></tr>
+        <tr><td><code>dataset_retrieval.py:119</code> 到 <code>:337</code></td><td>集中处理 metadata filtering、多知识库检索、source metadata 和排序。</td></tr>
+      </table>
+      <pre><code class="language-python">retrieval_resource_list = self._rag_retrieval.knowledge_retrieval(
+    query=query,
+    dataset_ids=node_data.dataset_ids,
+    retrieval_mode=DatasetRetrieveConfigEntity.RetrieveStrategy.MULTIPLE.value,
+    top_k=node_data.multiple_retrieval_config.top_k,
+    score_threshold=node_data.multiple_retrieval_config.score_threshold,
+    reranking_model=reranking_model,
+    weights=weights,
+    metadata_filtering_conditions=resolved_metadata_conditions,
+)</code></pre>
+      <p>这段调用可以作为分享时的证据：Dify 的 RAG 是产品级 pipeline。它不仅做向量相似度，还要处理多知识库、阈值、rerank、metadata、token/费用统计和 source 展示。</p>
+    </section>
+
+    <section id="agent">
+      <h2>7. Agent v2：为什么拆出 dify-agent</h2>
+      <div class="mermaid">
+sequenceDiagram
+    participant WF as Workflow Agent Node
+    participant API as Dify API
+    participant Agent as dify-agent server
+    participant Scheduler as RunScheduler
+    participant Runner as AgentRunRunner
+    participant Comp as Agenton Compositor
+    participant Layers as Layers: config/knowledge/tools/ask_human/output
+    participant Plugin as Plugin daemon / tools / model providers
+
+    WF->>API: 构造 runtime request
+    API->>Agent: create_run(request)
+    Agent->>Scheduler: create_run()
+    Scheduler->>Runner: asyncio task 执行 run
+    Runner->>Comp: build_pydantic_ai_compositor()
+    Comp->>Layers: enter layers in order
+    Layers->>Plugin: 调模型、工具、知识、外部能力
+    Plugin-->>Layers: tool result / model stream
+    Layers-->>Comp: output / deferred tool call / human input required
+    Comp-->>Runner: run outcome + session snapshot
+    Runner-->>Agent: persist events
+    Agent-->>WF: stream internal events
+    WF-->>WF: 转成 graphon 事件<br/>StreamCompletedEvent / PauseRequestedEvent
+      </div>
+      <p>源码证据：<code>agent_node.py:75</code> 定义 <code>DifyAgentNode</code>；<code>agent_node.py:129</code> 到 <code>:454</code> 的 <code>_run()</code> 会构造 agent runtime request、调用 agent backend、消费 event stream，并把人审/调度暂停转成 <code>PauseRequestedEvent</code>。<code>dify-agent/.../run_scheduler.py:55</code> 到 <code>:151</code> 管理 run 记录和 asyncio task；<code>runner.py:111</code> 到 <code>:199</code> 构建 compositor 并进入 agent layers。</p>
+      <pre><code class="language-python">create_response = self._agent_backend_client.create_run(runtime_request.request)
+for internal_event in self._consume_event_stream(create_response.run_id):
+    if isinstance(internal_event, AgentBackendDeferredToolCallInternalEvent):
+        yield PauseRequestedEvent(reason=self._to_graph_pause_reason(pause_reason))
+    # 其他 backend event 被翻译成 graphon 可理解的 stream / completed event</code></pre>
+      <p>设计解释：Agent loop 涉及 streaming、工具、知识、人审、session snapshot、异步调度，复杂度高于普通 workflow node。拆出 <code>dify-agent</code> 后，Flask 后端可以继续承担平台控制面，Agent 运行时则专注执行、组合 layer 和保存 run snapshot。</p>
+    </section>
+
+    <section id="plugin">
+      <h2>8. Plugin / Model Provider：生态变化快，所以不能写死</h2>
+      <table>
+        <tr><th>源码证据</th><th>说明</th></tr>
+        <tr><td><code>api/core/plugin/plugin_service.py:81</code></td><td>定义 <code>PluginService</code>。</td></tr>
+        <tr><td><code>plugin_service.py:451</code>、<code>:464</code></td><td>有插件模型供应商缓存失效和 <code>fetch_plugin_model_providers()</code>。</td></tr>
+        <tr><td><code>plugin_service.py:600</code> 到 <code>:632</code></td><td>检查 marketplace only、official only、official and partners、none、all 等插件安装权限。</td></tr>
+        <tr><td><code>api/core/plugin/impl/model.py</code>、<code>tool.py</code>、<code>agent.py</code></td><td>模型、工具、Agent 相关插件实现被拆到不同适配层。</td></tr>
+      </table>
+      <p>核心设计思想：模型供应商和工具生态更新太快，Dify 不能把所有模型、工具、Agent 扩展硬编码在核心后端里。PluginService 统一处理安装、卸载、权限、缓存失效和供应商发现，底层再按 model/tool/agent 分别适配。</p>
+    </section>
+
+    <section>
+      <h2>9. 前端运行体验：画布不是静态配置页</h2>
+      <p>前端证据很清楚：<code>web/service/workflow.ts:18</code> 到 <code>:49</code> 提供 fetch/sync draft、single node run、fetch published workflow、stop workflow run；<code>:133</code> 到 <code>:149</code> 支持 human input form。<code>use-workflow-run.ts:196</code> 到 <code>:319</code> 的 <code>handleRun()</code> 会解析运行 URL、构建请求体、校验请求，并绑定 workflow started/finished/node started/node finished/human input/agent log/text chunk 等事件处理器。</p>
+      <p>所以 Dify 前端不只是保存配置。它要在运行中实时渲染节点状态、文本增量、Agent log、人审表单、iteration/loop 进度和变量 inspect。后端事件命名和前端 handler 粒度都比较细，这是产品体验倒逼架构的典型例子。</p>
+    </section>
+
+    <section id="example">
+      <h2>10. 真实例子：企业客服知识库 + 工单处理 + 人审升级</h2>
+      <div class="example">
+        <p>假设一家 SaaS 公司要做“售后客服助手”：运营上传产品手册、FAQ、退费规则，搭建 Workflow：Start -> Knowledge Retrieval -> LLM -> 条件判断 -> HTTP Request 创建工单 -> Agent 节点补查订单 -> Human Input 人审 -> End。</p>
+      </div>
+      <ol>
+        <li>运营在 Dify Web 上传文档，Celery <code>deal_dataset_vector_index_task</code> 异步切分文档、写向量索引，索引状态显示在控制台。</li>
+        <li>用户从官网聊天窗口提问：“企业版能不能退费？我这个订单已经过了 20 天。”</li>
+        <li><code>WorkflowAppGenerator.generate()</code> 创建 task，前端通过 SSE 看到每个节点运行。</li>
+        <li>Knowledge Retrieval 节点按问题和 metadata 找到“退费规则”和“企业版 SLA”片段。</li>
+        <li>LLM 节点生成解释，但条件节点发现“涉及退款 + 超过规则边界”，进入 Agent 节点。</li>
+        <li>Agent 通过插件工具查订单状态，如果需要主管确认，<code>DifyAgentNode</code> 产生 <code>PauseRequestedEvent</code>，前端显示 Human Input 表单。</li>
+        <li>主管审核后 resume，workflow 继续创建工单并给用户返回结构化答复。</li>
+      </ol>
+      <p>这个例子能说明 Dify 的设计价值：RAG 是平台知识能力，Workflow 负责把知识、模型、HTTP、Agent、人审串起来，Agent 处理不确定任务，但被 workflow 的可视化边界和暂停恢复机制约束。</p>
+    </section>
+
+    <section id="compare">
+      <h2>11. 对比分析与组合方式</h2>
+      <table>
+        <tr><th>维度</th><th>Dify</th><th>LangGraph</th><th>n8n</th><th>LangChain</th><th>LlamaIndex</th></tr>
+        <tr><td>核心定位</td><td>LLM 应用开发与运营平台</td><td>代码级 Agent 状态图运行时</td><td>通用自动化 workflow 平台</td><td>LLM 应用组件库/Agent 抽象</td><td>RAG 数据框架</td></tr>
+        <tr><td>用户入口</td><td>Web 控制台 + API 发布</td><td>Python/JS 代码</td><td>可视化画布 + 节点生态</td><td>代码</td><td>代码</td></tr>
+        <tr><td>图执行</td><td>graphon + Dify NodeFactory</td><td>StateGraph/Pregel/checkpoint</td><td>WorkflowExecute DAG</td><td>runnable/chain/agent</td><td>workflow/query engine</td></tr>
+        <tr><td>RAG</td><td>Dataset、索引任务、检索节点、rerank、metadata</td><td>通常自行集成</td><td>通过节点/外部服务集成</td><td>retriever 组件</td><td>强项，数据 ingestion/index/retriever</td></tr>
+        <tr><td>Agent</td><td>Agent v2 + dify-agent + workflow pause</td><td>强项，状态机和人类中断</td><td>AI 节点与自动化流程</td><td>Agent/Tool 抽象</td><td>AgentWorkflow 辅助</td></tr>
+        <tr><td>生产平台能力</td><td>强：多租户、权限、插件、观测、API 发布</td><td>需要自己搭平台</td><td>强：自动化、凭证、触发器、队列</td><td>需要自己搭平台</td><td>需要自己搭平台</td></tr>
+      </table>
+      <h3>Dify + LangGraph 组合图</h3>
+      <div class="mermaid">
+flowchart LR
+    Dify["Dify<br/>产品化入口：应用、权限、知识库、插件、模型管理、观测"] --> API["HTTP / Tool / Workflow Node"]
+    API --> LangGraph["LangGraph 服务<br/>代码级状态机、复杂 Agent 状态、checkpoint、人为中断"]
+    LangGraph --> Tools["企业内部工具<br/>CRM、工单、订单、风控、数据库"]
+    Tools --> LangGraph
+    LangGraph --> Dify
+    Dify --> Human["Dify Human Input / 审批节点<br/>面向运营人员的人审界面"]
+    Dify --> Rag["Dify Dataset / RAG<br/>知识库配置和检索治理"]
+    Rag --> LangGraph
+    LangGraph --> Audit["返回结构化结果<br/>Dify 保存会话、运行记录、观测与分享入口"]
+      </div>
+      <p>组合建议：Dify 放在产品化入口，LangGraph 放在复杂 Agent 内核。通过 HTTP 节点、Tool 节点或自定义插件连接。不要把所有复杂状态机都塞进 Dify 画布；一旦流程需要大量代码状态和精细测试，交给 LangGraph 服务更清晰。</p>
+    </section>
+
+    <section id="limits">
+      <h2>12. 局限性与阅读注意事项</h2>
+      <table>
+        <tr><th>局限 / 风险</th><th>说明</th><th>建议</th></tr>
+        <tr><td>源码体量大</td><td>Dify 是产品平台，源码包含 API、Web、Agent、RAG、Plugin、部署、迁移。</td><td>按“运行主线 + 子系统”读，不按文件顺序读。</td></tr>
+        <tr><td>graphon 是外部运行时</td><td>当前 Dify workflow 明显依赖 graphon，很多执行细节在依赖包内。</td><td>重点看适配层：<code>WorkflowAppRunner</code>、<code>DifyNodeFactory</code>、workflow nodes。</td></tr>
+        <tr><td>画布不是万能代码编辑器</td><td>超复杂状态机在画布上可能难测试、难 code review。</td><td>复杂 Agent 内核可用 LangGraph，Dify 负责产品入口和治理。</td></tr>
+        <tr><td>插件生态带来治理成本</td><td>模型和工具插件灵活，但引入权限、来源、版本、缓存和凭证清理问题。</td><td>企业部署要明确插件安装范围和供应商治理策略。</td></tr>
+        <tr><td>本次源码为 codeload 快照</td><td>未能取得 commit SHA。</td><td>README 中注明版本证据，不把它当作固定 commit。</td></tr>
+      </table>
+    </section>
+
+    <section id="share">
+      <h2>13. 分享叙述建议</h2>
+      <ol>
+        <li>为什么 Dify 不是 LangChain：它要把 LLM 应用变成可配置、可发布、可运营的产品。</li>
+        <li>一次请求怎么跑：Web/API -> Generator -> Queue/SSE -> Runner -> graphon -> Node -> 事件返回。</li>
+        <li>工作流为什么能扩展：Graph JSON + NodeFactory + node type/version + 运行依赖注入。</li>
+        <li>RAG 为什么不是简单向量检索：索引、metadata、外部知识源、多知识库、rerank、source metadata。</li>
+        <li>Agent v2 为什么拆出去：Agent loop 需要异步、层式能力、人审、session snapshot，复杂度独立于普通 workflow。</li>
+        <li>和 LangGraph/n8n 的关系：Dify 是 LLM 产品平台，LangGraph 是代码级 Agent 状态机，n8n 是通用自动化平台。</li>
+      </ol>
+    </section>
+
+    <section id="route">
+      <h2>14. 精读路线</h2>
+      <ol>
+        <li><code>sources/dify/README.md</code>：先确认产品定位。</li>
+        <li><code>sources/dify/api/app.py</code>、<code>api/app_factory.py</code>：看 Flask/Celery 后端启动。</li>
+        <li><code>api/core/app/apps/workflow/app_generator.py</code>：看一次 workflow app 请求怎么进入运行。</li>
+        <li><code>api/core/app/apps/workflow/app_runner.py</code>：看 graphon runtime 如何被构建。</li>
+        <li><code>api/core/workflow/node_factory.py</code>：看节点类型如何解析、依赖如何注入。</li>
+        <li><code>knowledge_retrieval_node.py</code> 与 <code>dataset_retrieval.py</code>：看 RAG 查询主线。</li>
+        <li><code>api/tasks/deal_dataset_vector_index_task.py</code>：看知识库索引异步任务。</li>
+        <li><code>agent_v2/agent_node.py</code>：看 Agent 节点如何桥接 dify-agent。</li>
+        <li><code>dify-agent/src/dify_agent/runtime/run_scheduler.py</code>、<code>runner.py</code>、<code>agenton/compositor/core.py</code>：看 Agent v2 运行时。</li>
+        <li><code>api/core/plugin/plugin_service.py</code>：看插件和模型供应商治理。</li>
+        <li><code>web/service/workflow.ts</code>、<code>use-workflow-run.ts</code>：看前端画布运行和事件处理。</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

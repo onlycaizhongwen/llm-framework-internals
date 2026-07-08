@@ -1,0 +1,11 @@
+flowchart TB
+    User["Python 开发者 / RAG 工程师<br/>用代码搭生产级 RAG 与 Agent"] --> API["haystack public API<br/>Pipeline、AsyncPipeline、component、Document、ChatMessage<br/>为什么：Haystack 是代码优先框架，不是可视化平台"]
+    API --> Core["core/pipeline + core/component<br/>组件注册、socket 类型、graph、连接校验、运行调度<br/>为什么：把 RAG/Agent 拆成可测试、可序列化的显式组件图"]
+    Core --> Components["components/*<br/>converters、preprocessors、embedders、retrievers、rankers、builders、generators、routers、joiners、writers、agents、tools"]
+    Components --> Stores["document_stores/*<br/>InMemoryDocumentStore + 外部集成文档存储<br/>为什么：RAG 的索引和检索后端要可替换"]
+    Components --> Models["generators / embedders<br/>OpenAI、HF、SentenceTransformers、Azure、Bedrock 等<br/>为什么：模型供应商变化快，必须组件化"]
+    Components --> Agent["Agent + ToolInvoker + Tools<br/>工具调用循环、state_schema、HITL、breakpoint<br/>为什么：Agent 是 Pipeline 中的一个可组合组件"]
+    Core --> Serialize["serialization + marshal/yaml<br/>to_dict/from_dict、YAML dump/load<br/>为什么：Pipeline 要可保存、部署、复现"]
+    Core --> Debug["breakpoints + snapshots<br/>PipelineSnapshot、AgentBreakpoint、ToolBreakpoint<br/>为什么：生产 RAG/Agent 需要调试和恢复现场"]
+    Core --> Trace["tracing/*<br/>Tracer、Span、Logging/OpenTelemetry/Langfuse 等扩展<br/>为什么：生产系统需要观测组件级耗时和内容流"]
+    API --> Hayhooks["Hayhooks / 外部服务层<br/>REST API、MCP server、OpenAI-compatible endpoint<br/>为什么：核心库保持 Python orchestration，服务化放到外围"]

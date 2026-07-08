@@ -1,0 +1,11 @@
+flowchart LR
+    Root["FlowAgent<br/>Sequential / Parallel / Routing / Loop"] --> Builder["FlowGraphBuilder<br/>按 strategyType 选择构图策略"]
+    Builder --> Seq["SequentialGraphBuildingStrategy<br/>子 Agent 串行执行"]
+    Builder --> Par["ParallelGraphBuildingStrategy<br/>子 Agent 并行执行后聚合"]
+    Builder --> Routing["RoutingGraphBuildingStrategy / LlmRoutingAgent<br/>按条件或 LLM 判断选择子 Agent"]
+    Builder --> Loop["LoopGraphBuildingStrategy<br/>按次数、条件或数组循环执行"]
+    Seq --> Graph["StateGraph<br/>子 Agent 通过 asNode() 变成 SubGraph Node"]
+    Par --> Graph
+    Routing --> Graph
+    Loop --> Graph
+    Graph --> Compile["CompiledGraph<br/>统一使用 checkpoint、stream、state merge"]

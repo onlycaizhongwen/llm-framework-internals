@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant Client as Client / SDK
+    participant Router as FastAPI agents router
+    participant Server as SyncServer
+    participant Stream as StreamingService
+    participant Agent as Agent.step / inner_step
+    participant LLM as LLMClient
+    participant Tools as ToolExecutionManager
+    participant DB as Message / Step / Run storage
+    Client->>Router: POST /v1/agents/{id}/messages
+    Router->>Server: actor + request validation
+    Server->>Stream: create_agent_stream 或同步执行
+    Stream->>DB: create Run<br/>为什么：支持异步、取消和恢复观察
+    Stream->>Agent: 输入 MessageCreate 列表
+    Agent->>DB: 读取 in_context_messages + AgentState
+    Agent->>LLM: build_request_data + request_async<br/>带 tools、memory、system prompt
+    LLM-->>Agent: assistant message 或 tool call
+    Agent->>Tools: 执行 tool call<br/>为什么：send_message/记忆/文件/MCP 都统一成工具
+    Tools-->>Agent: ToolExecutionResult
+    Agent->>DB: 持久化 assistant/tool messages、step status
+    Agent-->>Stream: LettaResponse / SSE chunks
+    Stream-->>Client: messages / stream / run status
+    Note over Agent: 如果 token 接近上下文窗口，触发 summarizer；如果 tool_rules 限制下一步，则约束可调用工具。

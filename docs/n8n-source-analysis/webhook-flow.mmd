@@ -1,0 +1,13 @@
+flowchart TD
+    A["用户激活 workflow"] --> B["ActiveWorkflowManager.add<br/>判断 workflow 是否有 trigger/webhook"]
+    B --> C{"节点是否声明 webhooks?"}
+    C -->|"是"| D["WebhookService.getNodeWebhooks<br/>从 node description 生成 webhook data"]
+    D --> E["WebhookService.storeWebhook<br/>写 webhook_entity<br/>为什么：webhook 不需要一直占用内存，但要能被 HTTP 查到"]
+    E --> F["createWebhookIfNotExists<br/>调用节点 checkExists/create 等方法<br/>为什么：有些外部服务要注册回调地址"]
+    C -->|"否，非 webhook trigger"| G["ActiveWorkflowTriggers.add<br/>注册 cron / poll / trigger listener<br/>为什么：这类触发器要在进程内保持运行"]
+    H["外部 HTTP 请求"] --> I["WebhookRequestHandler"]
+    I --> J["WebhookService.findWebhook<br/>先查静态 cache/DB，再查动态 path"]
+    J --> K["WebhookManager.executeWebhook"]
+    K --> L["WebhookService.runWebhook<br/>调用节点 webhook(context)"]
+    L --> M["WorkflowRunner.run<br/>把 webhook 输入转成一次 execution"]
+    M --> N["WorkflowExecute 执行后续节点"]

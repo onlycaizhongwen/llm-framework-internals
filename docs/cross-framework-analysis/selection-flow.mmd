@@ -1,0 +1,14 @@
+flowchart TB
+    Start["我要做一个 LLM / Agent 项目<br/>先问：用户入口和复杂度在哪里？"]
+    Start --> Product{"需要低代码配置、权限、发布、运营界面？"}
+    Product -->|"LLM 应用为主"| Dify["优先 Dify<br/>适合客服助手、知识库问答、内部 AI 应用、可发布 API"]
+    Product -->|"业务自动化为主"| N8N["优先 n8n<br/>适合 SaaS 串联、Webhook、审批、定时任务、企业流程自动化"]
+    Product -->|"否，主要写代码"| Code{"核心难点是什么？"}
+    Code -->|"复杂状态机 / 长任务 / 可恢复 Agent"| LangGraph["优先 LangGraph<br/>状态图、checkpoint、人类中断、可测试分支"]
+    Code -->|"Java / Spring Boot 企业 Agent"| SpringAIAlibaba["优先 Spring AI Alibaba<br/>Graph Core、ReactAgent、FlowAgent、Nacos、A2A、MCP"]
+    Code -->|"多 Agent 对话协作"| AutoCrew["AutoGen 或 CrewAI<br/>AutoGen 偏消息运行时，CrewAI 偏角色/任务/流程"]
+    Code -->|"RAG 数据接入 / 索引工程"| Llama["优先 LlamaIndex<br/>ingestion、index、retriever、query engine"]
+    Code -->|"生产级可调试 RAG Pipeline"| Haystack["优先 Haystack<br/>Component Pipeline、typed sockets、Hybrid RAG、snapshot/tracing"]
+    Code -->|"模型/工具生态适配"| LangChain["优先 LangChain<br/>provider adapter、tool、middleware、Runnable"]
+    Code -->|"长期记忆 / 用户画像"| Memory["mem0 / Zep / Graphiti / Letta<br/>按记忆形态选择"]
+    Code -->|"上下文成本与代理网关"| Headroom["Headroom<br/>压缩上下文、代理网关、MCP/CCR 适配"]

@@ -1,0 +1,11 @@
+flowchart LR
+    Draft["前端画布 Draft Graph<br/>nodes + edges + features + variables"] --> Persist["syncWorkflowDraft()<br/>保存 Workflow.graph JSON"]
+    Persist --> Topology["WorkflowGraphTopology<br/>读取 nodes/edges，判断上下游关系"]
+    Topology --> Factory["DifyNodeFactory<br/>按 node type/version 解析节点类<br/>注入模型、记忆、RAG、工具、代码执行器、人审回调"]
+    Factory --> Runtime["graphon GraphRuntimeState<br/>变量池、文件、conversation、execution id"]
+    Runtime --> Execute["Graph engine 执行<br/>节点事件 + 状态推进"]
+    Execute --> Pause{"需要暂停？"}
+    Pause -->|"Human Input / Scheduling"| Save["保存 session snapshot / pause reason<br/>等待 resume"]
+    Save --> Resume["WorkflowAppGenerator.resume()<br/>带 resume 数据继续执行"]
+    Pause -->|"否"| Continue["继续下游节点"]
+    Continue --> Result["NodeRunResult / Workflow finished<br/>写运行记录、事件、观测数据"]

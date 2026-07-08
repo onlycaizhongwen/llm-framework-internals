@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>n8n 源码架构精读</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true }, sequence: { mirrorActors: false } });
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --ink: #202533;
+      --muted: #5f6878;
+      --line: #dde4ee;
+      --brand: #d94f2b;
+      --brand2: #1f6f8b;
+      --soft: #fff0eb;
+      --soft2: #eaf6fb;
+      --code: #172033;
+      --codeink: #edf4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.72;
+    }
+    header {
+      background: linear-gradient(180deg, #ffffff 0%, #fff2ec 100%);
+      border-bottom: 1px solid var(--line);
+      padding: 42px 24px 30px;
+    }
+    main, .hero { max-width: 1180px; margin: 0 auto; }
+    main { padding: 28px 20px 58px; }
+    h1 { margin: 0 0 12px; font-size: clamp(30px, 5vw, 52px); line-height: 1.12; letter-spacing: 0; }
+    h2 { margin: 36px 0 14px; font-size: 26px; border-left: 5px solid var(--brand); padding-left: 12px; }
+    h3 { margin: 24px 0 10px; font-size: 20px; }
+    p { margin: 10px 0; }
+    a { color: var(--brand2); }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 18px 0;
+    }
+    .lead { max-width: 960px; color: var(--muted); font-size: 18px; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .metric {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 108px;
+    }
+    .metric strong { display: block; color: var(--muted); font-size: 14px; }
+    .metric span { display: block; margin-top: 8px; font-weight: 700; font-size: 18px; }
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .toc a {
+      display: block;
+      background: #f7f9fc;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      text-decoration: none;
+      color: var(--ink);
+    }
+    .note {
+      background: var(--soft);
+      border-left: 5px solid var(--brand);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    .warn {
+      background: var(--soft2);
+      border-left: 5px solid var(--brand2);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: #fff4ef; color: #7c2d12; }
+    code {
+      background: #f3f6fb;
+      border: 1px solid #e3e9f3;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      background: var(--code);
+      color: var(--codeink);
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      line-height: 1.55;
+    }
+    pre code { background: transparent; border: 0; padding: 0; color: inherit; }
+    .mermaid {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 14px 0;
+      overflow-x: auto;
+    }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    .card {
+      background: #fbfcff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .card strong { display: block; color: var(--brand); margin-bottom: 6px; }
+    .pill {
+      display: inline-block;
+      background: #fff4ef;
+      color: #b13b1f;
+      border: 1px solid #f3c6b8;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+    @media (max-width: 860px) {
+      .summary, .toc { grid-template-columns: 1fr; }
+      section { padding: 18px; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <div class="pill">LLM Framework Internals / n8n</div>
+      <h1>n8n 源码架构精读</h1>
+      <p class="lead">从可视化工作流运行时平台入手，拆解 n8n 如何把前端画布、workflow JSON、节点生态、凭证、webhook、queue worker 和执行引擎组合成可运维自动化系统。</p>
+      <div class="summary">
+        <div class="metric"><strong>源码版本</strong><span>b000bbd...</span></div>
+        <div class="metric"><strong>包版本</strong><span>n8n 2.30.0</span></div>
+        <div class="metric"><strong>核心定位</strong><span>Workflow Automation Platform</span></div>
+        <div class="metric"><strong>阅读重点</strong><span>WorkflowExecute + Webhook + Queue</span></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>阅读导航</h2>
+      <p>建议按“定位 -> 架构 -> workflow 模型 -> 节点契约 -> 执行流程 -> webhook -> queue -> AI/权限/安全/执行历史深挖 -> 真实例子 -> 对比”的顺序看。Markdown 底稿见 <a href="./index.md">index.md</a>，图源码见同目录 <code>.mmd</code> 文件。</p>
+      <div class="toc">
+        <a href="#conclusion">总体结论</a>
+        <a href="#architecture">最高层架构</a>
+        <a href="#packages">Monorepo 分层</a>
+        <a href="#workflow">Workflow 模型</a>
+        <a href="#node">Node contract</a>
+        <a href="#execution">执行流程</a>
+        <a href="#webhook">Webhook</a>
+        <a href="#queue">Queue / Worker</a>
+        <a href="#loader">节点和凭证加载</a>
+        <a href="#patterns">设计思想</a>
+        <a href="#ai-langchain">AI / LangChain</a>
+        <a href="#permission">权限和凭证</a>
+        <a href="#security">表达式和 Code 安全</a>
+        <a href="#execution-history">执行历史和恢复</a>
+        <a href="#example">真实例子</a>
+        <a href="#scenarios">应用场景</a>
+        <a href="#compare">框架对比</a>
+        <a href="#limits">局限性</a>
+        <a href="#share">分享建议</a>
+      </div>
+    </section>
+
+    <section id="conclusion">
+      <h2>1. 总体结论</h2>
+      <p>n8n 的核心是 <strong>可视化工作流运行时平台</strong>：用户在前端画布上编排节点，后端把 workflow JSON 持久化，激活时注册 webhook/trigger/poller，执行时由 <code>WorkflowRunner</code> 创建 execution，再由 <code>WorkflowExecute</code> 按节点连接图推进每个节点。</p>
+      <div class="note">
+        <strong>一句话分享：</strong>LangGraph 解决“代码里的状态图怎么可靠运行”，n8n 解决“业务用户和工程师如何在可视化画布上把 SaaS、数据库、HTTP、代码、AI Agent、人工审批和定时/事件触发串成可运维自动化流程”。
+      </div>
+      <table>
+        <tr><th>主线</th><th>为什么值得讲</th></tr>
+        <tr><td>Monorepo 分层</td><td><code>workflow</code> 是模型层，<code>core</code> 是执行引擎，<code>cli</code> 是服务端，<code>nodes-base</code> 是节点生态。</td></tr>
+        <tr><td>Workflow model</td><td>nodes、connections、expression、data proxy 是画布和运行时共同语言。</td></tr>
+        <tr><td>Execution engine</td><td><code>WorkflowExecute.processRunExecutionData()</code> 是 DAG 执行主循环。</td></tr>
+        <tr><td>Active workflow</td><td>保存 workflow 不等于开始监听，激活时才注册 webhook/trigger/poller。</td></tr>
+        <tr><td>Queue mode</td><td>Bull/Redis + worker 支撑生产环境横向扩展。</td></tr>
+      </table>
+    </section>
+
+    <section id="architecture">
+      <h2>2. 最高层架构</h2>
+      <div class="mermaid">
+flowchart TB
+    User["用户 / 自动化工程师<br/>在浏览器里搭工作流"] --> UI["editor-ui Vue 前端<br/>画布、节点面板、凭证配置、执行结果<br/>为什么：n8n 的产品入口是可视化编排"]
+    UI --> API["packages/cli REST API / Controllers<br/>workflows、credentials、executions、node-types"]
+    API --> DB["@n8n/db<br/>WorkflowEntity / CredentialsEntity / ExecutionEntity / WebhookEntity<br/>为什么：工作流是可持久化产品资源"]
+    API --> Loader["LoadNodesAndCredentials<br/>加载 core/community nodes + credentials<br/>为什么：1500+ integrations 不能硬编码进运行时"]
+    Loader --> Nodes["packages/nodes-base<br/>Webhook、HTTP Request、Code、AI/LangChain 等节点"]
+    API --> Active["ActiveWorkflowManager<br/>激活 workflow，注册 webhook / trigger / poller<br/>为什么：保存工作流不等于开始监听外部事件"]
+    Active --> Webhooks["WebhookService + webhook_entity<br/>静态/动态 webhook 查找、注册、去重"]
+    Active --> Triggers["ActiveWorkflowTriggers<br/>cron、poll、长连接 trigger 保持在内存"]
+    Webhooks --> Runner["WorkflowRunner<br/>创建 execution、选择 main/queue/manual 路径"]
+    Triggers --> Runner
+    API --> Runner
+    Runner --> Engine["n8n-core WorkflowExecute<br/>节点栈、连接图、runData、错误处理<br/>为什么：真正执行 workflow DAG 的核心引擎"]
+    Engine --> Workflow["n8n-workflow Workflow<br/>nodes、connections、expressions、data proxy<br/>为什么：纯模型层可被前后端和运行时复用"]
+    Engine --> Credentials["CredentialsHelper / n8n-core Credentials<br/>解密、overwrite、dynamic credentials、preAuthentication"]
+    Engine --> Binary["BinaryDataService<br/>文件/对象存储二进制数据"]
+    Engine --> Hooks["Execution hooks / events / telemetry<br/>审计、推送、错误工作流"]
+    Runner --> Queue{"executions.mode = queue?"}
+    Queue -->|"否"| Main["main process 直接执行<br/>适合单实例/开发"]
+    Queue -->|"是"| Scaling["ScalingService + Bull/Redis<br/>enqueue job、abort-job、job-finished/job-failed"]
+    Scaling --> Worker["n8n worker command<br/>并发消费 job，调用 JobProcessor / WorkflowExecute<br/>为什么：生产环境需要横向扩展和隔离执行"]
+      </div>
+      <p>这张图从上往下读：前端和 API 负责产品入口，active workflow 负责把 workflow 挂到触发源，runner 和 engine 负责执行，queue/worker 负责生产扩展。</p>
+    </section>
+
+    <section id="packages">
+      <h2>3. Monorepo 分层</h2>
+      <table>
+        <tr><th>包 / 目录</th><th>职责</th><th>分享时怎么讲</th></tr>
+        <tr><td><code>packages/workflow</code></td><td>workflow 模型、节点接口、表达式、data proxy</td><td>n8n 的协议层和模型层。</td></tr>
+        <tr><td><code>packages/core</code></td><td>执行引擎、node context、credentials、binary data、node loader 基类</td><td>真正跑节点的 runtime。</td></tr>
+        <tr><td><code>packages/cli</code></td><td>REST API、commands、WorkflowRunner、webhooks、queue</td><td>n8n server，不只是 CLI。</td></tr>
+        <tr><td><code>packages/nodes-base</code></td><td>官方节点和凭证类型</td><td>节点生态主体。</td></tr>
+        <tr><td><code>packages/frontend/editor-ui</code></td><td>Vue 前端、画布、节点面板、执行结果</td><td>用户接触到的低代码产品。</td></tr>
+      </table>
+    </section>
+
+    <section id="workflow">
+      <h2>4. Workflow 模型</h2>
+      <p><code>Workflow</code> 类把 workflow JSON 变成可查询、可改名、可找上下游、可做表达式求值的运行时对象。它说明 n8n 的工作流本体是一张图，不是线性脚本。</p>
+      <table>
+        <tr><th>源码位置</th><th>说明</th></tr>
+        <tr><td><code>workflow.ts:58</code></td><td>定义 <code>Workflow</code>。</td></tr>
+        <tr><td><code>workflow.ts:65-67</code></td><td>保存 source/destination 两个方向的 connections。</td></tr>
+        <tr><td><code>workflow.ts:133</code></td><td>创建 <code>WorkflowExpression</code>。</td></tr>
+        <tr><td><code>workflow.ts:390</code>、<code>:421</code></td><td>节点改名时同步更新表达式引用。</td></tr>
+        <tr><td><code>workflow.ts:871</code></td><td>查找 start node。</td></tr>
+      </table>
+    </section>
+
+    <section id="node">
+      <h2>5. Node Contract</h2>
+      <p>n8n 的集成能力不是在引擎里写一堆 if/else，而是通过统一节点契约扩展。节点用 <code>description</code> 描述 UI 和能力，用 <code>execute()</code>、<code>webhook()</code>、<code>trigger()</code>、<code>poll()</code> 参与运行。</p>
+      <pre><code class="language-ts">export interface INodeType {
+  description: INodeTypeDescription;
+  execute?(this: IExecuteFunctions): Promise&lt;INodeExecutionData[][]&gt;;
+  webhook?(this: IWebhookFunctions): Promise&lt;IWebhookResponseData&gt;;
+}</code></pre>
+      <table>
+        <tr><th>源码位置</th><th>说明</th></tr>
+        <tr><td><code>interfaces.ts:2165</code></td><td><code>INodeType</code>。</td></tr>
+        <tr><td><code>interfaces.ts:2705</code></td><td><code>INodeTypeDescription</code>。</td></tr>
+        <tr><td><code>Code.node.ts:31</code>、<code>:192</code></td><td>Code 节点和 <code>execute()</code>。</td></tr>
+        <tr><td><code>Webhook.node.ts:42</code>、<code>:216</code></td><td>Webhook 节点和 <code>webhook()</code>。</td></tr>
+      </table>
+    </section>
+
+    <section id="execution">
+      <h2>6. 一次执行主流程</h2>
+      <div class="mermaid">
+sequenceDiagram
+    participant UI as editor-ui / API
+    participant Runner as WorkflowRunner
+    participant Active as ActiveExecutions
+    participant Manual as ManualExecutionService
+    participant Engine as WorkflowExecute
+    participant Node as Node execute/webhook/trigger
+    participant Hooks as hooks + persistence
+    UI->>Runner: run(workflow execution data)
+    Runner->>Active: add()<br/>创建/持久化 execution 记录
+    Runner->>Engine: new WorkflowExecute(additionalData, mode)
+    alt manual / partial
+        Runner->>Manual: runManually()
+        Manual->>Engine: run() 或 processRunExecutionData()
+    else normal
+        Runner->>Engine: processRunExecutionData(workflow)
+    end
+    Engine->>Engine: 从 start node / nodeExecutionStack 开始<br/>为什么：工作流图转为可推进的执行栈
+    loop 每个待执行节点
+        Engine->>Node: runNode() -> executeNode()
+        Node-->>Engine: INodeExecutionData[][]
+        Engine->>Engine: 写 runData，按 connections 推入下游节点
+    end
+    Engine->>Hooks: success/error hooks、execution data 持久化、push
+    Hooks-->>UI: execution result / progress
+      </div>
+      <table>
+        <tr><th>源码位置</th><th>说明</th></tr>
+        <tr><td><code>workflow-runner.ts:184</code>、<code>:236</code></td><td><code>WorkflowRunner.run()</code> 创建并登记 execution。</td></tr>
+        <tr><td><code>workflow-runner.ts:424</code>、<code>:435</code></td><td>调用 <code>processRunExecutionData()</code> 并挂到 active execution。</td></tr>
+        <tr><td><code>workflow-execute.ts:1575</code></td><td>执行主循环入口。</td></tr>
+        <tr><td><code>workflow-execute.ts:1300</code>、<code>:1039</code></td><td><code>runNode()</code> 和 <code>executeNode()</code>。</td></tr>
+      </table>
+    </section>
+
+    <section id="webhook">
+      <h2>7. Active Workflow 和 Webhook</h2>
+      <div class="mermaid">
+flowchart TD
+    A["用户激活 workflow"] --> B["ActiveWorkflowManager.add<br/>判断 workflow 是否有 trigger/webhook"]
+    B --> C{"节点是否声明 webhooks?"}
+    C -->|"是"| D["WebhookService.getNodeWebhooks<br/>从 node description 生成 webhook data"]
+    D --> E["WebhookService.storeWebhook<br/>写 webhook_entity<br/>为什么：webhook 不需要一直占用内存，但要能被 HTTP 查到"]
+    E --> F["createWebhookIfNotExists<br/>调用节点 checkExists/create 等方法<br/>为什么：有些外部服务要注册回调地址"]
+    C -->|"否，非 webhook trigger"| G["ActiveWorkflowTriggers.add<br/>注册 cron / poll / trigger listener<br/>为什么：这类触发器要在进程内保持运行"]
+    H["外部 HTTP 请求"] --> I["WebhookRequestHandler"]
+    I --> J["WebhookService.findWebhook<br/>先查静态 cache/DB，再查动态 path"]
+    J --> K["WebhookManager.executeWebhook"]
+    K --> L["WebhookService.runWebhook<br/>调用节点 webhook(context)"]
+    L --> M["WorkflowRunner.run<br/>把 webhook 输入转成一次 execution"]
+    M --> N["WorkflowExecute 执行后续节点"]
+      </div>
+      <p>源码里明确区分 webhook trigger、poll trigger、active trigger：webhook 进入 <code>webhook_entity</code> 表，非 webhook trigger 保持在内存。这是为了让 HTTP 触发可查找，而 cron/poll/长连接要在进程中持续活跃。</p>
+      <p>证据：<code>active-workflow-manager.ts:513-526</code>、<code>:528</code>、<code>:623-647</code>；<code>webhook.service.ts:32</code>、<code>:53-57</code>、<code>:152-181</code>、<code>:255</code>。</p>
+    </section>
+
+    <section id="queue">
+      <h2>8. Queue Mode 和 Worker</h2>
+      <div class="mermaid">
+flowchart LR
+    A["main / webhook process<br/>收到执行请求"] --> B["WorkflowRunner.run"]
+    B --> C{"executions.mode"}
+    C -->|"regular"| D["当前进程 WorkflowExecute<br/>简单部署"]
+    C -->|"queue"| E["ScalingService.addJob<br/>Bull queue / Redis<br/>为什么：执行任务与 API/webhook 进程解耦"]
+    E --> F["n8n worker command<br/>--concurrency 默认 10"]
+    F --> G["ScalingService.setupQueue<br/>queue.process(JOB_TYPE_NAME, concurrency)"]
+    G --> H["JobProcessor.processJob<br/>装载 execution data 并执行 workflow"]
+    H --> I["WorkflowExecute.processRunExecutionData"]
+    I --> J["job-finished / job-failed progress message<br/>主进程收到结果、更新 execution"]
+    K["停止执行"] --> L["stopJob / abort-job<br/>为什么：跨进程执行要通过 queue progress/pubsub 传中止信号"]
+    L --> F
+      </div>
+      <p>queue mode 将 API/webhook 与执行计算解耦。main/webhook 进程入队，worker 按并发消费 job，主进程通过 progress message 接收 <code>job-finished</code> / <code>job-failed</code>。</p>
+      <p>证据：<code>worker.ts:37</code>、<code>:28</code>、<code>:184</code>；<code>scaling.service.ts:35</code>、<code>:56</code>、<code>:111-126</code>、<code>:222-246</code>、<code>:259-270</code>。</p>
+    </section>
+
+    <section id="loader">
+      <h2>9. 节点和凭证加载</h2>
+      <p>节点生态是 n8n 的护城河，所以源码里专门有 loader 层。它从内置包、社区包和自定义目录加载 node class 与 credential type，再交给前端展示和运行时执行。</p>
+      <table>
+        <tr><th>源码位置</th><th>说明</th></tr>
+        <tr><td><code>load-nodes-and-credentials.ts:42</code></td><td><code>LoadNodesAndCredentials</code>。</td></tr>
+        <tr><td><code>load-nodes-and-credentials.ts:108-117</code></td><td>加载 custom directories 和 module registry node loaders。</td></tr>
+        <tr><td><code>directory-loader.ts:165</code></td><td>从文件加载 node class。</td></tr>
+        <tr><td><code>package-directory-loader.ts:27-39</code></td><td>从 package.json 的 <code>n8n</code> 字段加载 nodes。</td></tr>
+        <tr><td><code>credentials-helper.ts:449</code>、<code>:473</code>、<code>:494-507</code></td><td>解密凭证并支持 dynamic credentials。</td></tr>
+      </table>
+    </section>
+
+    <section id="patterns">
+      <h2>10. 核心设计思想</h2>
+      <div class="cards">
+        <div class="card"><strong>Workflow-as-graph</strong>n8n 的本体是 nodes + connections，而不是线性脚本。</div>
+        <div class="card"><strong>Product resource lifecycle</strong>执行是可审计、可取消、可查看历史的产品资源。</div>
+        <div class="card"><strong>Plugin/node contract</strong>1500+ 集成靠统一节点契约扩展。</div>
+        <div class="card"><strong>Model / engine 分离</strong><code>workflow</code> 模型层和 <code>core</code> 执行层解耦。</div>
+        <div class="card"><strong>Trigger activation model</strong>保存 workflow 和激活监听是两件事。</div>
+        <div class="card"><strong>Queue-based scaling</strong>生产执行与 API/webhook 解耦。</div>
+      </div>
+    </section>
+
+    <section id="ai-langchain">
+      <h2>11. 深挖一：AI / LangChain 节点集成</h2>
+      <p>n8n 的 AI 能力不是把 LangChain 当成黑盒，而是把 LangChain tool calling 翻译成 n8n 自己的节点执行模型：Agent 负责推理，连接工具仍然是 n8n 节点，工具调用变成 <code>EngineRequest</code>，结果再以 <code>ai_tool</code> runData 回填给 Agent。</p>
+      <div class="mermaid">
+flowchart TD
+    Agent["AI Agent 节点<br/>LangChain agent loop<br/>为什么：让 LLM 决定何时调用工具"]
+    ToolSchema["N8nTool / DynamicTool<br/>Zod schema + fallback JSON parser<br/>为什么：模型输出不稳定，需要容错解析"]
+    EngineReq["EngineRequest actions<br/>toolName / toolInput / metadata<br/>为什么：把一次工具调用变成 n8n 可执行动作"]
+    Hitl["HITL / SendAndWait<br/>审批或拒绝工具调用<br/>为什么：高风险动作不能全自动放行"]
+    ToolNode["连接的 n8n 工具节点<br/>HTTP / DB / SaaS / Code<br/>为什么：复用节点生态"]
+    EngineResp["EngineResponse / ai_tool runData<br/>工具结果回填给 Agent<br/>为什么：保持可观测、可调试"]
+    Memory["memoryManagement / buildSteps<br/>重建 intermediate steps<br/>为什么：Agent 继续推理要知道历史工具结果"]
+    Agent --> ToolSchema --> EngineReq
+    EngineReq --> Hitl
+    Hitl -- approved --> ToolNode
+    Hitl -- denied --> Agent
+    ToolNode --> EngineResp --> Memory --> Agent
+      </div>
+      <table>
+        <tr><th>源码位置</th><th>证明什么</th></tr>
+        <tr><td><code>packages/@n8n/nodes-langchain/utils/N8nTool.ts:49</code></td><td><code>N8nTool</code> 继承 LangChain <code>DynamicStructuredTool</code>。</td></tr>
+        <tr><td><code>N8nTool.ts:60-92</code></td><td>先走 Zod parser，失败后再 relaxed JSON parse 和单参数兜底，说明模型输出会被容错处理。</td></tr>
+        <tr><td><code>agent-execution/executeEngineAction.ts:16-40</code></td><td>根据 action metadata 找工具，调用 <code>tool.invoke()</code>，再包装为 <code>ai_tool</code> 数据。</td></tr>
+        <tr><td><code>agent-execution/processHitlResponses.ts:94-105</code></td><td>源码注释直接描述 Agent 工具调用被人审拦截、批准后再执行 gated tool 的链路。</td></tr>
+      </table>
+      <pre><code>// N8nTool.ts
+export class N8nTool extends DynamicStructuredTool&lt;ZodObjectAny&gt; {
+  asDynamicTool(): DynamicTool {
+    const parser = new StructuredOutputParser(schema);
+    parsedQuery = schema.parse(dataFromModel);
+    return await func(parsedQuery);
+  }
+}</code></pre>
+      <div class="note"><strong>为什么这么设计：</strong>复用 n8n 节点生态，保留 execution 可观测性，并把人审、审批拒绝、工具错误都纳入同一套工作流调试体验。</div>
+    </section>
+
+    <section id="permission">
+      <h2>12. 深挖二：数据库模型、权限和凭证隔离</h2>
+      <p>n8n 的 workflow、credential、execution 都是带权限、历史和生命周期的产品资源。特别要注意：workflow 共享和 credential 共享是分开的，因为“能编辑流程”不等于“能使用所有密钥”。</p>
+      <div class="mermaid">
+flowchart TD
+    Project["Project<br/>personal / team<br/>为什么：企业协作的资源边界"]
+    UserRole["ProjectRelation + Role + Scope<br/>用户在项目中的角色和权限<br/>为什么：权限不是写死在代码分支里"]
+    SharedWf["SharedWorkflow<br/>workflowId + projectId + role<br/>为什么：工作流共享和权限独立建模"]
+    SharedCred["SharedCredentials<br/>credentialsId + projectId + role<br/>为什么：凭证比 workflow 更敏感，需要单独共享"]
+    Credential["CredentialsEntity<br/>encrypted data / type / resolver<br/>为什么：节点只拿运行所需凭证"]
+    Execution["ExecutionEntity<br/>status / retryOf / waitTill / storedAt<br/>为什么：执行历史要可查、可恢复、可清理"]
+    ExecutionData["ExecutionData<br/>runData + workflowData snapshot<br/>为什么：大体积执行数据与索引字段分离"]
+    Recovery["ExecutionRepository<br/>markAsCrashed / getWaitingExecutions / cancelMany<br/>为什么：服务重启、等待节点和取消都要落库"]
+    Project --> UserRole
+    Project --> SharedWf
+    Project --> SharedCred --> Credential
+    SharedWf --> Execution --> ExecutionData
+    Execution --> Recovery
+      </div>
+      <table>
+        <tr><th>源码位置</th><th>证明什么</th></tr>
+        <tr><td><code>project.ts:20-44</code></td><td><code>Project</code> 聚合项目成员关系、共享凭证、共享 workflow。</td></tr>
+        <tr><td><code>shared-workflow.ts:8-23</code></td><td>用 <code>workflowId + projectId + role</code> 表达 workflow 共享。</td></tr>
+        <tr><td><code>shared-credentials.ts:8-23</code></td><td>用 <code>credentialsId + projectId + role</code> 单独表达凭证共享。</td></tr>
+        <tr><td><code>role.ts:42-65</code></td><td>角色有 <code>roleType</code>，并通过 <code>role_scope</code> 关联权限范围。</td></tr>
+        <tr><td><code>execution-entity.ts:50-89</code></td><td>执行状态、重试、等待时间、存储位置都是一等字段。</td></tr>
+      </table>
+      <pre><code>// shared-credentials.ts
+export class SharedCredentials extends WithTimestamps {
+  role: CredentialSharingRole;
+  credentialsId: string;
+  projectId: string;
+}</code></pre>
+      <div class="note"><strong>为什么这么设计：</strong>权限通过 Project/Role/Scope 建模，凭证和 workflow 分开共享，执行数据拆成索引字段和大体积 runData，才能支撑企业协作和历史查询。</div>
+    </section>
+
+    <section id="security">
+      <h2>13. 深挖三：表达式 / Code 节点安全边界</h2>
+      <p>表达式和 Code 节点是 n8n 低代码体验的“开口”。源码里对这个开口做了多层边界：表达式用 AST/VM 沙箱，Code 节点通过 task runner 执行，并限制 require 模块。</p>
+      <div class="mermaid">
+flowchart TD
+    UserCode["用户表达式 / Code 节点<br/>灵活处理数据<br/>风险：能接触执行上下文"]
+    Expr["Expression + Tournament<br/>AST hooks / VM evaluator<br/>为什么：参数表达式需要动态求值"]
+    ExprSandbox["expression-sandboxing<br/>屏蔽 process / require / module / Buffer<br/>为什么：表达式不应逃逸到 Node.js 全局"]
+    CodeNode["Code.node.ts<br/>JS / Python 模式<br/>为什么：复杂转换才用代码"]
+    Runner["JsTaskRunnerSandbox / PythonTaskRunnerSandbox<br/>startJob 发送到 task runner<br/>为什么：把用户代码从主执行进程隔离出去"]
+    Resolver["require-resolver allowlist<br/>allowedBuiltInModules / allowedExternalModules<br/>为什么：模块能力要显式授权"]
+    Validated["result-validation<br/>校验返回 item 结构<br/>为什么：防止破坏 workflow 数据契约"]
+    UserCode --> Expr --> ExprSandbox
+    UserCode --> CodeNode --> Runner --> Resolver
+    Runner --> Validated
+      </div>
+      <table>
+        <tr><th>源码位置</th><th>证明什么</th></tr>
+        <tr><td><code>expression-sandboxing.ts:78-83</code></td><td>构造空的 <code>process/require/module/Buffer</code> 上下文。</td></tr>
+        <tr><td><code>expression-sandboxing.ts:236-299</code></td><td>校验 <code>$</code> 只能作为函数调用或合法属性访问。</td></tr>
+        <tr><td><code>Code.node.ts:211-230</code></td><td>JS 走 <code>JsTaskRunnerSandbox</code>，Python 走 <code>PythonTaskRunnerSandbox</code>。</td></tr>
+        <tr><td><code>JsTaskRunnerSandbox.ts:30-43</code></td><td>JS 代码通过 <code>startJob('javascript')</code> 交给 task runner。</td></tr>
+        <tr><td><code>require-resolver.ts:22-40</code></td><td>require 只允许 allowlist 里的内置/外部模块。</td></tr>
+      </table>
+      <pre><code>// require-resolver.ts
+const isAllowed = isBuiltin(request)
+  ? checkIsAllowed(allowedBuiltInModules, request)
+  : checkIsAllowed(allowedExternalModules, request);
+if (!isAllowed) throw new ExecutionError(new DisallowedModuleError(request));</code></pre>
+      <div class="warn"><strong>分享重点：</strong>Code 节点不是“随便跑 Node.js”。它是受控能力，源码和 UI 都在引导用户优先用原生节点做 HTTP、过滤、聚合、去重等常见任务。</div>
+    </section>
+
+    <section id="execution-history">
+      <h2>14. 深挖四：执行历史、错误恢复和可观测性</h2>
+      <p>执行历史是 n8n 和纯 SDK 最大的产品差异之一。n8n 不只是跑完一个函数，而是把每次运行变成可查询、可取消、可重试、可恢复、可展示的 execution 资源。</p>
+      <table>
+        <tr><th>源码位置</th><th>证明什么</th></tr>
+        <tr><td><code>workflow-runner.ts:235-386</code></td><td>创建 execution 后构造 workflow/additionalData，并把 execution 标记为 running。</td></tr>
+        <tr><td><code>workflow-runner.ts:419-435</code></td><td>有历史 payload 时走 <code>WorkflowExecute.processRunExecutionData()</code>，并 attach 到 active executions。</td></tr>
+        <tr><td><code>execution.repository.ts:353-374</code></td><td><code>markAsCrashed()</code> 只覆盖仍处于可崩溃状态的执行。</td></tr>
+        <tr><td><code>execution.repository.ts:611-632</code></td><td><code>getWaitingExecutions()</code> 查询即将恢复的 waiting execution。</td></tr>
+        <tr><td><code>execution.repository.ts:709-726</code></td><td>取消执行会写入 <code>canceled</code> 并清空 <code>waitTill</code>。</td></tr>
+      </table>
+      <pre><code>// execution.repository.ts
+await this.update(
+  { id: In(batch), status: In(CRASHABLE_EXECUTION_STATUSES) },
+  { status: 'crashed', stoppedAt: new Date(), waitTill: null },
+);</code></pre>
+      <div class="note"><strong>为什么这么设计：</strong>active executions 是当前进程内存态，ExecutionEntity 是跨进程事实态。服务重启、queue worker 完成、Wait 节点恢复、取消和历史调试都依赖落库状态。</div>
+    </section>
+
+    <section id="example">
+      <h2>15. 真实例子：客户工单 AI 自动分流</h2>
+      <p>一个典型 n8n workflow 可以这样设计：Webhook 接收客服系统工单，HTTP Request 拉客户历史订单，AI 节点总结问题类型，IF/Switch 分支，Slack/Email 通知负责人，低置信度时进入人工审批。</p>
+      <p>源码链路是：前端保存 workflow JSON；激活时 <code>ActiveWorkflowManager</code> 注册 webhook；请求到来后 <code>WebhookService</code> 找到 webhook；<code>WorkflowRunner</code> 创建 execution；<code>WorkflowExecute</code> 按图执行每个节点；如果是 queue mode，execution 由 worker 消费。</p>
+      <div class="warn">这个例子能说明 n8n 和 LangGraph 的差别：LangGraph 更适合开发者用代码定义复杂状态图；n8n 更适合把 SaaS/API/AI/人工审批的业务流程产品化，让更多角色能编辑和观察。</div>
+      <h3>高风险 AI 动作加人审</h3>
+      <p>如果 AI 判断客户符合退款条件，可以让 Agent 先调用“申请退款”工具，但工具前面接 SendAndWait/HITL：Agent 生成退款参数，HITL 拦截并发给人工审批，审批通过后才生成新的 <code>EngineRequest</code> 执行真实退款工具；拒绝时 Agent 收到拒绝原因并停止或改走客服跟进。</p>
+    </section>
+
+    <section id="scenarios">
+      <h2>16. 应用场景</h2>
+      <table>
+        <tr><th>场景</th><th>n8n 价值</th><th>注意点</th></tr>
+        <tr><td>SaaS 集成自动化</td><td>Webhook、HTTP Request、凭证管理和大量官方/社区节点能快速串联系统。</td><td>节点多但版本差异也多，复杂集成要关注错误处理。</td></tr>
+        <tr><td>AI Agent 工作流</td><td>AI/LangChain 节点、工具调用、人工审批、可视化调试可以组合成业务自动化。</td><td>复杂循环状态、checkpoint 和恢复更适合交给 LangGraph 内核。</td></tr>
+        <tr><td>企业内部运营流程</td><td>定时、审批、CRM/工单/消息通知串联，适合运营、客服、销售自动化。</td><td>权限、审计、凭证隔离是重点。</td></tr>
+        <tr><td>数据同步 / 轻量 ETL</td><td>定时拉取、字段转换、写入数据库或 SaaS，门槛低。</td><td>大规模数据处理不应替代专门 ETL/流处理平台。</td></tr>
+        <tr><td>Webhook 集线器</td><td><code>webhook_entity</code>、动态 path、workflow runner 让外部事件容易进入流程。</td><td>需要公开 endpoint 安全、签名校验和限流。</td></tr>
+      </table>
+    </section>
+
+    <section id="compare">
+      <h2>17. 和其他框架对比</h2>
+      <table>
+        <tr><th>维度</th><th>n8n</th><th>LangGraph</th><th>LangChain</th><th>LlamaIndex</th><th>AutoGen / CrewAI</th><th>mem0 / Zep</th></tr>
+        <tr><td>核心问题</td><td>可视化自动化流程如何设计、触发、执行和运维</td><td>代码状态图如何可靠执行</td><td>LLM 应用组件如何组合</td><td>私有数据如何进入 RAG 查询</td><td>多 Agent 如何协作</td><td>长期记忆如何存取</td></tr>
+        <tr><td>用户入口</td><td>浏览器画布 + REST/API + CLI</td><td>Python/JS 代码</td><td>Python/JS 代码</td><td>Python/TS 代码</td><td>Python 代码</td><td>API/SDK</td></tr>
+        <tr><td>状态模型</td><td>workflow JSON + execution/runData + DB</td><td>显式 state + checkpoint</td><td>组件状态/外部状态</td><td>index/storage/query context</td><td>Agent/team runtime</td><td>memory/session/graph</td></tr>
+        <tr><td>生产能力</td><td>UI、用户、凭证、执行历史、queue、webhook</td><td>checkpoint、interrupt、resume</td><td>取决于应用封装</td><td>RAG ingestion/query</td><td>协作编排</td><td>记忆服务</td></tr>
+      </table>
+      <div class="note">
+        <strong>和 LangGraph 组合：</strong>n8n 管系统集成、用户可视化配置、凭证、触发器、执行历史；LangGraph 管复杂 agent 状态、循环、checkpoint、人审中断和恢复。
+      </div>
+    </section>
+
+    <section id="limits">
+      <h2>18. 局限性和阅读注意点</h2>
+      <table>
+        <tr><th>局限 / 注意点</th><th>为什么</th><th>建议</th></tr>
+        <tr><td>代码量巨大</td><td>产品型 monorepo，节点、前端、后端、EE 逻辑都在仓库里</td><td>先抓 execution/webhook/queue 三条主线。</td></tr>
+        <tr><td>节点生态会分散注意力</td><td><code>nodes-base</code> 文件很多</td><td>只选 Webhook、HTTP Request、Code 三类代表节点。</td></tr>
+        <tr><td>不是纯 LLM 框架</td><td>AI 节点只是 n8n 的一部分</td><td>讲清它是 workflow automation platform。</td></tr>
+        <tr><td>复杂 Agent 状态不如代码图直观</td><td>可视化节点适合业务流程，但复杂循环和状态恢复会变重</td><td>与 LangGraph 组合。</td></tr>
+        <tr><td>自托管运维成本</td><td>DB、Redis、worker、webhook URL、binary data、credentials 都要管</td><td>生产部署要有监控、备份、密钥管理和队列容量规划。</td></tr>
+      </table>
+    </section>
+
+    <section id="share">
+      <h2>19. 分享建议</h2>
+      <p>推荐不要从 1500 个节点开始讲，而要先抓住三件事：workflow 是一张可视化图，active workflow 负责把这张图挂到 webhook/cron/poller 上，WorkflowExecute 负责把图转换成节点执行栈并推进。</p>
+      <ol>
+        <li>先讲定位：n8n 是 AI + workflow automation platform，不是单纯 LLM SDK。</li>
+        <li>讲仓库分层：workflow/model、core/runtime、cli/server、nodes-base、frontend。</li>
+        <li>讲节点契约：description 决定 UI，execute/webhook/trigger 决定运行时。</li>
+        <li>讲主流程：WorkflowRunner 创建 execution，WorkflowExecute 按图执行节点。</li>
+        <li>讲 active workflow 和 queue mode，说明它为什么像一个生产平台。</li>
+        <li>讲 AI/LangChain 工具调用，说明 n8n 如何把 tool calling 转成可视化节点执行。</li>
+        <li>讲安全和权限：Project/Role/Scope、SharedCredentials、Code sandbox、task runner。</li>
+        <li>用客户工单 AI 自动分流和高风险退款人审例子收束。</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

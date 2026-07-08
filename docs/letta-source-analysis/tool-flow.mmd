@@ -1,0 +1,17 @@
+flowchart LR
+    A["LLM 输出 tool call<br/>函数名 + JSON args"] --> B["Agent._handle_ai_response<br/>解析 tool_call 并匹配 Tool"]
+    B --> C["ToolRulesSolver<br/>为什么：约束 init、child、terminal、approval 等工具顺序"]
+    C --> D["ToolExecutionManager.execute_tool_async"]
+    D --> E{"tool_type"}
+    E -->|"LETTA_CORE / MEMORY_CORE"| F["LettaCoreToolExecutor<br/>send_message、memory、archival、conversation"]
+    E -->|"LETTA_FILES_CORE"| G["LettaFileToolExecutor<br/>open/grep/semantic_search 文件"]
+    E -->|"EXTERNAL_MCP"| H["MCPToolExecutor<br/>调用外部 MCP server"]
+    E -->|"EXTERNAL_COMPOSIO"| I["Composio executor"]
+    E -->|"CUSTOM / sandbox"| J["ToolExecutionSandbox<br/>本地 / E2B / Modal 等沙箱"]
+    F --> K["ToolExecutionResult"]
+    G --> K
+    H --> K
+    I --> K
+    J --> K
+    K --> L["写入 tool message<br/>再进入下一轮 LLM 或终止"]
+    L --> M["send_message 通常是 TerminalToolRule<br/>为什么：把最终回复也作为工具调用，便于统一审计和流式输出"]

@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LLM / Agent 开源框架源码横向分析与选型指南</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true } });
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f9fc;
+      --panel: #ffffff;
+      --ink: #202534;
+      --muted: #5e6878;
+      --line: #dbe3ef;
+      --brand: #2563eb;
+      --brand2: #0f8f70;
+      --soft: #edf4ff;
+      --soft2: #eaf8f4;
+      --warm: #fff7ed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.74;
+    }
+    header {
+      background: linear-gradient(180deg, #ffffff 0%, #edf4ff 100%);
+      border-bottom: 1px solid var(--line);
+      padding: 44px 24px 30px;
+    }
+    main, .hero { max-width: 1220px; margin: 0 auto; }
+    main { padding: 28px 20px 64px; }
+    h1 { margin: 0 0 12px; font-size: clamp(30px, 5vw, 52px); line-height: 1.12; letter-spacing: 0; }
+    h2 { margin: 38px 0 14px; font-size: 27px; border-left: 5px solid var(--brand); padding-left: 12px; }
+    h3 { margin: 24px 0 10px; font-size: 20px; }
+    p { margin: 10px 0; }
+    a { color: var(--brand); }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 18px 0;
+    }
+    .lead { max-width: 980px; color: var(--muted); font-size: 18px; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .metric {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 112px;
+    }
+    .metric strong { display: block; color: var(--muted); font-size: 14px; }
+    .metric span { display: block; margin-top: 8px; font-weight: 800; font-size: 17px; }
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .toc a {
+      display: block;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      text-decoration: none;
+      color: var(--ink);
+    }
+    .note, .green, .case {
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    .note { background: var(--soft); border-left: 5px solid var(--brand); }
+    .green { background: var(--soft2); border-left: 5px solid var(--brand2); }
+    .case { background: var(--warm); border-left: 5px solid #f59e0b; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; vertical-align: top; text-align: left; }
+    th { background: #edf4ff; color: #1d4ed8; }
+    code {
+      background: #f3f6fb;
+      border: 1px solid #e3e9f3;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 0.92em;
+    }
+    .mermaid {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      margin: 16px 0;
+      overflow-x: auto;
+    }
+    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .card { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fbfdff; }
+    .card h3 { margin-top: 0; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    @media (max-width: 980px) {
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .toc, .grid2 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .summary { grid-template-columns: 1fr; }
+      section { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>LLM / Agent 开源框架源码横向分析与选型指南</h1>
+      <p class="lead">这份横向材料把 LangChain、LangGraph、Spring AI Alibaba、Dify、n8n、Haystack、LlamaIndex、AutoGen、CrewAI、Letta、mem0、Zep、Graphiti、Headroom 等源码分析串起来。它不按“谁更火”排序，而是按问题域、架构范式、真实组合方式来讲，方便做技术分享和选型判断。</p>
+      <div class="summary">
+        <div class="metric"><strong>第 1 部分</strong><span>总览对比矩阵</span></div>
+        <div class="metric"><strong>第 2 部分</strong><span>框架选型指南</span></div>
+        <div class="metric"><strong>第 3 部分</strong><span>组合架构专题</span></div>
+        <div class="metric"><strong>第 4 部分</strong><span>源码设计范式</span></div>
+        <div class="metric"><strong>第 5 部分</strong><span>真实案例合集</span></div>
+      </div>
+      <div class="toc">
+        <a href="#matrix">总览矩阵</a>
+        <a href="#selection">选型指南</a>
+        <a href="#composition">组合架构</a>
+        <a href="#patterns">设计范式</a>
+        <a href="#cases">真实案例</a>
+        <a href="#share">分享顺序</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="matrix">
+      <h2>1. 总览对比矩阵</h2>
+      <p>先按“解决什么问题”分层，而不是按语言、Star 或流行度分层。真实项目里这些框架通常是上下游关系，不是互斥关系。</p>
+      <div class="mermaid">
+flowchart TB
+    Goal["开源 LLM / Agent 框架源码横向地图<br/>先按解决的问题分类，而不是按热度分类"]
+    Goal --> App["应用平台层<br/>把 AI 能力产品化、可配置、可运营"]
+    App --> Dify["Dify<br/>LLM 应用平台：Workflow、RAG、Agent、Plugin、模型、观测"]
+    App --> N8N["n8n<br/>通用自动化平台：触发器、节点、凭证、队列、可视化流程"]
+    Goal --> Runtime["Agent / Workflow 运行时层<br/>解决复杂任务如何可靠推进"]
+    Runtime --> LangGraph["LangGraph<br/>代码级状态图、checkpoint、中断恢复、Pregel 模型"]
+    Runtime --> SpringAIAlibaba["Spring AI Alibaba<br/>Java / Spring Boot Agentic AI：Graph Core、ReactAgent、FlowAgent、Nacos/A2A/MCP"]
+    Runtime --> AutoGen["AutoGen<br/>多 Agent 消息运行时、GroupChat、团队协作"]
+    Runtime --> CrewAI["CrewAI<br/>Crew / Agent / Task / Flow，角色分工式协作"]
+    Runtime --> Letta["Letta<br/>状态化 Agent、core/archival memory、tool-first loop"]
+    Goal --> Component["组件与数据层<br/>给应用提供 LLM/RAG/记忆基础能力"]
+    Component --> LangChain["LangChain<br/>模型适配、Runnable、Agent middleware、工具和生态集成"]
+    Component --> LlamaIndex["LlamaIndex<br/>Ingestion、Index、Retriever、QueryEngine、RAG 数据框架"]
+    Component --> Haystack["Haystack<br/>Component Pipeline、typed sockets、DocumentStore、Hybrid RAG、调试观测"]
+    Component --> Memory["记忆 / 知识图谱"]
+    Memory --> Mem0["mem0<br/>记忆抽取、向量/图谱存储、生命周期管理"]
+    Memory --> Zep["Zep<br/>会话记忆、上下文组装、长期记忆服务化"]
+    Memory --> Graphiti["Graphiti<br/>时序知识图谱、episode ingestion、实体关系搜索"]
+    Goal --> Infra["上下文与代理基础设施"]
+    Infra --> Headroom["Headroom<br/>上下文压缩、代理网关、MCP/CCR 适配、Rust 热路径"]
+      </div>
+      <table>
+        <tr><th>框架</th><th>一句话定位</th><th>核心抽象</th><th>强项</th><th>局限</th><th>最适合讲的源码主线</th></tr>
+        <tr><td>LangChain</td><td>LLM 应用组件和集成生态</td><td>Runnable、Tool、Agent middleware、Provider adapter</td><td>模型/工具生态、组合式调用、迁移兼容</td><td>不是完整产品平台，复杂状态恢复要靠 LangGraph</td><td>provider adapter、middleware、classic 迁移</td></tr>
+        <tr><td>LangGraph</td><td>代码级 Agent 状态图运行时</td><td>StateGraph、Pregel、checkpoint、interrupt</td><td>复杂状态机、可恢复、人类中断、可测试</td><td>需要自己做 UI、权限、运营平台</td><td>Pregel 执行、checkpoint、中断恢复</td></tr>
+        <tr><td>Spring AI Alibaba</td><td>Java / Spring Boot 生产级 Agentic AI 框架</td><td>StateGraph、CompiledGraph、ReactAgent、FlowAgent、Hook、ToolCallback</td><td>企业 Java 服务落地、Nacos/A2A/MCP、checkpoint、Observation、多 Agent flow</td><td>Java/Spring 学习和部署门槛较高，低代码平台能力需要 Admin/Studio 配合</td><td>Graph Core、ReactAgent、AgentToolNode、FlowAgent、Nacos/A2A starters</td></tr>
+        <tr><td>Dify</td><td>LLM 应用开发与运营平台</td><td>App、Workflow、Dataset、Plugin、dify-agent</td><td>可视化配置、RAG、Agent、发布、观测、权限</td><td>超复杂代码状态机不适合全塞画布</td><td>WorkflowAppGenerator、DifyNodeFactory、RAG、Agent v2</td></tr>
+        <tr><td>n8n</td><td>通用自动化和集成平台</td><td>Workflow、Node、Credential、Execution</td><td>SaaS 集成、Webhook、触发器、队列、低代码自动化</td><td>LLM/Agent 是能力之一，不是唯一核心</td><td>WorkflowExecute、ActiveWorkflow、Webhook、Queue</td></tr>
+        <tr><td>Haystack</td><td>生产级 RAG / Agent 组件编排框架</td><td>Component、Pipeline、DocumentStore、Tool、Snapshot</td><td>typed pipeline、hybrid retrieval、debug、tracing、可序列化</td><td>没有内置低代码运营平台，复杂长期状态机可组合 LangGraph</td><td>Component socket、Pipeline run loop、RAG、ToolInvoker、breakpoint</td></tr>
+        <tr><td>LlamaIndex</td><td>RAG 数据框架</td><td>Document、Node、Index、Retriever、QueryEngine</td><td>ingestion、索引、检索、数据连接器</td><td>产品化和 Agent 运行治理要另搭</td><td>IngestionPipeline、VectorStoreIndex、RetrieverQueryEngine</td></tr>
+        <tr><td>AutoGen</td><td>多 Agent 消息协作框架</td><td>AssistantAgent、Message、GroupChat、Runtime</td><td>多 Agent 对话、团队协作、消息路由</td><td>生产 UI/权限/任务治理要另搭</td><td>AssistantAgent、GroupChat、runtime</td></tr>
+        <tr><td>CrewAI</td><td>角色任务式 Agent 编排</td><td>Crew、Agent、Task、Flow</td><td>角色分工清晰，适合业务任务拆解</td><td>状态恢复和底层运行控制不如 LangGraph 精细</td><td>Crew/Task 执行、Flow、Tool</td></tr>
+        <tr><td>mem0 / Zep / Graphiti / Letta</td><td>记忆与长期上下文体系</td><td>Memory、Session、Episode、AgentState</td><td>用户偏好、会话记忆、图谱关系、状态化 Agent</td><td>通常不单独承担完整业务编排</td><td>记忆抽取、上下文组装、时序图谱、tool-first loop</td></tr>
+        <tr><td>Headroom</td><td>上下文压缩和代理网关</td><td>proxy、compression、MCP/CCR adapter</td><td>降低上下文成本、网关式接入</td><td>不是 Agent/RAG 框架</td><td>代理路径、压缩核心、fail-open</td></tr>
+      </table>
+    </section>
+
+    <section id="selection">
+      <h2>2. 框架选型指南</h2>
+      <div class="mermaid">
+flowchart TB
+    Start["我要做一个 LLM / Agent 项目<br/>先问：用户入口和复杂度在哪里？"]
+    Start --> Product{"需要低代码配置、权限、发布、运营界面？"}
+    Product -->|"LLM 应用为主"| Dify["优先 Dify<br/>适合客服助手、知识库问答、内部 AI 应用、可发布 API"]
+    Product -->|"业务自动化为主"| N8N["优先 n8n<br/>适合 SaaS 串联、Webhook、审批、定时任务、企业流程自动化"]
+    Product -->|"否，主要写代码"| Code{"核心难点是什么？"}
+    Code -->|"复杂状态机 / 长任务 / 可恢复 Agent"| LangGraph["优先 LangGraph<br/>状态图、checkpoint、人类中断、可测试分支"]
+    Code -->|"Java / Spring Boot 企业 Agent"| SpringAIAlibaba["优先 Spring AI Alibaba<br/>Graph Core、ReactAgent、FlowAgent、Nacos、A2A、MCP"]
+    Code -->|"多 Agent 对话协作"| AutoCrew["AutoGen 或 CrewAI<br/>AutoGen 偏消息运行时，CrewAI 偏角色/任务/流程"]
+    Code -->|"RAG 数据接入 / 索引工程"| Llama["优先 LlamaIndex<br/>ingestion、index、retriever、query engine"]
+    Code -->|"生产级可调试 RAG Pipeline"| Haystack["优先 Haystack<br/>Component Pipeline、typed sockets、Hybrid RAG、snapshot/tracing"]
+    Code -->|"模型/工具生态适配"| LangChain["优先 LangChain<br/>provider adapter、tool、middleware、Runnable"]
+    Code -->|"长期记忆 / 用户画像"| Memory["mem0 / Zep / Graphiti / Letta<br/>按记忆形态选择"]
+    Code -->|"上下文成本与代理网关"| Headroom["Headroom<br/>压缩上下文、代理网关、MCP/CCR 适配"]
+      </div>
+      <div class="green">如果团队主栈是 Java / Spring Boot，且目标是把 Agent 作为后端服务纳入已有配置、观测、部署、服务治理体系，Spring AI Alibaba 比 Python 运行时更贴近组织现状。它的价值不是“又一个 ReAct 封装”，而是 Graph Core + Agent Framework + Spring Boot Starters 的组合。</div>
+      <div class="grid2">
+        <div class="card"><h3>客服助手</h3><p>优先 Dify。客服助手通常包含知识库、应用配置、API 发布、人审、运行记录和运营维护。复杂风控、退款、升级审批可接 LangGraph 或 Spring AI Alibaba 服务。</p></div>
+        <div class="card"><h3>复杂 Agent 状态机</h3><p>Python/JS 团队优先 LangGraph；Java/Spring 团队优先 Spring AI Alibaba。核心问题都是状态推进、失败恢复、人类中断、分支测试和 checkpoint。</p></div>
+        <div class="card"><h3>企业自动化</h3><p>优先 n8n。触发器、Webhook、凭证、节点生态、执行历史、队列和失败重试是主问题，AI 决策可以作为其中一个节点。</p></div>
+        <div class="card"><h3>高质量 RAG</h3><p>LlamaIndex 偏数据接入、切分、索引和 query engine；Haystack 偏生产级可调试 RAG Pipeline；Dify 偏产品化知识库；LangChain 偏生态组件组合。</p></div>
+      </div>
+    </section>
+
+    <section id="composition">
+      <h2>3. 组合架构专题</h2>
+      <p>成熟项目通常不会只选一个框架，而是按边界组合：外层负责产品入口和运营，中层负责任务编排，内层负责 RAG、记忆、工具和模型适配。</p>
+      <div class="mermaid">
+flowchart LR
+    UI["产品入口<br/>Dify / n8n / Spring Boot / 自研 Web"] --> Orchestrator["编排核心<br/>LangGraph / Spring AI Alibaba Graph / Dify Workflow / n8n WorkflowExecute"]
+    Orchestrator --> RAG["RAG 数据层<br/>Haystack Pipeline / LlamaIndex / Dify Dataset / LangChain retriever"]
+    Orchestrator --> Memory["记忆层<br/>mem0 / Zep / Graphiti / Letta memory"]
+    Orchestrator --> Tools["工具与系统集成<br/>Spring AI ToolCallback / LangChain Tools / n8n Nodes / Dify Plugin / 自研 API"]
+    Orchestrator --> Agent["多 Agent 协作<br/>AutoGen / CrewAI / Letta / LangGraph subgraph / Spring AI Alibaba FlowAgent"]
+    RAG --> LLM["模型适配层<br/>Haystack Generator / LangChain provider adapter / Spring AI ChatClient / Dify model provider / 直接 SDK"]
+    Memory --> LLM
+    Tools --> Audit["生产治理<br/>权限、凭证、日志、观测、回放、人工审批"]
+    Agent --> Audit
+    Audit --> UI
+      </div>
+      <table>
+        <tr><th>组合</th><th>适合场景</th><th>边界划分</th></tr>
+        <tr><td>Dify + LangGraph</td><td>业务人员需要配置和运营，同时核心决策很复杂</td><td>Dify 做应用入口、知识库、人审和观测；LangGraph 做复杂状态机、checkpoint 和代码级测试。</td></tr>
+        <tr><td>n8n + LangGraph</td><td>业务系统集成很多，AI 决策只是其中一段</td><td>n8n 做 Webhook、SaaS 节点、凭证、定时任务；LangGraph 做复杂推理和状态恢复。</td></tr>
+        <tr><td>Spring AI Alibaba + Spring Boot / Nacos / A2A</td><td>企业 Java 团队把 Agent 作为后端服务落地</td><td>Spring AI Alibaba 做 Graph Core、ReactAgent、FlowAgent、ToolCallback、checkpoint 和 stream；Spring Boot 做生命周期、依赖注入、配置和部署；Nacos 做 Prompt/模型/MCP/Agent 配置治理；A2A 做跨服务 Agent 注册发现。</td></tr>
+        <tr><td>LangChain + LangGraph</td><td>纯代码项目，需要模型/工具生态和状态图</td><td>LangChain 提供模型、工具、middleware、retriever；LangGraph 负责组织成可恢复状态图。</td></tr>
+        <tr><td>Haystack + LangGraph</td><td>RAG Pipeline 很重，同时又有长期复杂状态机</td><td>Haystack 做 typed component graph、DocumentStore、hybrid retrieval、ranker、snapshot、tracing；LangGraph 做 checkpoint、人类中断和复杂分支。</td></tr>
+        <tr><td>mem0 / Zep / Graphiti + Agent</td><td>长期个性化助手或企业知识沉淀</td><td>Agent 处理当下任务；记忆系统处理跨会话事实、偏好、关系和历史上下文。</td></tr>
+      </table>
+    </section>
+
+    <section id="patterns">
+      <h2>4. 源码设计范式专题</h2>
+      <div class="mermaid">
+flowchart TB
+    Pattern["源码设计范式横向总结"]
+    Pattern --> Graph["图运行时范式<br/>把任务变成节点、边、状态和事件"]
+    Graph --> LG["LangGraph：StateGraph + Pregel + checkpoint"]
+    Graph --> SAA["Spring AI Alibaba：StateGraph + CompiledGraph + CheckpointSaver"]
+    Graph --> DifyG["Dify：Workflow.graph + graphon + DifyNodeFactory"]
+    Graph --> N8NG["n8n：Workflow JSON + WorkflowExecute + runData"]
+    Pattern --> AgentLoop["Agent Loop 范式<br/>模型输出动作，工具执行，状态回写"]
+    AgentLoop --> Auto["AutoGen：消息驱动、多 Agent runtime"]
+    AgentLoop --> Crew["CrewAI：角色、任务、流程、工具"]
+    AgentLoop --> LettaP["Letta：AgentState、Memory、tool-first loop"]
+    AgentLoop --> DifyA["Dify Agent v2：dify-agent + Agenton layers + pause"]
+    AgentLoop --> SAAA["Spring AI Alibaba：ReactAgent + AgentLlmNode + AgentToolNode + Hook"]
+    Pattern --> RAG["RAG Pipeline 范式<br/>ingestion、index、retrieve、rerank、context injection"]
+    RAG --> HS["Haystack：typed Component Pipeline + DocumentStore + debug/tracing"]
+    RAG --> LI["LlamaIndex：数据管线和索引检索抽象"]
+    RAG --> DifyR["Dify：产品化 Dataset + 检索节点"]
+    RAG --> LCR["LangChain：组件和集成生态"]
+    Pattern --> MemoryP["记忆范式<br/>短期上下文、长期记忆、图谱记忆、时序事实"]
+    MemoryP --> M0["mem0：抽取-存储-更新-检索"]
+    MemoryP --> Z["Zep：会话级上下文服务"]
+    MemoryP --> G["Graphiti：时序知识图谱"]
+      </div>
+      <div class="grid2">
+        <div class="card"><h3>图运行时范式</h3><p>图运行时不是为了“画图好看”，而是为了让复杂任务可拆分、可追踪、可恢复、可局部重跑。LangGraph 偏 Python/JS 代码级状态图；Spring AI Alibaba 偏 Java / Spring Boot 状态图和 Agent 服务化；Dify 偏产品画布；n8n 偏自动化流程图。</p></div>
+        <div class="card"><h3>Agent Loop 范式</h3><p>核心循环是模型读取状态、决定动作、工具执行、结果写回状态。Spring AI Alibaba 的特点是把 ReAct 循环放进 Graph Core，并通过 Hook / Interceptor / ToolCallback 接入 Spring AI 生态。</p></div>
+        <div class="card"><h3>RAG Pipeline 范式</h3><p>完整 RAG 至少包括数据接入、切分、metadata、embedding、索引、检索、rerank、上下文注入、引用来源、评估和更新。Haystack 更强调 typed pipeline、debug 和观测。</p></div>
+        <div class="card"><h3>Memory 范式</h3><p>记忆分短期上下文、长期事实、图谱关系、时序事实。mem0 管生命周期，Zep 管会话上下文，Graphiti 管时序图谱，Letta 管状态化 Agent 记忆。</p></div>
+      </div>
+    </section>
+
+    <section id="cases">
+      <h2>5. 真实案例合集</h2>
+      <div class="mermaid">
+flowchart TB
+    Cases["真实案例选择框架组合"]
+    Cases --> CS["企业客服助手<br/>Dify + Haystack/LlamaIndex/Dify Dataset + LangGraph 可选"]
+    Cases --> KBRAG["企业知识库 RAG 内核<br/>Haystack Pipeline + DocumentStore + rerank/tracing"]
+    Cases --> JavaAgent["企业 Java Agent 服务<br/>Spring AI Alibaba + Nacos/A2A/MCP + Spring Boot"]
+    Cases --> Sales["销售助理 / CRM 自动化<br/>n8n + LangGraph + LangChain Tools"]
+    Cases --> Ticket["工单自动化<br/>n8n 触发器 + Dify 人审 + LangGraph 决策"]
+    Cases --> Code["代码分析 Agent<br/>LangGraph + LangChain Tools + Headroom"]
+    Cases --> Memory["个人长期记忆助手<br/>Letta 或 mem0/Zep/Graphiti + LangGraph"]
+    Cases --> Research["研究型多 Agent<br/>AutoGen / CrewAI + LangGraph checkpoint"]
+      </div>
+      <div class="case"><strong>企业客服助手：</strong>Dify 做产品入口和知识库，LlamaIndex 承担复杂数据管线，Haystack 承担可调试 RAG 后端内核，LangGraph 处理退款、风控、升级审批等复杂状态机。</div>
+      <div class="case"><strong>企业知识库 RAG 内核：</strong>Haystack 用 Component Pipeline 串起 converter、preprocessor、embedder、BM25/embedding retriever、joiner、ranker、prompt builder 和 generator；DocumentStore 负责替换不同检索后端；snapshot/tracing 用于定位召回、重排和生成问题。</div>
+      <div class="case"><strong>企业 Java Agent 服务：</strong>Spring Boot 服务中运行 Spring AI Alibaba ReactAgent / FlowAgent；Nacos 管 Prompt、模型、MCP 工具和 Agent 配置；财务、IT、HR 子 Agent 通过 A2A 注册到 Nacos；主 Agent 按任务路由，checkpoint saver 保证人工中断后能恢复。</div>
+      <div class="case"><strong>销售助理 / CRM 自动化：</strong>n8n 监听 CRM 事件并连接邮件、Slack、表格；LangGraph 判断客户等级和下一步动作；LangChain Tools 封装模型和工具。</div>
+      <div class="case"><strong>工单自动化：</strong>n8n 负责工单系统集成，Dify 负责客服可配置 AI 应用和人审界面，LangGraph 负责复杂决策和恢复。</div>
+      <div class="case"><strong>代码分析 Agent：</strong>LangGraph 管理分析状态和检查点，LangChain Tools 封装 shell / 搜索 / 代码检索，Headroom 在上下文膨胀时做压缩。</div>
+      <div class="case"><strong>个人长期记忆助手：</strong>Letta 适合完整状态化 Agent；mem0 / Zep / Graphiti 适合作为独立记忆服务，再接 LangGraph 进行任务规划。</div>
+    </section>
+
+    <section id="share">
+      <h2>6. 分享顺序建议</h2>
+      <ol>
+        <li>先用“问题分类图”说明这些框架不在同一个赛道。</li>
+        <li>再讲总览矩阵，告诉听众每个框架最该看什么源码。</li>
+        <li>用选型流程回答“我该选哪一个”。</li>
+        <li>用组合架构说明真实项目通常是多框架组合。</li>
+        <li>用设计范式把源码抽象升维：图运行时、Agent loop、RAG pipeline、Memory。</li>
+        <li>最后用 2-3 个真实案例收束，帮助听众把概念落地。</li>
+      </ol>
+      <div class="note">一句话收尾：选框架不是选“最强的那个”，而是先判断问题属于产品平台、状态图运行时、RAG 数据层、记忆系统还是自动化集成，再组合对应的源码范式。</div>
+    </section>
+  </main>
+</body>
+</html>

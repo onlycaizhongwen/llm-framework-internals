@@ -1,0 +1,10 @@
+flowchart LR
+    Dify["Dify<br/>产品化入口：应用、权限、知识库、插件、模型管理、观测"] --> API["HTTP / Tool / Workflow Node"]
+    API --> LangGraph["LangGraph 服务<br/>代码级状态机、复杂 Agent 状态、checkpoint、人为中断"]
+    LangGraph --> Tools["企业内部工具<br/>CRM、工单、订单、风控、数据库"]
+    Tools --> LangGraph
+    LangGraph --> Dify
+    Dify --> Human["Dify Human Input / 审批节点<br/>面向运营人员的人审界面"]
+    Dify --> Rag["Dify Dataset / RAG<br/>知识库配置和检索治理"]
+    Rag --> LangGraph
+    LangGraph --> Audit["返回结构化结果<br/>Dify 保存会话、运行记录、观测与分享入口"]

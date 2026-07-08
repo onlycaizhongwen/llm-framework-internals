@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant Dev as 开发者
+    participant SG as StateGraph
+    participant CG as CompiledGraph
+    participant Runner as GraphRunner
+    participant Node as NodeAction
+    participant Saver as CheckpointSaver
+    participant Stream as Flux / NodeOutput
+
+    Dev->>SG: addNode / addEdge / addConditionalEdges
+    SG->>SG: validateGraph<br/>为什么：先检查入口、节点、边和条件映射
+    Dev->>SG: compile(CompileConfig)
+    SG->>CG: 生成 nodeFactories / edges / keyStrategyMap
+    CG->>Saver: 可选读取 checkpoint
+    CG->>Runner: graphResponseStream(inputs, config)
+    loop 直到 END 或中断
+        Runner->>Node: apply(OverAllState, RunnableConfig)
+        Node-->>Runner: Map 状态增量
+        Runner->>Runner: 按 KeyStrategy 合并状态
+        Runner->>Saver: 保存 checkpoint / snapshot
+        Runner-->>Stream: 输出 NodeOutput / GraphResponse
+    end
+    Stream-->>Dev: final state / streaming events

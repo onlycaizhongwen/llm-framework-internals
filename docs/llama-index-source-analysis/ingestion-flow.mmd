@@ -1,0 +1,11 @@
+flowchart TD
+    A["Reader<br/>SimpleDirectoryReader / connector<br/>读取文件、网页、数据库"] --> B["Document<br/>带文本和 metadata 的原始文档"]
+    B --> C["IngestionPipeline.run<br/>统一写入入口<br/>为什么：把切块、缓存、去重、写库放到一条链路"]
+    C --> D["Transformations<br/>NodeParser / Extractor / Embedding<br/>为什么：文档要变成可检索 nodes"]
+    D --> E["IngestionCache<br/>缓存 transformation 结果<br/>为什么：大文档重复处理成本高"]
+    D --> F["Docstore Strategy<br/>duplicates_only / upserts / upserts_and_delete<br/>为什么：更新知识库时要处理重复、增量和删除"]
+    F --> G["Docstore<br/>保存 node 文本和 metadata"]
+    D --> H["VectorStore<br/>保存 embedding 和检索字段"]
+    H --> I["StorageContext<br/>统一管理 docstore / vector_store / index_store"]
+    G --> I
+    I --> J["Index / QueryEngine<br/>后续查询复用同一份存储"]

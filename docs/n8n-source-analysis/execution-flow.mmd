@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant UI as editor-ui / API
+    participant Runner as WorkflowRunner
+    participant Active as ActiveExecutions
+    participant Manual as ManualExecutionService
+    participant Engine as WorkflowExecute
+    participant Node as Node execute/webhook/trigger
+    participant Hooks as hooks + persistence
+    UI->>Runner: run(workflow execution data)
+    Runner->>Active: add()<br/>创建/持久化 execution 记录
+    Runner->>Engine: new WorkflowExecute(additionalData, mode)
+    alt manual / partial
+        Runner->>Manual: runManually()
+        Manual->>Engine: run() 或 processRunExecutionData()
+    else normal
+        Runner->>Engine: processRunExecutionData(workflow)
+    end
+    Engine->>Engine: 从 start node / nodeExecutionStack 开始<br/>为什么：工作流图转为可推进的执行栈
+    loop 每个待执行节点
+        Engine->>Node: runNode() -> executeNode()
+        Node-->>Engine: INodeExecutionData[][]
+        Engine->>Engine: 写 runData，按 connections 推入下游节点
+    end
+    Engine->>Hooks: success/error hooks、execution data 持久化、push
+    Hooks-->>UI: execution result / progress

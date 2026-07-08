@@ -1,0 +1,14 @@
+flowchart TD
+    Agent["AI Agent 节点<br/>LangChain agent loop<br/>为什么：让 LLM 决定何时调用工具"]
+    ToolSchema["N8nTool / DynamicTool<br/>Zod schema + fallback JSON parser<br/>为什么：模型输出不稳定，需要容错解析"]
+    EngineReq["EngineRequest actions<br/>toolName / toolInput / metadata<br/>为什么：把一次工具调用变成 n8n 可执行动作"]
+    Hitl["HITL / SendAndWait<br/>审批或拒绝工具调用<br/>为什么：高风险动作不能全自动放行"]
+    ToolNode["连接的 n8n 工具节点<br/>HTTP / DB / SaaS / Code<br/>为什么：复用节点生态"]
+    EngineResp["EngineResponse / ai_tool runData<br/>工具结果回填给 Agent<br/>为什么：保持可观测、可调试"]
+    Memory["memoryManagement / buildSteps<br/>重建 intermediate steps<br/>为什么：Agent 继续推理要知道历史工具结果"]
+
+    Agent --> ToolSchema --> EngineReq
+    EngineReq --> Hitl
+    Hitl -- approved --> ToolNode
+    Hitl -- denied --> Agent
+    ToolNode --> EngineResp --> Memory --> Agent

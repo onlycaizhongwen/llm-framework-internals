@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant Dev as 开发者代码
+    participant Pipe as Pipeline / AsyncPipeline
+    participant Base as PipelineBase
+    participant Graph as networkx MultiDiGraph
+    participant Comp as Component.run / run_async
+    participant Trace as Tracer / Breakpoint
+    participant Out as Pipeline outputs
+
+    Dev->>Pipe: add_component(name, instance)
+    Pipe->>Base: 检查 @component 契约与 sockets
+    Base->>Graph: 添加节点和 instance
+    Dev->>Pipe: connect("retriever", "prompt_builder.documents")
+    Base->>Graph: 类型校验 + socket 匹配 + 添加边
+    Dev->>Pipe: run(data, include_outputs_from, break_point)
+    Pipe->>Pipe: warm_up()
+    loop 按输入就绪和优先级推进
+        Pipe->>Trace: 创建组件 span / 检查 breakpoint
+        Pipe->>Comp: 调用 run(**inputs)
+        Comp-->>Pipe: dict 输出，按 output socket 分发
+        Pipe->>Graph: 推送给下游组件输入
+    end
+    Pipe-->>Out: 返回叶子组件或指定组件输出

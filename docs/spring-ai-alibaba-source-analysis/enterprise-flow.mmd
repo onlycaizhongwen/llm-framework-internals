@@ -1,0 +1,8 @@
+flowchart TB
+    Admin["Admin / Studio<br/>可视化配置 Agent、Prompt、MCP、评估与观测"] --> NacosConfig["Nacos Config Starter<br/>读取 agent.json、prompt.json、model.json、mcp-servers.json"]
+    NacosConfig --> Builder["NacosReactAgentBuilder<br/>注入模型、Prompt、MCP 工具、Partner Agents"]
+    Builder --> Agent["ReactAgent / FlowAgent<br/>运行在 Spring Boot 服务内"]
+    Agent --> A2A["A2A Nacos Starter<br/>Agent Card 注册发现、JSON-RPC 路由、GraphAgentExecutor"]
+    A2A --> Remote["远程 Agent 服务<br/>为什么：企业里不同 Agent 往往由不同服务团队维护"]
+    Agent --> Obs["Graph Observation Starter<br/>ObservationRegistry / ChatModelObservationConvention"]
+    Agent --> Biz["业务系统<br/>数据库、工单、CRM、知识库、内部服务"]

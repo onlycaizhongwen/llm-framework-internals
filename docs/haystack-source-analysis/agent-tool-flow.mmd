@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant User as 用户消息
+    participant Agent as Agent component
+    participant State as State / messages
+    participant LLM as ChatGenerator
+    participant Invoker as ToolInvoker
+    participant Tool as Tool / ComponentTool / PipelineTool
+    participant HITL as ConfirmationStrategy / Human in the loop
+
+    User->>Agent: messages 或 user_prompt 参数
+    Agent->>State: 初始化 state_schema，默认 messages 合并
+    loop 直到 exit_conditions 或 max_agent_steps
+        Agent->>LLM: 传入 messages + tools
+        LLM-->>Agent: ChatMessage，可能包含 tool calls
+        alt 无工具调用或命中 text exit
+            Agent-->>User: 返回 last_message + state
+        else 有工具调用
+            Agent->>HITL: 可选确认工具执行
+            HITL-->>Agent: 执行 / 拒绝 / 修改
+            Agent->>Invoker: 调用工具并传入 state 输入
+            Invoker->>Tool: invoke()
+            Tool-->>Invoker: result / error
+            Invoker-->>State: tool result 写回 messages 或 state
+        end
+    end

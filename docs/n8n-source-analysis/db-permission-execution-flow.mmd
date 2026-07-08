@@ -1,0 +1,15 @@
+flowchart TD
+    Project["Project<br/>personal / team<br/>为什么：企业协作的资源边界"]
+    UserRole["ProjectRelation + Role + Scope<br/>用户在项目中的角色和权限<br/>为什么：权限不是写死在代码分支里"]
+    SharedWf["SharedWorkflow<br/>workflowId + projectId + role<br/>为什么：工作流共享和权限独立建模"]
+    SharedCred["SharedCredentials<br/>credentialsId + projectId + role<br/>为什么：凭证比 workflow 更敏感，需要单独共享"]
+    Credential["CredentialsEntity<br/>encrypted data / type / resolver<br/>为什么：节点只拿运行所需凭证"]
+    Execution["ExecutionEntity<br/>status / retryOf / waitTill / storedAt<br/>为什么：执行历史要可查、可恢复、可清理"]
+    ExecutionData["ExecutionData<br/>runData + workflowData snapshot<br/>为什么：大体积执行数据与索引字段分离"]
+    Recovery["ExecutionRepository<br/>markAsCrashed / getWaitingExecutions / cancelMany<br/>为什么：服务重启、等待节点和取消都要落库"]
+
+    Project --> UserRole
+    Project --> SharedWf
+    Project --> SharedCred --> Credential
+    SharedWf --> Execution --> ExecutionData
+    Execution --> Recovery

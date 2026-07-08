@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Letta 源码架构精读</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true }, sequence: { mirrorActors: false } });
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --ink: #1d2433;
+      --muted: #5d6678;
+      --line: #d9deea;
+      --brand: #2764c7;
+      --brand-soft: #e8f0ff;
+      --green: #0f8f6f;
+      --orange: #b35c00;
+      --code: #f3f5f9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.7;
+    }
+    header {
+      background: linear-gradient(180deg, #ffffff 0%, #edf3ff 100%);
+      border-bottom: 1px solid var(--line);
+      padding: 44px 24px 30px;
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px 20px 56px; }
+    .hero { max-width: 1180px; margin: 0 auto; }
+    .eyebrow { color: var(--brand); font-weight: 700; margin-bottom: 8px; }
+    h1 { margin: 0 0 12px; font-size: clamp(30px, 5vw, 52px); line-height: 1.12; letter-spacing: 0; }
+    h2 { margin: 38px 0 14px; font-size: 26px; border-left: 5px solid var(--brand); padding-left: 12px; }
+    h3 { margin: 24px 0 10px; font-size: 20px; }
+    p { margin: 10px 0; }
+    a { color: var(--brand); }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 112px;
+    }
+    .metric strong { display: block; font-size: 14px; color: var(--muted); }
+    .metric span { display: block; margin-top: 8px; font-size: 18px; font-weight: 700; }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 18px 0;
+    }
+    .note {
+      background: var(--brand-soft);
+      border-left: 5px solid var(--brand);
+      padding: 14px 16px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+    .warn {
+      background: #fff6e8;
+      border-left: 5px solid var(--orange);
+      padding: 14px 16px;
+      border-radius: 6px;
+      margin: 16px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    th { background: #f1f4fa; text-align: left; }
+    code {
+      background: var(--code);
+      border: 1px solid #e2e6ef;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      background: #182033;
+      color: #edf2ff;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      line-height: 1.55;
+    }
+    pre code { background: transparent; border: 0; padding: 0; color: inherit; }
+    .mermaid {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 14px 0;
+      overflow-x: auto;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .pill {
+      display: inline-block;
+      background: #eef7f4;
+      color: var(--green);
+      border: 1px solid #cfe9df;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .toc a {
+      display: block;
+      background: #f6f8fc;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      text-decoration: none;
+      color: var(--ink);
+    }
+    @media (max-width: 860px) {
+      .summary, .grid2, .toc { grid-template-columns: 1fr; }
+      section { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <div class="eyebrow">LLM Framework Internals / Letta</div>
+      <h1>Letta 源码架构精读</h1>
+      <p>从 legacy Letta server 入手，拆解一个有长期记忆、工具、运行状态和 Provider Adapter 的 Agent 服务端是怎么实现的。</p>
+      <div class="summary">
+        <div class="metric"><strong>源码版本</strong><span>b76da909...</span></div>
+        <div class="metric"><strong>包版本</strong><span>letta 0.16.8</span></div>
+        <div class="metric"><strong>核心定位</strong><span>Stateful Agent Server</span></div>
+        <div class="metric"><strong>阅读重点</strong><span>AgentState + Memory + Tools</span></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>阅读导航</h2>
+      <p>建议按“定位 -> 架构 -> 主流程 -> 设计思想 -> 真实例子 -> 对比分析”的顺序看。Markdown 底稿见 <a href="./index.md">index.md</a>，图源码见同目录的 <code>.mmd</code> 文件。</p>
+      <div class="toc">
+        <a href="#conclusion">总体结论</a>
+        <a href="#architecture">最高层架构</a>
+        <a href="#agentstate">AgentState</a>
+        <a href="#message-flow">发送消息主流程</a>
+        <a href="#memory">Memory 分层</a>
+        <a href="#tools">工具调用</a>
+        <a href="#provider">Provider Adapter</a>
+        <a href="#runtime">Streaming / Run / Step</a>
+        <a href="#example">真实例子</a>
+        <a href="#compare">框架对比</a>
+        <a href="#limits">局限性</a>
+        <a href="#share">分享建议</a>
+      </div>
+    </section>
+
+    <section id="conclusion">
+      <h2>1. 总体结论</h2>
+      <p>Letta 的核心定位是 <strong>stateful agent server</strong>：它把 Agent 的 persona、人类画像、工具、消息、长期记忆、文件知识、运行状态都放进服务端数据模型，再通过 REST、OpenAI-compatible API 和 streaming 暴露出去。</p>
+      <div class="note">
+        <strong>一句话分享：</strong>LangGraph 强在“流程状态图怎么流转”，mem0 强在“记忆事实怎么抽取和检索”，Letta 强在“把一个有身份、有核心记忆、有工具、有长期档案的 Agent 做成服务端对象，并让它可以持续对话和自我维护记忆”。
+      </div>
+      <div class="warn">
+        <strong>版本边界：</strong><code>README.md</code> 明确说明该仓库是 legacy Letta server，活跃开发迁到 <code>letta-code</code>。因此这份分析聚焦 V1 API/server、Agent Runtime、memory、tools 和 provider adapter。
+      </div>
+      <table>
+        <tr><th>主线</th><th>为什么值得讲</th></tr>
+        <tr><td>FastAPI router -> SyncServer -> Managers</td><td>看懂服务端分层，知道 API 为什么不直接操作数据库。</td></tr>
+        <tr><td>AgentState</td><td>Letta 的 Agent 是持久资源，不是一次性 prompt。</td></tr>
+        <tr><td>Agent.step / inner_step</td><td>一次消息如何进入 LLM、工具、消息持久化和总结。</td></tr>
+        <tr><td>Memory 分层</td><td>core blocks 常驻 prompt，archival/source passages 按需检索。</td></tr>
+        <tr><td>Tool-first loop</td><td>回复用户、改记忆、搜档案、调 MCP 都统一成 tool call。</td></tr>
+      </table>
+    </section>
+
+    <section id="architecture">
+      <h2>2. 最高层架构</h2>
+      <div class="mermaid">
+flowchart TB
+    User["用户 / SDK / CLI / OpenAI兼容客户端<br/>为什么：Letta 把有记忆的 Agent 暴露成 API 和本地工具"] --> API["FastAPI REST / OpenAI compatible routers<br/>agents、messages、sources、tools、groups、runs"]
+    API --> Server["SyncServer<br/>统一业务入口<br/>为什么：路由层只做协议和鉴权，业务交给 server + managers"]
+    Server --> Managers["Service Managers<br/>AgentManager / MessageManager / BlockManager / PassageManager / ToolManager / RunManager"]
+    Managers --> AgentState["AgentState<br/>persona/human blocks、tools、tool_rules、llm_config、embedding_config"]
+    Managers --> Storage["SQLModel / SQLAlchemy ORM<br/>agents、messages、blocks、passages、sources、runs、steps"]
+    Server --> Runtime["Agent Runtime<br/>Agent.step / inner_step<br/>为什么：一次请求最多推进若干 LLM step 和 tool step"]
+    Runtime --> Prompt["Memory.compile / system prompt<br/>把 core memory、summary、sources、tool rules 拼进上下文"]
+    Runtime --> LLM["LLMClient factory<br/>OpenAI / Anthropic / Bedrock / Gemini / vLLM / Ollama 等"]
+    Runtime --> ToolExec["ToolExecutionManager<br/>core tools、sandbox tools、MCP、Composio、files tools"]
+    ToolExec --> MemoryTools["Core memory + archival memory tools<br/>send_message、conversation_search、archival_memory_search/insert、memory_*"]
+    MemoryTools --> Blocks["Blocks<br/>短期核心记忆<br/>为什么：persona/human 等高频事实直接进 prompt"]
+    MemoryTools --> Passages["Passages / Archives / Sources<br/>长期向量记忆和文件检索<br/>为什么：低频大量知识按需搜索"]
+    Runtime --> Summarizer["Summarizer / context window calculator<br/>为什么：上下文接近窗口时压缩历史消息"]
+    Runtime --> Streaming["StreamingService + Run/Step managers<br/>SSE、后台流、取消、状态追踪"]
+      </div>
+      <p>这张图要从上往下读：入口层负责协议，业务层负责资源和持久化，Runtime 层负责一次 Agent step，memory/tool/provider/streaming 是围绕 Runtime 的能力组件。</p>
+      <table>
+        <tr><th>证据</th><th>说明</th></tr>
+        <tr><td><code>letta/server/rest_api/app.py:294</code>、<code>:411</code>、<code>:853</code></td><td>创建 FastAPI app 并挂载路由。</td></tr>
+        <tr><td><code>letta/server/rest_api/routers/v1/agents.py:613</code>、<code>:1662</code></td><td>创建 Agent 和发送消息入口。</td></tr>
+        <tr><td><code>letta/server/server.py:626</code></td><td><code>SyncServer</code> 把创建 Agent 转给 <code>AgentManager</code>。</td></tr>
+        <tr><td><code>letta/agent.py:96</code>、<code>:753</code>、<code>:857</code></td><td><code>Agent</code>、<code>step()</code>、<code>inner_step()</code> 是运行时核心。</td></tr>
+      </table>
+    </section>
+
+    <section id="agentstate">
+      <h2>3. AgentState：核心对象</h2>
+      <p>读 Letta 源码时，最先要抓住 <code>AgentState</code>。它说明 Letta 的 Agent 是数据库里的长期资源，有配置、有记忆、有工具、有运行规则。</p>
+      <table>
+        <tr><th>字段</th><th>作用</th><th>为什么重要</th></tr>
+        <tr><td><code>llm_config</code></td><td>模型、endpoint、context window</td><td>Provider adapter 和上下文预算都依赖它。</td></tr>
+        <tr><td><code>embedding_config</code></td><td>长期记忆和文件 passage 的 embedding 配置</td><td>决定 archival/source 检索能力。</td></tr>
+        <tr><td><code>blocks</code> / <code>memory</code></td><td>persona、human、自定义核心记忆块</td><td>高频事实常驻 system prompt。</td></tr>
+        <tr><td><code>tools</code></td><td>Agent 可调用的工具列表</td><td>回复、记忆编辑、文件检索都工具化。</td></tr>
+        <tr><td><code>tool_rules</code></td><td>工具顺序和终止规则</td><td>降低乱调工具风险。</td></tr>
+        <tr><td><code>enable_sleeptime</code></td><td>后台记忆维护模式</td><td>把主对话和记忆整理分离。</td></tr>
+      </table>
+      <p><span class="pill">设计范式</span><strong>Agent-as-stateful-resource</strong>。LangChain 里很多 Agent 是运行时组合；Letta 则把 Agent 做成有 ID、有配置、有记忆、有工具、有运行记录的服务端资源。</p>
+    </section>
+
+    <section id="message-flow">
+      <h2>4. 发送消息主流程</h2>
+      <div class="mermaid">
+sequenceDiagram
+    participant Client as Client / SDK
+    participant Router as FastAPI agents router
+    participant Server as SyncServer
+    participant Stream as StreamingService
+    participant Agent as Agent.step / inner_step
+    participant LLM as LLMClient
+    participant Tools as ToolExecutionManager
+    participant DB as Message / Step / Run storage
+    Client->>Router: POST /v1/agents/{id}/messages
+    Router->>Server: actor + request validation
+    Server->>Stream: create_agent_stream 或同步执行
+    Stream->>DB: create Run<br/>为什么：支持异步、取消和恢复观察
+    Stream->>Agent: 输入 MessageCreate 列表
+    Agent->>DB: 读取 in_context_messages + AgentState
+    Agent->>LLM: build_request_data + request_async<br/>带 tools、memory、system prompt
+    LLM-->>Agent: assistant message 或 tool call
+    Agent->>Tools: 执行 tool call<br/>为什么：send_message/记忆/文件/MCP 都统一成工具
+    Tools-->>Agent: ToolExecutionResult
+    Agent->>DB: 持久化 assistant/tool messages、step status
+    Agent-->>Stream: LettaResponse / SSE chunks
+    Stream-->>Client: messages / stream / run status
+      </div>
+      <p><code>inner_step()</code> 的注释很关键：一次 step 至多生成一次 LLM call。服务端可以通过多 step、streaming、background run 来控制长期执行，而不是让模型无限循环。</p>
+      <pre><code class="language-python">class Agent(BaseAgent):
+    def step(...):
+        step_response = self.inner_step(...)
+
+    def inner_step(...):
+        """Runs a single step in the agent loop (generates at most one LLM call)"""</code></pre>
+    </section>
+
+    <section id="memory">
+      <h2>5. Memory 分层</h2>
+      <div class="mermaid">
+flowchart TD
+    A["创建 Agent<br/>AgentCreate / AgentManager.create_agent_async"] --> B["生成 AgentState<br/>llm_config、embedding_config、tools、tool_rules"]
+    B --> C["Blocks/Core Memory<br/>persona、human、自定义 label<br/>为什么：高价值、常用事实常驻 prompt"]
+    B --> D["Archives / Passages<br/>archival memory<br/>为什么：大量低频事实不直接塞进上下文"]
+    B --> E["Sources / Files<br/>上传文档 -> chunk -> embedding -> passage"]
+    C --> F["Memory.compile<br/>拼接 system prompt + blocks + tool usage rules + sources"]
+    F --> G["LLM 调用<br/>模型看到核心记忆和工具说明"]
+    G --> H{"模型调用记忆工具?"}
+    H -->|"core_memory_append / replace / memory_*"| I["BlockManager 更新 block<br/>重建关联 Agent 的 system prompt"]
+    H -->|"archival_memory_insert"| J["PassageManager 写入 archive passage<br/>生成 embedding"]
+    H -->|"archival_memory_search / conversation_search"| K["向量/文本检索 passages 或 messages"]
+    I --> F
+    J --> K
+    K --> G
+    E --> K
+      </div>
+      <table>
+        <tr><th>记忆类型</th><th>源码对象</th><th>适合放什么</th><th>为什么这么分</th></tr>
+        <tr><td>Core memory</td><td><code>Block</code> / <code>Memory.compile()</code></td><td>persona、human、偏好、关键事实</td><td>每轮都需要看到，直接进 prompt。</td></tr>
+        <tr><td>Recall memory</td><td><code>MessageManager</code></td><td>对话历史、tool result</td><td>历史很多，按需搜索或总结。</td></tr>
+        <tr><td>Archival memory</td><td><code>Passage</code> / <code>Archive</code></td><td>长期知识、笔记、事实档案</td><td>数量大，不应常驻上下文。</td></tr>
+        <tr><td>Source/file memory</td><td><code>Source</code> / <code>File</code> / <code>Passage</code></td><td>上传文档、代码、知识库</td><td>用 RAG 方式检索。</td></tr>
+        <tr><td>Summary memory</td><td><code>Summarizer</code></td><td>被压缩的旧对话</td><td>上下文快满时保留摘要。</td></tr>
+      </table>
+      <p>和 mem0 不同，Letta 不只是外部 memory layer。它让 Agent 通过工具主动维护 memory，并把 memory 编译进下一轮上下文。</p>
+    </section>
+
+    <section id="tools">
+      <h2>6. Tool-first Agent Loop</h2>
+      <div class="mermaid">
+flowchart LR
+    A["LLM 输出 tool call<br/>函数名 + JSON args"] --> B["Agent._handle_ai_response<br/>解析 tool_call 并匹配 Tool"]
+    B --> C["ToolRulesSolver<br/>为什么：约束 init、child、terminal、approval 等工具顺序"]
+    C --> D["ToolExecutionManager.execute_tool_async"]
+    D --> E{"tool_type"}
+    E -->|"LETTA_CORE / MEMORY_CORE"| F["LettaCoreToolExecutor<br/>send_message、memory、archival、conversation"]
+    E -->|"LETTA_FILES_CORE"| G["LettaFileToolExecutor<br/>open/grep/semantic_search 文件"]
+    E -->|"EXTERNAL_MCP"| H["MCPToolExecutor<br/>调用外部 MCP server"]
+    E -->|"EXTERNAL_COMPOSIO"| I["Composio executor"]
+    E -->|"CUSTOM / sandbox"| J["ToolExecutionSandbox<br/>本地 / E2B / Modal 等沙箱"]
+    F --> K["ToolExecutionResult"]
+    G --> K
+    H --> K
+    I --> K
+    J --> K
+    K --> L["写入 tool message<br/>再进入下一轮 LLM 或终止"]
+    L --> M["send_message 通常是 TerminalToolRule<br/>为什么：把最终回复也作为工具调用，便于统一审计和流式输出"]
+      </div>
+      <p>Letta 的一个特别设计是：最终回复也常常通过 <code>send_message</code> 工具表达。这样“回复用户、编辑记忆、检索档案、调用 MCP”都进入同一套 tool call 审计模型。</p>
+      <table>
+        <tr><th>证据</th><th>说明</th></tr>
+        <tr><td><code>letta/agent.py:445</code>、<code>:527</code>、<code>:736</code></td><td>解析 LLM tool call、找到目标工具、更新 ToolRules 状态。</td></tr>
+        <tr><td><code>tool_execution_manager.py:68</code>、<code>:95</code></td><td>统一工具执行入口。</td></tr>
+        <tr><td><code>core_tool_executor.py:78</code>、<code>:278</code>、<code>:307</code>、<code>:319</code></td><td>核心工具包括回复、archival search/insert、core memory append。</td></tr>
+        <tr><td><code>schemas/tool_rule.py:64</code>、<code>:254</code>、<code>:275</code></td><td>Child / Init / Terminal tool rules。</td></tr>
+      </table>
+    </section>
+
+    <section id="provider">
+      <h2>7. Provider Adapter</h2>
+      <p>Letta 的 provider 适配是 Factory + Adapter + Provider Registry。Agent runtime 不直接依赖某个 SDK，而是通过 <code>LLMClientBase</code> 统一请求、streaming、usage 和 embeddings。</p>
+      <pre><code class="language-python">class LLMClient:
+    @staticmethod
+    def create(provider_type: ProviderType, actor: User) -> LLMClientBase:
+        match provider_type:
+            case ProviderType.openai:
+                return OpenAIClient(...)
+            case ProviderType.anthropic:
+                return AnthropicClient(...)</code></pre>
+      <table>
+        <tr><th>源码位置</th><th>含义</th></tr>
+        <tr><td><code>letta/llm_api/llm_client.py:14-132</code></td><td>根据 <code>ProviderType</code> 创建 OpenAI、Anthropic、Bedrock、Gemini、vLLM 等 client。</td></tr>
+        <tr><td><code>letta/llm_api/llm_client_base.py:200</code>、<code>:246</code>、<code>:293</code></td><td>统一 request、async request、request data 构造。</td></tr>
+        <tr><td><code>letta/llm_api/openai_client.py:502</code>、<code>:767</code>、<code>:1084</code></td><td>OpenAI 请求构造、请求发送和 embeddings。</td></tr>
+        <tr><td><code>letta/adapters/letta_llm_stream_adapter.py:23</code></td><td>streaming adapter。</td></tr>
+      </table>
+    </section>
+
+    <section id="runtime">
+      <h2>8. Streaming、Run、Step 和 Summarizer</h2>
+      <div class="grid2">
+        <div>
+          <h3>服务端运行状态</h3>
+          <p><code>RunManager</code>、<code>StepManager</code>、<code>StreamingService</code> 让 Letta 像后端平台：支持 SSE、后台流、取消、keepalive、错误收束和状态更新。</p>
+          <p>证据：<code>streaming_service.py:196</code>、<code>run_manager.py:48</code>、<code>run_manager.py:320</code>、<code>step_manager.py:40</code>。</p>
+        </div>
+        <div>
+          <h3>上下文自管理</h3>
+          <p>当 usage 接近 context window 或发生 overflow，Agent 会触发 summarizer。它压缩的是 Agent 历史消息，而不是像 Headroom 那样作为外部代理压缩工具输出。</p>
+          <p>证据：<code>agent.py:945-987</code>、<code>agent.py:1039</code>、<code>summarizer_sliding_window.py:99</code>。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="example">
+      <h2>9. 真实例子：源码分析助手</h2>
+      <p>假设我们要做一个长期服务的“源码分析助手”，用户偏好是中文、先架构后主流程、HTML 为主、图中写中文说明和为什么、浅色背景。</p>
+      <pre><code class="language-python">agent = AgentCreate(
+    name="source-analysis-assistant",
+    memory_blocks=[
+        {"label": "persona", "value": "我是一个擅长开源 LLM 框架源码精读的中文助手。"},
+        {"label": "human", "value": "用户主要看 HTML，偏好浅色背景、中文说明、先架构后主流程。"},
+    ],
+    include_base_tools=True,
+)</code></pre>
+      <p>当用户说“分析 letta-ai/letta，参考其他工程”时，Letta 会读取 AgentState，把 persona/human blocks 编进 system prompt。模型可以调用文件工具读源码，调用 archival memory 找之前 mem0/headroom 的分析风格，也可以通过 memory 工具更新用户偏好。</p>
+      <p>这个例子能说明 Letta 和 mem0 的差别：mem0 更像外部 memory layer；Letta 更像把 memory、tools、messages、LLM provider 和 execution lifecycle 都封装进 Agent server。</p>
+    </section>
+
+    <section id="compare">
+      <h2>10. 和其他框架对比</h2>
+      <table>
+        <tr><th>维度</th><th>Letta</th><th>LangGraph</th><th>mem0</th><th>Zep / Graphiti</th><th>AutoGen / CrewAI</th></tr>
+        <tr><td>核心问题</td><td>有记忆的 Agent 如何服务端持久运行</td><td>状态图流程如何可控执行</td><td>长期 facts 怎么抽取和检索</td><td>会话/图谱记忆如何服务化</td><td>多 Agent 如何对话协作</td></tr>
+        <tr><td>状态模型</td><td>AgentState + DB resources</td><td>显式 graph state + checkpoint</td><td>user/agent/run scoped memories</td><td>thread/user/session/graph</td><td>Agent/team runtime state</td></tr>
+        <tr><td>记忆方式</td><td>core blocks + archival passages + summary</td><td>由应用定义 state/memory</td><td>Memory.add/search</td><td>context assembly / temporal graph</td><td>通常依赖外部 memory</td></tr>
+        <tr><td>工具模型</td><td>send_message、memory、file、MCP 都是 tool</td><td>node/tool 自定义</td><td>不是工具编排核心</td><td>记忆 API 为主</td><td>工具调用和团队协作</td></tr>
+      </table>
+      <div class="note">
+        <strong>和 LangGraph 组合：</strong>LangGraph 管复杂业务流程，Letta 管某个节点里的“有记忆 Agent”。LangGraph 节点可以调用 Letta Agent API，让 Letta 处理对话、记忆和工具。
+      </div>
+    </section>
+
+    <section id="limits">
+      <h2>11. 局限性和阅读注意点</h2>
+      <table>
+        <tr><th>局限 / 注意点</th><th>为什么</th><th>建议</th></tr>
+        <tr><td>当前仓库是 legacy server</td><td>README 已说明活跃开发迁到 <code>letta-code</code></td><td>分享时先讲清版本边界。</td></tr>
+        <tr><td>历史包袱较重</td><td>有 deprecated memory 字段、V1 API、旧 MemGPT 概念</td><td>主线放在 AgentState、Agent loop、Blocks/Passages、ToolExecution。</td></tr>
+        <tr><td>架构比纯库复杂</td><td>服务端要处理数据库、stream、run、step、auth、jobs</td><td>适合平台型 Agent，不适合所有轻量 app。</td></tr>
+        <tr><td>记忆由 Agent 工具维护，可能误写</td><td>LLM 调用 memory 工具可能出错</td><td>关键业务记忆要加 approval、审计和回滚。</td></tr>
+        <tr><td>Git clone 网络不稳定</td><td>本次 clone 阶段 SSL 中断</td><td>已使用 codeload 快照；后续网络稳定可改成 submodule。</td></tr>
+      </table>
+    </section>
+
+    <section id="share">
+      <h2>12. 分享建议</h2>
+      <p>推荐不要从路由列表开始讲，而是从 AgentState 开始：Letta 的核心是把 Agent 做成服务端资源，它有身份、有记忆块、有工具、有长期档案、有模型配置、有运行记录。</p>
+      <ol>
+        <li>先讲背景：Letta 前身 MemGPT，这个仓库是 legacy server。</li>
+        <li>讲架构：FastAPI router、SyncServer、Managers、Agent Runtime、Storage、Provider、Tool Executor。</li>
+        <li>讲 AgentState：为什么 Letta 的 Agent 是服务端资源。</li>
+        <li>讲主流程：用户消息进入 <code>Agent.step/inner_step</code>，LLM 输出 tool call，工具执行并持久化。</li>
+        <li>讲 memory 分层：core blocks、archival passages、sources/files、summary memory。</li>
+        <li>最后对比 LangGraph、mem0、Zep、AutoGen、CrewAI，明确选型边界。</li>
+      </ol>
+      <div class="note">
+        <strong>开场白：</strong>“Letta 读源码时不要先从路由列表讲起，而要先抓住 AgentState。Letta 的核心是把 Agent 做成服务端资源：它有身份、有记忆块、有工具、有长期档案、有模型配置、有运行记录。”
+      </div>
+    </section>
+  </main>
+</body>
+</html>

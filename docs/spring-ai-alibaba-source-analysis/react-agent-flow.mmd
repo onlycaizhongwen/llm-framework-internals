@@ -1,0 +1,10 @@
+flowchart TB
+    Input["用户输入 / messages / input<br/>为什么：兼容对话和图节点两种入口"] --> BeforeAgent["beforeAgent hooks<br/>Instruction、PII、Memory、Skills 等"]
+    BeforeAgent --> BeforeModel["beforeModel hooks<br/>上下文压缩、人工中断、工具选择、模型调用限制"]
+    BeforeModel --> LLM["AgentLlmNode<br/>ChatClient + ChatModel + ToolCallingChatOptions<br/>为什么：禁用 Spring AI 内部工具执行，由框架统一管理工具循环"]
+    LLM --> Route{"最后一条 AssistantMessage<br/>是否包含 tool calls？"}
+    Route -->|"有工具调用"| Tool["AgentToolNode<br/>解析 ToolCall、执行 ToolCallback、注入 state/config/tool context"]
+    Tool -->|"ToolResponseMessage 写回 messages"| BeforeModel
+    Route -->|"无工具调用"| AfterModel["afterModel hooks<br/>HumanInTheLoop、return_direct、结果修正"]
+    AfterModel --> AfterAgent["afterAgent hooks<br/>收尾、记忆写入、审计"]
+    AfterAgent --> Output["AssistantMessage / outputKey<br/>为什么：对外暴露简单 call API，内部仍是 StateGraph"]

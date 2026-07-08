@@ -1,0 +1,12 @@
+flowchart TD
+    UserCode["用户表达式 / Code 节点<br/>灵活处理数据<br/>风险：能接触执行上下文"]
+    Expr["Expression + Tournament<br/>AST hooks / VM evaluator<br/>为什么：参数表达式需要动态求值"]
+    ExprSandbox["expression-sandboxing<br/>屏蔽 process / require / module / Buffer<br/>为什么：表达式不应逃逸到 Node.js 全局"]
+    CodeNode["Code.node.ts<br/>JS / Python 模式<br/>为什么：复杂转换才用代码"]
+    Runner["JsTaskRunnerSandbox / PythonTaskRunnerSandbox<br/>startJob 发送到 task runner<br/>为什么：把用户代码从主执行进程隔离出去"]
+    Resolver["require-resolver allowlist<br/>allowedBuiltInModules / allowedExternalModules<br/>为什么：模块能力要显式授权"]
+    Validated["result-validation<br/>校验返回 item 结构<br/>为什么：防止破坏 workflow 数据契约"]
+
+    UserCode --> Expr --> ExprSandbox
+    UserCode --> CodeNode --> Runner --> Resolver
+    Runner --> Validated

@@ -1,0 +1,12 @@
+flowchart TB
+    Upload["上传文档 / 外部知识源<br/>DatasetDocument + Segment"] --> IndexTask["Celery dataset queue<br/>deal_dataset_vector_index_task"]
+    IndexTask --> Processor["IndexProcessorFactory<br/>load / clean / save vector index"]
+    Processor --> Segment["DocumentSegment<br/>文本、向量、关键词、metadata"]
+    Segment --> Store["Vector DB / full-text index<br/>语义检索、全文检索、混合检索"]
+    Query["用户问题 / 工作流变量 / 附件"] --> KR["KnowledgeRetrievalNode<br/>从 variable_pool 取 query 和 metadata 条件"]
+    KR --> DatasetRetrieval["DatasetRetrieval.knowledge_retrieval()<br/>single/multiple dataset retrieval"]
+    DatasetRetrieval --> Filter["metadata filtering<br/>manual 或 automatic LLM 生成过滤条件"]
+    Filter --> Store
+    Store --> Merge["合并多知识库结果<br/>score threshold、top_k、source metadata"]
+    Merge --> Rerank["Rerank / weighted score<br/>reranking_model 或 vector/keyword 权重"]
+    Rerank --> Context["返回 Source 列表<br/>给 LLM 节点、Agent 或最终回答注入上下文"]

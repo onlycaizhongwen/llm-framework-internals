@@ -1,0 +1,16 @@
+flowchart TB
+    User["用户 / 业务运营 / 开发者<br/>用浏览器配置 AI 应用、知识库和工作流"] --> Web["web：Next/React 控制台<br/>画布、应用配置、知识库、插件、模型供应商<br/>为什么：Dify 是产品平台，先服务可视化配置"]
+    Web --> API["api：Flask REST/SSE 后端<br/>App、Workflow、Dataset、Plugin、Model Provider<br/>为什么：统一承载多租户、权限、配置和运行入口"]
+    API --> DB["PostgreSQL / SQLAlchemy Models<br/>App、Workflow、Conversation、Dataset、Document、PluginInstallation<br/>为什么：应用配置和运行历史必须可审计、可恢复"]
+    API --> Redis["Redis<br/>队列事件、停止标记、缓存、Celery broker/result<br/>为什么：流式输出和异步任务需要进程间通信"]
+    API --> Worker["Celery workers<br/>Workflow 后台执行、文档索引、异步任务<br/>为什么：LLM/RAG/索引耗时，不能阻塞 Web 请求"]
+    API --> Graphon["graphon workflow runtime<br/>GraphRuntimeState、NodeFactory、NodeRunResult、PauseRequestedEvent<br/>为什么：把可视化图转成可恢复、可暂停的运行时"]
+    Graphon --> Nodes["Workflow Nodes<br/>LLM、Knowledge Retrieval、Tool、Agent、HTTP、Code、Human Input<br/>为什么：节点是业务能力的插件化边界"]
+    Nodes --> Model["Model Provider / Plugin daemon<br/>模型、工具、Agent 扩展、凭证治理<br/>为什么：模型和工具生态变化快，需要从核心平台外置"]
+    Nodes --> Rag["RAG 子系统<br/>DatasetRetrieval、IndexProcessor、Vector DB、Rerank<br/>为什么：知识库是平台级能力，不只是某个节点"]
+    Nodes --> Agent["dify-agent：FastAPI + Agenton compositor<br/>RunScheduler、AgentRunRunner、Layers、Ask Human<br/>为什么：Agent v2 需要独立运行时承载工具、知识和人审"]
+    Rag --> VDB["Vector DB providers<br/>Milvus、Chroma、Elasticsearch、pgvector 等"]
+    Rag --> ObjectStore["对象存储 / 文件服务<br/>文档、附件、二进制资源"]
+    Worker --> Graphon
+    Web --> SSE["SSE / streaming event handlers<br/>节点开始/结束、文本片段、人审暂停、Agent log<br/>为什么：用户需要看到长任务的实时进度"]
+    API --> SSE

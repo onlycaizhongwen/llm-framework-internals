@@ -1,0 +1,11 @@
+flowchart LR
+    UI["产品入口<br/>Dify / n8n / Spring Boot / 自研 Web"] --> Orchestrator["编排核心<br/>LangGraph / Spring AI Alibaba Graph / Dify Workflow / n8n WorkflowExecute"]
+    Orchestrator --> RAG["RAG 数据层<br/>Haystack Pipeline / LlamaIndex / Dify Dataset / LangChain retriever"]
+    Orchestrator --> Memory["记忆层<br/>mem0 / Zep / Graphiti / Letta memory"]
+    Orchestrator --> Tools["工具与系统集成<br/>Spring AI ToolCallback / LangChain Tools / n8n Nodes / Dify Plugin / 自研 API"]
+    Orchestrator --> Agent["多 Agent 协作<br/>AutoGen / CrewAI / Letta / LangGraph subgraph"]
+    RAG --> LLM["模型适配层<br/>Haystack Generator / LangChain provider adapter / Dify model provider / 直接 SDK"]
+    Memory --> LLM
+    Tools --> Audit["生产治理<br/>权限、凭证、日志、观测、回放、人工审批"]
+    Agent --> Audit
+    Audit --> UI

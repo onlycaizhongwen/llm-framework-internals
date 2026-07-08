@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant User as 用户
+    participant Index as VectorStoreIndex
+    participant Retriever as VectorIndexRetriever
+    participant Engine as RetrieverQueryEngine
+    participant Post as NodePostprocessors
+    participant Synth as ResponseSynthesizer
+    participant LLM as LLM
+    User->>Index: index.as_query_engine()
+    Index->>Retriever: as_retriever()<br/>为什么：索引只负责提供检索器
+    Index->>Engine: RetrieverQueryEngine.from_args()
+    User->>Engine: query("问题")
+    Engine->>Retriever: retrieve(query_bundle)
+    Retriever-->>Engine: NodeWithScore 列表
+    Engine->>Post: rerank / filter / metadata 处理<br/>为什么：召回之后还要排序和清洗
+    Post-->>Engine: 精排后的 nodes
+    Engine->>Synth: synthesize(query, nodes)
+    Synth->>LLM: 按 response_mode 组织 prompt<br/>compact/refine/tree_summarize
+    LLM-->>Synth: 生成答案
+    Synth-->>Engine: Response + source nodes
+    Engine-->>User: 最终答案和来源

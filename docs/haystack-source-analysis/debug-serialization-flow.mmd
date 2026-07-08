@@ -1,0 +1,10 @@
+flowchart LR
+    Pipe["Pipeline 对象<br/>components + connections + metadata"] --> Dict["to_dict()<br/>component_to_dict + connections"]
+    Dict --> YAML["YamlMarshaller<br/>保存为 YAML / 部署配置"]
+    YAML --> Load["from_dict()/loads()<br/>import class + init_parameters"]
+    Load --> Pipe2["恢复 Pipeline<br/>复现实验或部署到服务"]
+    Pipe --> Break["Breakpoint / AgentBreakpoint / ToolBreakpoint"]
+    Break --> Snapshot["PipelineSnapshot<br/>inputs、component_visits、outputs、agent_snapshot、original_input_data"]
+    Snapshot --> Save["snapshot callback 或 JSON 文件<br/>为什么：调试、恢复、失败复盘"]
+    Pipe --> Trace["Tracer / Span<br/>组件级 tags、content tags、日志关联"]
+    Trace --> Obs["Langfuse / OpenTelemetry / logging 等观测后端"]

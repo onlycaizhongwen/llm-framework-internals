@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant Client as Web/API 调用方
+    participant Flask as Flask Controller / App Service
+    participant Gen as WorkflowAppGenerator
+    participant Queue as WorkflowAppQueueManager / Redis
+    participant Thread as 后台 worker thread
+    participant Runner as WorkflowAppRunner
+    participant Graph as graphon WorkflowEntry
+    participant Node as Workflow Node
+    participant SSE as SSE / blocking response
+
+    Client->>Flask: 提交 app/workflow 运行请求
+    Flask->>Gen: generate(application_generate_entity)
+    Gen->>Queue: 创建 task queue + task_id
+    Gen->>Thread: 启动 _generate_worker()
+    Gen->>SSE: _handle_response()<br/>监听队列事件并返回流式/阻塞响应
+    Thread->>Runner: runner.run()
+    Runner->>Graph: 构建 GraphRuntimeState、VariablePool、CommandChannel
+    Graph->>Node: 逐节点执行 LLM/RAG/Tool/Agent/Code/Human Input
+    Node-->>Graph: NodeRunResult / StreamCompletedEvent / PauseRequestedEvent
+    Graph-->>Runner: workflow event stream
+    Runner-->>Queue: publish 节点事件、文本片段、完成/失败
+    Queue-->>SSE: listen() 推送给前端或 API 调用方

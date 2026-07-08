@@ -1,0 +1,16 @@
+flowchart TD
+    A["创建 Agent<br/>AgentCreate / AgentManager.create_agent_async"] --> B["生成 AgentState<br/>llm_config、embedding_config、tools、tool_rules"]
+    B --> C["Blocks/Core Memory<br/>persona、human、自定义 label<br/>为什么：高价值、常用事实常驻 prompt"]
+    B --> D["Archives / Passages<br/>archival memory<br/>为什么：大量低频事实不直接塞进上下文"]
+    B --> E["Sources / Files<br/>上传文档 -> chunk -> embedding -> passage"]
+    C --> F["Memory.compile<br/>拼接 system prompt + blocks + tool usage rules + sources"]
+    F --> G["LLM 调用<br/>模型看到核心记忆和工具说明"]
+    G --> H{"模型调用记忆工具?"}
+    H -->|"core_memory_append / replace / memory_*"| I["BlockManager 更新 block<br/>重建关联 Agent 的 system prompt"]
+    H -->|"archival_memory_insert"| J["PassageManager 写入 archive passage<br/>生成 embedding"]
+    H -->|"archival_memory_search / conversation_search"| K["向量/文本检索 passages 或 messages"]
+    I --> F
+    J --> K
+    K --> G
+    E --> K
+    Note["设计要点：Letta 把 memory 分成 prompt 内的核心记忆和 prompt 外的 archival/source 记忆，避免把所有长期信息都塞进上下文。"]

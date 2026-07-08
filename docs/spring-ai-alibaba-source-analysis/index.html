@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spring AI Alibaba 源码分析</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true }, sequence: { mirrorActors: false } });
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --ink: #1f2937;
+      --muted: #5b6472;
+      --line: #d9e2ee;
+      --brand: #0f766e;
+      --brand2: #2563eb;
+      --soft: #ecfdf5;
+      --soft2: #eff6ff;
+      --warm: #fff7ed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.75;
+    }
+    header {
+      background: linear-gradient(180deg, #ffffff 0%, #eef8f6 100%);
+      border-bottom: 1px solid var(--line);
+      padding: 42px 24px 28px;
+    }
+    main, .hero { max-width: 1180px; margin: 0 auto; }
+    main { padding: 26px 20px 64px; }
+    h1 { margin: 0 0 12px; font-size: clamp(30px, 5vw, 50px); line-height: 1.12; letter-spacing: 0; }
+    h2 { margin: 36px 0 14px; font-size: 26px; border-left: 5px solid var(--brand); padding-left: 12px; }
+    h3 { margin: 22px 0 8px; font-size: 20px; }
+    p { margin: 10px 0; }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 18px 0;
+    }
+    .lead { max-width: 940px; color: var(--muted); font-size: 18px; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+    .metric { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-height: 108px; }
+    .metric strong { display: block; color: var(--muted); font-size: 14px; }
+    .metric span { display: block; margin-top: 8px; font-weight: 800; font-size: 17px; }
+    .toc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+    .toc a { display: block; background: #f8fafc; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; text-decoration: none; color: var(--ink); }
+    .note { background: var(--soft2); border-left: 5px solid var(--brand2); border-radius: 6px; padding: 14px 16px; margin: 16px 0; }
+    .case { background: var(--warm); border-left: 5px solid #f59e0b; border-radius: 6px; padding: 14px 16px; margin: 16px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; vertical-align: top; text-align: left; }
+    th { background: #ecfdf5; color: #0f766e; }
+    code { background: #f3f6fb; border: 1px solid #e4eaf3; border-radius: 5px; padding: 1px 5px; font-family: Consolas, "SFMono-Regular", monospace; font-size: 0.92em; }
+    pre { background: #172033; color: #edf4ff; border-radius: 8px; padding: 14px; overflow-x: auto; }
+    pre code { background: transparent; border: 0; color: inherit; padding: 0; }
+    .mermaid { background: #ffffff; border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 16px 0; overflow-x: auto; }
+    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .card { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fbfdff; }
+    .card h3 { margin-top: 0; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    @media (max-width: 960px) { .summary, .toc, .grid2 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 640px) { .summary, .toc, .grid2 { grid-template-columns: 1fr; } section { padding: 18px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>Spring AI Alibaba 源码分析</h1>
+      <p class="lead">面向 Java / Spring Boot 开发者的生产级 Agentic AI 框架。核心不是单个模型调用，而是 Graph Core 状态图运行时、Agent Framework、Spring AI 生态、Nacos / A2A / MCP 企业集成和 Admin / Studio 平台入口的组合。</p>
+      <div class="summary">
+        <div class="metric"><strong>固定提交</strong><span>4a823250...</span></div>
+        <div class="metric"><strong>版本</strong><span>1.1.2.2</span></div>
+        <div class="metric"><strong>技术栈</strong><span>Java 17 / Spring Boot 3.5.8 / Spring AI 1.1.2</span></div>
+        <div class="metric"><strong>主线</strong><span>Graph Runtime + Agent Framework + Starters</span></div>
+      </div>
+      <div class="toc">
+        <a href="#summary">总体结论</a>
+        <a href="#reading-route">阅读路线</a>
+        <a href="#talk-track">演讲口径</a>
+        <a href="#architecture">最高层架构</a>
+        <a href="#graph">Graph 主流程</a>
+        <a href="#agent">ReactAgent</a>
+        <a href="#flow">多 Agent Flow</a>
+        <a href="#enterprise">企业集成</a>
+        <a href="#case">真实例子</a>
+        <a href="#compare">横向对比</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="summary">
+      <h2>1. 总体结论</h2>
+      <p>Spring AI Alibaba 的源码主线可以拆成三层：底层 <code>Graph Core</code> 负责状态图、checkpoint、stream 和恢复；上层 <code>Agent Framework</code> 负责 ReactAgent、FlowAgent、Hook、Interceptor 和工具循环；企业集成层通过 Spring Boot Starters、Nacos、A2A、MCP、Observation、Admin/Studio 把 Agent 放进 Java 服务体系。</p>
+      <div class="note">分享时一句话：LangGraph 让 Python Agent 有了状态图运行时，Spring AI Alibaba 则是在 Java / Spring Boot 生态里做类似事情，并且更贴近 Nacos、A2A、MCP、Spring AI 和企业服务治理。</div>
+      <table>
+        <tr><th>结论</th><th>源码证据</th></tr>
+        <tr><td>Maven 多模块 Java 项目</td><td><code>pom.xml:51-62</code> 声明 graph-core、agent-framework、studio、sandbox 和多个 starters。</td></tr>
+        <tr><td>当前版本和基础栈</td><td><code>pom.xml:89</code>、<code>:92</code>、<code>:99</code>、<code>:101</code> 显示版本、Java、Spring AI、Spring Boot。</td></tr>
+        <tr><td>Agent Framework 建在 Graph Runtime 上</td><td><code>StateGraph.java:52</code>、<code>CompiledGraph.java:59</code>、<code>ReactAgent.java:311</code>。</td></tr>
+      </table>
+    </section>
+
+    <section id="reading-route">
+      <h2>2. 源码阅读路线图</h2>
+      <p>第一次读 Spring AI Alibaba，不建议从所有目录平铺展开。更好的顺序是先抓住“构建信息 -> 状态图运行时 -> Agent 封装 -> 多 Agent 编排 -> 企业集成 -> 示例验证”这条线。</p>
+      <table>
+        <tr><th>顺序</th><th>先看什么</th><th>重点问题</th><th>为什么先看这里</th></tr>
+        <tr><td>1</td><td><code>pom.xml</code>、根 README</td><td>这是一个什么类型的 Java 项目？有哪些模块？当前依赖栈是什么？</td><td>先确定它不是单 starter，而是 Maven 多模块工程，包含 graph-core、agent-framework、starters、admin/studio 和 examples。</td></tr>
+        <tr><td>2</td><td><code>StateGraph.java</code></td><td>图怎么声明节点、边、条件边、并行边？</td><td>这是底层抽象入口。读懂 <code>StateGraph</code>，才知道 Agent workflow 最终如何变成可执行状态图。</td></tr>
+        <tr><td>3</td><td><code>CompiledGraph.java</code>、<code>GraphRunner</code></td><td>图编译后怎么运行、流式输出、保存 checkpoint？</td><td><code>CompiledGraph</code> 是运行时核心，解释为什么框架可以支持长任务、恢复、中断和 streaming。</td></tr>
+        <tr><td>4</td><td><code>OverAllState</code>、<code>KeyStrategy</code>、<code>CheckpointSaver</code></td><td>状态怎么合并？失败后怎么恢复？</td><td>Agent 系统的难点不是一次调用模型，而是多节点、多工具、多轮执行时状态不能乱。</td></tr>
+        <tr><td>5</td><td><code>ReactAgent.java</code></td><td>ReAct loop 怎么被包装成图？</td><td>这是对外最容易理解的 Agent API，也是从 Graph Core 过渡到 Agent Framework 的关键。</td></tr>
+        <tr><td>6</td><td><code>AgentLlmNode.java</code>、<code>AgentToolNode.java</code></td><td>模型节点和工具节点如何分工？为什么工具执行由框架接管？</td><td>这里能看到 Spring AI <code>ChatClient</code> / <code>ToolCallback</code> 和框架自身 tool loop 的边界。</td></tr>
+        <tr><td>7</td><td><code>FlowGraphBuilder.java</code>、FlowAgent 系列</td><td>多 Agent workflow 怎么构图？</td><td>这条线解释它不只是单 Agent，而是支持顺序、并行、路由、循环等组合。</td></tr>
+        <tr><td>8</td><td>Nacos、A2A、MCP、Observation starters</td><td>企业配置、远程 Agent、工具生态和观测如何接入？</td><td>这是 Spring AI Alibaba 区别于普通 Agent 框架的地方：它把 Agent 放进企业 Java 基础设施。</td></tr>
+        <tr><td>9</td><td><code>examples/multiagent-patterns</code>、chatbot、deepresearch</td><td>这些抽象在真实代码里怎么用？</td><td>最后用 examples 反向验证前面的理解，避免只讲抽象类和接口。</td></tr>
+      </table>
+      <div class="note">分享时可以压缩成一句话：先看 <code>pom.xml</code> 定位项目，再看 <code>StateGraph/CompiledGraph</code> 理解运行时，然后看 <code>ReactAgent/AgentToolNode</code> 理解 Agent loop，最后看 <code>Nacos/A2A/MCP starters</code> 理解企业落地。</div>
+    </section>
+
+    <section id="talk-track">
+      <h2>3. 演讲口径版总结</h2>
+      <p>这一节适合在分享开头或结尾使用，目标是在 5-8 分钟内讲清楚 Spring AI Alibaba 的价值。</p>
+      <div class="grid2">
+        <div class="card"><h3>第 1 分钟：定位</h3><p>Spring AI Alibaba 不是简单的 Spring AI 模型 starter，而是面向 Java / Spring Boot 团队的 Agentic AI 框架。它把 Graph Core、ReAct loop、多 Agent flow、工具治理、Nacos/A2A/MCP 和 Admin/Studio 放在同一个工程里。</p></div>
+        <div class="card"><h3>第 2-3 分钟：为什么需要 Graph Core</h3><p>真实 Agent 不是一次 <code>chat()</code> 调用，而是多轮状态推进。源码用 <code>StateGraph</code> 表达节点和边，用 <code>CompiledGraph</code> 执行，用 <code>CheckpointSaver</code> 保存状态，用 <code>KeyStrategy</code> 约束状态合并。</p></div>
+        <div class="card"><h3>第 4-5 分钟：ReactAgent 怎么跑</h3><p><code>ReactAgent</code> 把 ReAct loop 封装成图：输入进入 hook，模型节点生成回答或 tool call，工具节点执行 <code>ToolCallback</code>，结果写回 messages，再回到模型节点，直到没有工具调用。</p></div>
+        <div class="card"><h3>关键设计点</h3><p>工具执行不交给 Spring AI 内部自动完成，而是由 <code>AgentToolNode</code> 接管。这样 checkpoint、Human-in-the-loop、ToolInterceptor 和状态合并才能统一治理。</p></div>
+        <div class="card"><h3>第 6 分钟：企业特征</h3><p>Nacos Config 管 Prompt、模型、MCP 工具、Agent 配置；A2A Nacos 让不同服务里的 Agent 注册发现；Observation 让图节点、模型调用、工具调用进入企业观测体系。</p></div>
+        <div class="card"><h3>第 7-8 分钟：和 LangGraph 怎么比</h3><p>共同点是状态图、checkpoint、stream、人类中断和复杂 Agent workflow。差异是 LangGraph 更适合 Python/JS 代码级状态机，Spring AI Alibaba 更适合 Java / Spring Boot 企业团队。</p></div>
+      </div>
+      <div class="case">一句话收束：如果团队主栈是 Python，复杂状态机优先看 LangGraph；如果团队主栈是 Java/Spring，并且要把 Agent 做成可配置、可观测、可恢复、可跨服务协作的后端服务，Spring AI Alibaba 更贴近落地场景。</div>
+    </section>
+
+    <section id="architecture">
+      <h2>4. 最高层架构</h2>
+      <div class="mermaid">
+flowchart TB
+    Dev["Java / Spring Boot 开发者<br/>为什么：目标用户不是 Python Agent 工程师，而是企业 Java 应用团队"] --> Boot["Spring Boot 应用<br/>依赖 starter / agent-framework / graph-core"]
+    Boot --> AF["Agent Framework<br/>ReactAgent、FlowAgent、Hook、Interceptor、ToolNode<br/>为什么：把 ReAct、多 Agent、上下文工程封成 Java 友好的 Builder API"]
+    AF --> Graph["Graph Core<br/>StateGraph、CompiledGraph、GraphRunner、OverAllState<br/>为什么：长任务 Agent 需要状态图、checkpoint、stream 和恢复"]
+    Graph --> State["状态与合并策略<br/>KeyStrategy、AppendStrategy、ReplaceStrategy、StateSerializer<br/>为什么：多个节点/工具并发写状态时需要明确合并语义"]
+    Graph --> Checkpoint["Checkpoint Saver<br/>Memory、File、Redis、Mongo、JDBC/MySQL/Postgres/Oracle/H2<br/>为什么：生产 Agent 不能只靠进程内上下文"]
+    AF --> SpringAI["Spring AI 生态<br/>ChatClient、ChatModel、ToolCallback、VectorStore、Advisor<br/>为什么：复用 Spring AI 标准模型/工具/向量库抽象"]
+    Boot --> Starters["Spring Boot Starters<br/>Nacos Config、A2A Nacos、Graph Observation、Builtin Nodes、AgentScope<br/>为什么：把 Agent 接入企业配置、注册发现和观测体系"]
+    Starters --> Nacos["Nacos / A2A / MCP<br/>动态 Prompt、模型、MCP 工具、Agent Card 注册发现<br/>为什么：分布式 Agent 需要配置治理和跨服务协作"]
+    Boot --> Admin["Admin / Studio<br/>可视化开发、调试、观测、评估、MCP 管理<br/>为什么：Java 后端框架也需要产品化运营入口"]
+      </div>
+      <table>
+        <tr><th>模块</th><th>作用</th><th>分享说法</th></tr>
+        <tr><td><code>spring-ai-alibaba-graph-core</code></td><td>状态图、节点、边、并行、checkpoint、store、stream、serializer</td><td>Java 版 Agent 状态图运行时。</td></tr>
+        <tr><td><code>spring-ai-alibaba-agent-framework</code></td><td>ReactAgent、FlowAgent、Hook、Interceptor、ToolNode</td><td>把底层图运行时包装成 Agent 开发框架。</td></tr>
+        <tr><td><code>spring-boot-starters/*</code></td><td>Nacos、A2A、Observation、Builtin Nodes、AgentScope</td><td>让 Agent 接入 Spring Boot 企业基础设施。</td></tr>
+        <tr><td><code>examples</code></td><td>chatbot、voice-agent、deepresearch、multiagent、RAG workflow</td><td>用真实用法验证设计意图。</td></tr>
+      </table>
+    </section>
+
+    <section id="graph">
+      <h2>5. Graph Core 主流程</h2>
+      <div class="mermaid">
+sequenceDiagram
+    participant Dev as 开发者
+    participant SG as StateGraph
+    participant CG as CompiledGraph
+    participant Runner as GraphRunner
+    participant Node as NodeAction
+    participant Saver as CheckpointSaver
+    participant Stream as Flux / NodeOutput
+    Dev->>SG: addNode / addEdge / addConditionalEdges
+    SG->>SG: validateGraph<br/>为什么：先检查入口、节点、边和条件映射
+    Dev->>SG: compile(CompileConfig)
+    SG->>CG: 生成 nodeFactories / edges / keyStrategyMap
+    CG->>Saver: 可选读取 checkpoint
+    CG->>Runner: graphResponseStream(inputs, config)
+    loop 直到 END 或中断
+        Runner->>Node: apply(OverAllState, RunnableConfig)
+        Node-->>Runner: Map 状态增量
+        Runner->>Runner: 按 KeyStrategy 合并状态
+        Runner->>Saver: 保存 checkpoint / snapshot
+        Runner-->>Stream: 输出 NodeOutput / GraphResponse
+    end
+    Stream-->>Dev: final state / streaming events
+      </div>
+      <div class="grid2">
+        <div class="card"><h3>构图</h3><p><code>StateGraph.java:239-309</code> 支持普通节点、条件节点、并行条件节点；<code>:373-486</code> 支持普通边、条件边和并行条件边。</p></div>
+        <div class="card"><h3>编译</h3><p><code>StateGraph.java:530-546</code> 校验图并创建 <code>CompiledGraph</code>，默认注册 <code>MemorySaver</code>。</p></div>
+        <div class="card"><h3>运行</h3><p><code>CompiledGraph.java:549-638</code> 暴露 <code>graphResponseStream()</code>、<code>stream()</code>、<code>streamSnapshots()</code>。</p></div>
+        <div class="card"><h3>恢复</h3><p><code>CompiledGraph.java:258</code>、<code>:310</code>、<code>:442</code>、<code>:464</code> 围绕 checkpoint 读取、更新、保存状态。</p></div>
+      </div>
+      <pre><code class="language-java">StateGraph graph = new StateGraph("rag_workflow", () -> {
+    Map&lt;String, KeyStrategy&gt; strategies = new HashMap&lt;&gt;();
+    strategies.put("question", new ReplaceStrategy());
+    strategies.put("documents", new ReplaceStrategy());
+    strategies.put("messages", new AppendStrategy(false));
+    return strategies;
+});
+
+graph.addNode("rewrite", node_async(rewriteNode))
+     .addNode("retrieve", node_async(retrieveNode))
+     .addNode("prepare_agent", node_async(prepareAgentNode))
+     .addNode("rag_agent", ragAgent.asNode())
+     .addEdge(START, "rewrite")
+     .addEdge("rewrite", "retrieve")
+     .addEdge("retrieve", "prepare_agent")
+     .addEdge("prepare_agent", "rag_agent")
+     .addEdge("rag_agent", END);</code></pre>
+      <p>这段来自 RAG workflow example，证明它的图不是概念图，而是直接进入生产代码的运行模型。</p>
+    </section>
+
+    <section id="agent">
+      <h2>6. ReactAgent 主流程</h2>
+      <div class="mermaid">
+flowchart TB
+    Input["用户输入 / messages / input<br/>为什么：兼容对话和图节点两种入口"] --> BeforeAgent["beforeAgent hooks<br/>Instruction、PII、Memory、Skills 等"]
+    BeforeAgent --> BeforeModel["beforeModel hooks<br/>上下文压缩、人工中断、工具选择、模型调用限制"]
+    BeforeModel --> LLM["AgentLlmNode<br/>ChatClient + ChatModel + ToolCallingChatOptions<br/>为什么：禁用 Spring AI 内部工具执行，由框架统一管理工具循环"]
+    LLM --> Route{"最后一条 AssistantMessage<br/>是否包含 tool calls？"}
+    Route -->|"有工具调用"| Tool["AgentToolNode<br/>解析 ToolCall、执行 ToolCallback、注入 state/config/tool context"]
+    Tool -->|"ToolResponseMessage 写回 messages"| BeforeModel
+    Route -->|"无工具调用"| AfterModel["afterModel hooks<br/>HumanInTheLoop、return_direct、结果修正"]
+    AfterModel --> AfterAgent["afterAgent hooks<br/>收尾、记忆写入、审计"]
+    AfterAgent --> Output["AssistantMessage / outputKey<br/>为什么：对外暴露简单 call API，内部仍是 StateGraph"]
+      </div>
+      <table>
+        <tr><th>源码点</th><th>说明</th></tr>
+        <tr><td><code>ReactAgent.java:97-120</code></td><td>持有 LLM 节点、Tool 节点、hooks、model/tool interceptors。</td></tr>
+        <tr><td><code>ReactAgent.java:172-229</code></td><td>提供多个 <code>call()</code> 重载，对外隐藏图运行细节。</td></tr>
+        <tr><td><code>ReactAgent.java:303</code></td><td><code>asNode()</code> 让 Agent 可以作为更大图里的一个节点。</td></tr>
+        <tr><td><code>ReactAgent.java:311-587</code></td><td><code>initGraph()</code> 把 hook、LLM、Tool 组织成 <code>StateGraph</code>。</td></tr>
+        <tr><td><code>ReactAgent.java:714-762</code></td><td>通过条件边在 model/tool/end 之间循环。</td></tr>
+        <tr><td><code>AgentToolNode.java:167-290</code></td><td>根据配置选择顺序或并行工具执行。</td></tr>
+      </table>
+      <div class="note">关键设计：Spring AI 的 <code>ChatClient</code> 和 <code>ToolCallback</code> 负责标准模型/工具抽象，但真正的工具循环由 Agent Framework 接管，这样 checkpoint、HITL、ToolInterceptor 和状态合并才可控。</div>
+    </section>
+
+    <section id="flow">
+      <h2>7. 多 Agent Flow</h2>
+      <div class="mermaid">
+flowchart LR
+    Root["FlowAgent<br/>Sequential / Parallel / Routing / Loop"] --> Builder["FlowGraphBuilder<br/>按 strategyType 选择构图策略"]
+    Builder --> Seq["SequentialGraphBuildingStrategy<br/>子 Agent 串行执行"]
+    Builder --> Par["ParallelGraphBuildingStrategy<br/>子 Agent 并行执行后聚合"]
+    Builder --> Routing["RoutingGraphBuildingStrategy / LlmRoutingAgent<br/>按条件或 LLM 判断选择子 Agent"]
+    Builder --> Loop["LoopGraphBuildingStrategy<br/>按次数、条件或数组循环执行"]
+    Seq --> Graph["StateGraph<br/>子 Agent 通过 asNode() 变成 SubGraph Node"]
+    Par --> Graph
+    Routing --> Graph
+    Loop --> Graph
+    Graph --> Compile["CompiledGraph<br/>统一使用 checkpoint、stream、state merge"]
+      </div>
+      <table>
+        <tr><th>Flow</th><th>适合场景</th><th>设计价值</th></tr>
+        <tr><td>SequentialAgent</td><td>调研 -> 分析 -> 写报告</td><td>阶段顺序明确，方便 checkpoint 和阶段输出。</td></tr>
+        <tr><td>ParallelAgent</td><td>多专家并行分析</td><td>并发执行后聚合，提高吞吐。</td></tr>
+        <tr><td>RoutingAgent</td><td>客服分流、销售/售后/技术支持分派</td><td>路由决策变成图边或 LLM 判断。</td></tr>
+        <tr><td>LoopAgent</td><td>反复检索、反思、修正、重试</td><td>把循环条件显式化，避免 while loop 黑盒。</td></tr>
+      </table>
+      <p><code>FlowGraphBuilder.java:37-49</code> 通过 strategy registry 选择构图策略；<code>SequentialAgent.java:24</code>、<code>:35-36</code> 显示具体 FlowAgent 委托 builder 构图。</p>
+    </section>
+
+    <section id="enterprise">
+      <h2>8. 企业集成</h2>
+      <div class="mermaid">
+flowchart TB
+    Admin["Admin / Studio<br/>可视化配置 Agent、Prompt、MCP、评估与观测"] --> NacosConfig["Nacos Config Starter<br/>读取 agent.json、prompt.json、model.json、mcp-servers.json"]
+    NacosConfig --> Builder["NacosReactAgentBuilder<br/>注入模型、Prompt、MCP 工具、Partner Agents"]
+    Builder --> Agent["ReactAgent / FlowAgent<br/>运行在 Spring Boot 服务内"]
+    Agent --> A2A["A2A Nacos Starter<br/>Agent Card 注册发现、JSON-RPC 路由、GraphAgentExecutor"]
+    A2A --> Remote["远程 Agent 服务<br/>为什么：企业里不同 Agent 往往由不同服务团队维护"]
+    Agent --> Obs["Graph Observation Starter<br/>ObservationRegistry / ChatModelObservationConvention"]
+    Agent --> Biz["业务系统<br/>数据库、工单、CRM、知识库、内部服务"]
+      </div>
+      <ul>
+        <li><code>NacosAgentInjector.java:23-34</code> 从 Nacos 加载 Agent 配置。</li>
+        <li><code>NacosMcpToolsInjector.java:31-51</code> 把 MCP server 配置转换为工具。</li>
+        <li><code>NacosModelInjector.java:30-48</code> 加载并替换模型配置。</li>
+        <li><code>GraphAgentExecutor.java:57</code> 把 Graph/Agent 包装成 A2A 远程执行器。</li>
+        <li><code>NacosAgentRegistry.java:30</code> 把 Agent Card 注册到 Nacos。</li>
+      </ul>
+    </section>
+
+    <section id="case">
+      <h2>9. 真实例子：企业知识助理 + 工单流转</h2>
+      <div class="case">员工问政策、报销、系统权限、工单进度。简单问题直接回答，复杂问题查知识库、调用工单系统，必要时转人工或跨部门 Agent。</div>
+      <ol>
+        <li>Spring Boot 服务引入 Agent Framework 和模型 starter。</li>
+        <li>用 <code>ReactAgent.builder()</code> 定义知识助理，挂载工单查询、权限申请、知识检索等工具。</li>
+        <li>用 Hook 做 PII 脱敏、模型调用限制、工具调用限制、摘要压缩、Human in the loop。</li>
+        <li>用 <code>StateGraph</code> 或 <code>FlowAgent</code> 表达分类、检索、工具调用、人工升级。</li>
+        <li>用 Nacos 管理 Prompt、模型、MCP 工具和 Agent 配置。</li>
+        <li>用 A2A 把财务、IT、HR Agent 注册成远程 Agent。</li>
+        <li>用 checkpoint saver 和 observation 做恢复和追踪。</li>
+      </ol>
+    </section>
+
+    <section id="compare">
+      <h2>10. 横向对比</h2>
+      <div class="mermaid">
+flowchart LR
+    Saa["Spring AI Alibaba<br/>Java / Spring Boot Agentic AI 框架"] --> LG["对标 LangGraph<br/>都有状态图、checkpoint、interrupt、stream<br/>差异：SAA 原生 Java/Spring"]
+    Saa --> LC["对接 LangChain 思想<br/>工具、模型、middleware/hook 类似<br/>差异：SAA 复用 Spring AI ChatClient/ToolCallback"]
+    Saa --> Dify["对比 Dify<br/>Dify 是低代码应用平台<br/>SAA 是 Java 代码框架 + Admin/Studio"]
+    Saa --> N8N["对比 n8n<br/>n8n 强系统自动化和节点生态<br/>SAA 强 Agent 状态图和 Spring 服务落地"]
+    Saa --> Hay["对比 Haystack<br/>Haystack 强 RAG Pipeline<br/>SAA 强 Agentic Workflow + 企业 Java 集成"]
+      </div>
+      <table>
+        <tr><th>维度</th><th>Spring AI Alibaba</th><th>LangGraph</th><th>Dify</th><th>n8n</th><th>Haystack</th></tr>
+        <tr><td>定位</td><td>Java/Spring Agentic AI 框架</td><td>Python/JS 状态图 runtime</td><td>LLM 应用平台</td><td>通用自动化平台</td><td>RAG/Agent Pipeline</td></tr>
+        <tr><td>核心抽象</td><td>StateGraph、ReactAgent、FlowAgent、Hook</td><td>StateGraph、Checkpoint</td><td>App、Workflow、Dataset</td><td>Workflow、Node、Credential</td><td>Component、Pipeline、DocumentStore</td></tr>
+        <tr><td>强项</td><td>企业 Java 服务、多 Agent、Nacos/A2A/MCP</td><td>复杂状态机</td><td>产品化运营</td><td>SaaS 集成</td><td>可调试 RAG</td></tr>
+        <tr><td>局限</td><td>Java/Spring 学习和部署门槛较高</td><td>平台自建</td><td>精细代码图较弱</td><td>Agent 不是唯一核心</td><td>企业配置治理需外层补</td></tr>
+      </table>
+      <div class="note">选型建议：如果团队主栈是 Java/Spring，且要做可恢复 Agent、多 Agent、企业配置治理、A2A/MCP 集成，优先看 Spring AI Alibaba；如果主栈是 Python 且核心是状态机，优先 LangGraph；如果核心是运营平台，优先 Dify。</div>
+    </section>
+  </main>
+</body>
+</html>

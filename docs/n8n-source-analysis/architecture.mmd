@@ -1,0 +1,21 @@
+flowchart TB
+    User["用户 / 自动化工程师<br/>在浏览器里搭工作流"] --> UI["editor-ui Vue 前端<br/>画布、节点面板、凭证配置、执行结果<br/>为什么：n8n 的产品入口是可视化编排"]
+    UI --> API["packages/cli REST API / Controllers<br/>workflows、credentials、executions、node-types"]
+    API --> DB["@n8n/db<br/>WorkflowEntity / CredentialsEntity / ExecutionEntity / WebhookEntity<br/>为什么：工作流是可持久化产品资源"]
+    API --> Loader["LoadNodesAndCredentials<br/>加载 core/community nodes + credentials<br/>为什么：1500+ integrations 不能硬编码进运行时"]
+    Loader --> Nodes["packages/nodes-base<br/>Webhook、HTTP Request、Code、AI/LangChain 等节点"]
+    API --> Active["ActiveWorkflowManager<br/>激活 workflow，注册 webhook / trigger / poller<br/>为什么：保存工作流不等于开始监听外部事件"]
+    Active --> Webhooks["WebhookService + webhook_entity<br/>静态/动态 webhook 查找、注册、去重"]
+    Active --> Triggers["ActiveWorkflowTriggers<br/>cron、poll、长连接 trigger 保持在内存"]
+    Webhooks --> Runner["WorkflowRunner<br/>创建 execution、选择 main/queue/manual 路径"]
+    Triggers --> Runner
+    API --> Runner
+    Runner --> Engine["n8n-core WorkflowExecute<br/>节点栈、连接图、runData、错误处理<br/>为什么：真正执行 workflow DAG 的核心引擎"]
+    Engine --> Workflow["n8n-workflow Workflow<br/>nodes、connections、expressions、data proxy<br/>为什么：纯模型层可被前后端和运行时复用"]
+    Engine --> Credentials["CredentialsHelper / n8n-core Credentials<br/>解密、overwrite、dynamic credentials、preAuthentication"]
+    Engine --> Binary["BinaryDataService<br/>文件/对象存储二进制数据"]
+    Engine --> Hooks["Execution hooks / events / telemetry<br/>审计、推送、错误工作流"]
+    Runner --> Queue{"executions.mode = queue?"}
+    Queue -->|"否"| Main["main process 直接执行<br/>适合单实例/开发"]
+    Queue -->|"是"| Scaling["ScalingService + Bull/Redis<br/>enqueue job、abort-job、job-finished/job-failed"]
+    Scaling --> Worker["n8n worker command<br/>并发消费 job，调用 JobProcessor / WorkflowExecute<br/>为什么：生产环境需要横向扩展和隔离执行"]

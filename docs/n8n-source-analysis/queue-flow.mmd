@@ -1,0 +1,12 @@
+flowchart LR
+    A["main / webhook process<br/>收到执行请求"] --> B["WorkflowRunner.run"]
+    B --> C{"executions.mode"}
+    C -->|"regular"| D["当前进程 WorkflowExecute<br/>简单部署"]
+    C -->|"queue"| E["ScalingService.addJob<br/>Bull queue / Redis<br/>为什么：执行任务与 API/webhook 进程解耦"]
+    E --> F["n8n worker command<br/>--concurrency 默认 10"]
+    F --> G["ScalingService.setupQueue<br/>queue.process(JOB_TYPE_NAME, concurrency)"]
+    G --> H["JobProcessor.processJob<br/>装载 execution data 并执行 workflow"]
+    H --> I["WorkflowExecute.processRunExecutionData"]
+    I --> J["job-finished / job-failed progress message<br/>主进程收到结果、更新 execution"]
+    K["停止执行"] --> L["stopJob / abort-job<br/>为什么：跨进程执行要通过 queue progress/pubsub 传中止信号"]
+    L --> F

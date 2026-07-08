@@ -1,0 +1,19 @@
+flowchart TB
+    App["应用 / Agent / Notebook / API<br/>用户想问自己的数据"] --> Core["llama-index-core<br/>核心抽象和主流程<br/>为什么：把数据、索引、检索、合成拆成可替换组件"]
+    App --> Integrations["llama-index-integrations<br/>LLM、Embedding、VectorStore、Reader、Tool 集成<br/>为什么：生态变化快，和 core 解耦"]
+    Core --> Settings["Settings<br/>LLM / Embedding / Callback / Transformations 默认配置<br/>为什么：降低样板代码，但仍可显式覆盖"]
+    Core --> Ingestion["IngestionPipeline<br/>Document -> Node -> Embedding -> Store<br/>为什么：写入链路可缓存、可去重、可异步"]
+    Core --> Index["BaseIndex / VectorStoreIndex<br/>围绕 nodes 构建索引<br/>为什么：把数据结构和查询入口统一起来"]
+    Core --> Storage["StorageContext<br/>docstore / index_store / vector_stores<br/>为什么：内存、磁盘、外部向量库统一管理"]
+    Core --> Query["RetrieverQueryEngine<br/>retrieve -> postprocess -> synthesize<br/>为什么：检索和生成分离，便于替换 rerank 和 response mode"]
+    Core --> Agent["AgentWorkflow / FunctionAgent / ReActAgent<br/>工具调用和事件化步骤<br/>为什么：在 RAG 基础上支持 agentic app"]
+    Ingestion --> Readers["Readers<br/>SimpleDirectoryReader 等<br/>把文件/API 数据变成 Document"]
+    Ingestion --> Transform["TransformComponent / NodeParser<br/>切块、清洗、元数据、embedding<br/>为什么：RAG 质量取决于节点粒度"]
+    Transform --> Storage
+    Index --> Retriever["BaseRetriever / VectorIndexRetriever<br/>根据 query 找相关 nodes"]
+    Retriever --> Query
+    Query --> Synth["ResponseSynthesizer<br/>refine / compact / tree_summarize 等<br/>为什么：把召回片段组织成可读答案"]
+    Integrations --> Providers["OpenAI / Anthropic / Ollama / Qdrant / Chroma / Pinecone / Weaviate ..."]
+    Providers --> Core
+    Agent --> Tools["QueryEngineTool / FunctionTool<br/>把查询引擎或函数暴露给 Agent"]
+    Tools --> Query

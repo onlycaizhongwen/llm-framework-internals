@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant WF as Workflow Agent Node
+    participant API as Dify API
+    participant Agent as dify-agent server
+    participant Scheduler as RunScheduler
+    participant Runner as AgentRunRunner
+    participant Comp as Agenton Compositor
+    participant Layers as Layers: config/knowledge/tools/ask_human/output
+    participant Plugin as Plugin daemon / tools / model providers
+
+    WF->>API: 构造 runtime request
+    API->>Agent: create_run(request)
+    Agent->>Scheduler: create_run()
+    Scheduler->>Runner: asyncio task 执行 run
+    Runner->>Comp: build_pydantic_ai_compositor()
+    Comp->>Layers: enter layers in order
+    Layers->>Plugin: 调模型、工具、知识、外部能力
+    Plugin-->>Layers: tool result / model stream
+    Layers-->>Comp: output / deferred tool call / human input required
+    Comp-->>Runner: run outcome + session snapshot
+    Runner-->>Agent: persist events
+    Agent-->>WF: stream internal events
+    WF-->>WF: 转成 graphon 事件<br/>StreamCompletedEvent / PauseRequestedEvent

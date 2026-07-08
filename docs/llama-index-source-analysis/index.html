@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LlamaIndex 源码架构精读</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true }, sequence: { mirrorActors: false } });
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f9fc;
+      --panel: #ffffff;
+      --ink: #202533;
+      --muted: #5d6678;
+      --line: #dce3ef;
+      --brand: #176b87;
+      --brand2: #7a4f18;
+      --soft: #eaf7f8;
+      --soft2: #fff5e6;
+      --code: #172033;
+      --codeink: #edf4ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.72;
+    }
+    header {
+      background: linear-gradient(180deg, #ffffff 0%, #edf8f9 100%);
+      border-bottom: 1px solid var(--line);
+      padding: 42px 24px 30px;
+    }
+    main, .hero { max-width: 1180px; margin: 0 auto; }
+    main { padding: 28px 20px 58px; }
+    h1 { margin: 0 0 12px; font-size: clamp(30px, 5vw, 52px); line-height: 1.12; letter-spacing: 0; }
+    h2 { margin: 36px 0 14px; font-size: 26px; border-left: 5px solid var(--brand); padding-left: 12px; }
+    h3 { margin: 24px 0 10px; font-size: 20px; }
+    p { margin: 10px 0; }
+    a { color: var(--brand); }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 18px 0;
+    }
+    .lead { max-width: 960px; color: var(--muted); font-size: 18px; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .metric {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 108px;
+    }
+    .metric strong { display: block; color: var(--muted); font-size: 14px; }
+    .metric span { display: block; margin-top: 8px; font-weight: 700; font-size: 18px; }
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .toc a {
+      display: block;
+      background: #f6f9fd;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      text-decoration: none;
+      color: var(--ink);
+    }
+    .note {
+      background: var(--soft);
+      border-left: 5px solid var(--brand);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    .warn {
+      background: var(--soft2);
+      border-left: 5px solid var(--brand2);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: #eef6f7; color: #164e5d; }
+    code {
+      background: #f3f6fb;
+      border: 1px solid #e3e9f3;
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      background: var(--code);
+      color: var(--codeink);
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      line-height: 1.55;
+    }
+    pre code { background: transparent; border: 0; padding: 0; color: inherit; }
+    .mermaid {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 14px 0;
+      overflow-x: auto;
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    .card {
+      background: #fbfcff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .card strong { display: block; color: var(--brand); margin-bottom: 6px; }
+    .pill {
+      display: inline-block;
+      background: #edf8f0;
+      color: #1d7040;
+      border: 1px solid #cdebd6;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+    @media (max-width: 860px) {
+      .summary, .grid2, .toc { grid-template-columns: 1fr; }
+      section { padding: 18px; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <div class="pill">LLM Framework Internals / LlamaIndex</div>
+      <h1>LlamaIndex 源码架构精读</h1>
+      <p class="lead">从 data-first / RAG-first 主线入手，拆解 LlamaIndex 如何把 Reader、Document、Node、Index、Retriever、QueryEngine、ResponseSynthesizer 和 Agent Workflow 组织成可扩展的数据应用框架。</p>
+      <div class="summary">
+        <div class="metric"><strong>源码版本</strong><span>7fd33e00...</span></div>
+        <div class="metric"><strong>核心包</strong><span>llama-index-core 0.14.23</span></div>
+        <div class="metric"><strong>核心定位</strong><span>Data / RAG Framework</span></div>
+        <div class="metric"><strong>阅读重点</strong><span>Ingestion + QueryEngine</span></div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>阅读导航</h2>
+      <p>建议按“定位 -> 架构 -> ingestion -> index/query -> storage -> agent workflow -> 对比”的顺序看。Markdown 底稿见 <a href="./index.md">index.md</a>，图源码见同目录 <code>.mmd</code> 文件。</p>
+      <div class="toc">
+        <a href="#conclusion">总体结论</a>
+        <a href="#architecture">最高层架构</a>
+        <a href="#boundary">仓库边界</a>
+        <a href="#ingestion">Ingestion</a>
+        <a href="#index">索引构建</a>
+        <a href="#query">RAG 查询链路</a>
+        <a href="#storage">StorageContext</a>
+        <a href="#settings">Settings</a>
+        <a href="#agent">AgentWorkflow</a>
+        <a href="#patterns">设计思想</a>
+        <a href="#example">真实例子</a>
+        <a href="#compare">框架对比</a>
+        <a href="#limits">局限性</a>
+        <a href="#share">分享建议</a>
+      </div>
+    </section>
+
+    <section id="conclusion">
+      <h2>1. 总体结论</h2>
+      <p>LlamaIndex 的核心定位是 <strong>data framework for LLM / agentic applications</strong>。它最强的主线不是“多 Agent 怎么聊天”，而是“私有数据如何进入 LLM 应用并被稳定查询”。</p>
+      <div class="note">
+        <strong>一句话分享：</strong>LangChain 更像通用 LLM 应用组件库，LangGraph 强在显式状态图和 checkpoint，LlamaIndex 强在数据/RAG 管线：怎么把文件、数据库、网页、向量库、检索器和答案合成组织成一条可扩展链路。
+      </div>
+      <pre><code>Reader -> Document -> Node/Transformation -> Index/Storage -> Retriever -> QueryEngine -> ResponseSynthesizer</code></pre>
+      <table>
+        <tr><th>主线</th><th>为什么值得讲</th></tr>
+        <tr><td><code>llama-index-core</code> / integrations</td><td>core 稳定抽象，integrations 承接快速变化的模型、向量库和 reader。</td></tr>
+        <tr><td><code>IngestionPipeline</code></td><td>把 Document 到 Node、embedding、docstore、vector store 变成可缓存、可更新的链路。</td></tr>
+        <tr><td><code>BaseIndex / VectorStoreIndex</code></td><td>索引是数据结构、存储上下文和查询入口的组合。</td></tr>
+        <tr><td><code>RetrieverQueryEngine</code></td><td>一次查询被拆成 retrieve、postprocess、synthesize。</td></tr>
+        <tr><td><code>AgentWorkflow</code></td><td>在 RAG 和 tools 之上加入事件化 Agent 执行。</td></tr>
+      </table>
+    </section>
+
+    <section id="architecture">
+      <h2>2. 最高层架构</h2>
+      <div class="mermaid">
+flowchart TB
+    App["应用 / Agent / Notebook / API<br/>用户想问自己的数据"] --> Core["llama-index-core<br/>核心抽象和主流程<br/>为什么：把数据、索引、检索、合成拆成可替换组件"]
+    App --> Integrations["llama-index-integrations<br/>LLM、Embedding、VectorStore、Reader、Tool 集成<br/>为什么：生态变化快，和 core 解耦"]
+    Core --> Settings["Settings<br/>LLM / Embedding / Callback / Transformations 默认配置<br/>为什么：降低样板代码，但仍可显式覆盖"]
+    Core --> Ingestion["IngestionPipeline<br/>Document -> Node -> Embedding -> Store<br/>为什么：写入链路可缓存、可去重、可异步"]
+    Core --> Index["BaseIndex / VectorStoreIndex<br/>围绕 nodes 构建索引<br/>为什么：把数据结构和查询入口统一起来"]
+    Core --> Storage["StorageContext<br/>docstore / index_store / vector_stores<br/>为什么：内存、磁盘、外部向量库统一管理"]
+    Core --> Query["RetrieverQueryEngine<br/>retrieve -> postprocess -> synthesize<br/>为什么：检索和生成分离，便于替换 rerank 和 response mode"]
+    Core --> Agent["AgentWorkflow / FunctionAgent / ReActAgent<br/>工具调用和事件化步骤<br/>为什么：在 RAG 基础上支持 agentic app"]
+    Ingestion --> Readers["Readers<br/>SimpleDirectoryReader 等<br/>把文件/API 数据变成 Document"]
+    Ingestion --> Transform["TransformComponent / NodeParser<br/>切块、清洗、元数据、embedding<br/>为什么：RAG 质量取决于节点粒度"]
+    Transform --> Storage
+    Index --> Retriever["BaseRetriever / VectorIndexRetriever<br/>根据 query 找相关 nodes"]
+    Retriever --> Query
+    Query --> Synth["ResponseSynthesizer<br/>refine / compact / tree_summarize 等<br/>为什么：把召回片段组织成可读答案"]
+    Integrations --> Providers["OpenAI / Anthropic / Ollama / Qdrant / Chroma / Pinecone / Weaviate ..."]
+    Providers --> Core
+    Agent --> Tools["QueryEngineTool / FunctionTool<br/>把查询引擎或函数暴露给 Agent"]
+    Tools --> Query
+      </div>
+      <p>这张图要从中间的 <code>llama-index-core</code> 读起：core 负责稳定主链路，integrations 负责外部生态，应用通过 index/query engine/agent workflow 使用这些能力。</p>
+      <table>
+        <tr><th>证据</th><th>说明</th></tr>
+        <tr><td><code>llama-index-core/llama_index/core</code></td><td>包含 indices、ingestion、retrievers、query_engine、response_synthesizers、storage、agent、workflow。</td></tr>
+        <tr><td><code>indices/base.py:25</code></td><td><code>BaseIndex</code> 是索引抽象基类。</td></tr>
+        <tr><td><code>indices/vector_store/base.py:36</code></td><td><code>VectorStoreIndex</code> 是常用向量索引实现。</td></tr>
+        <tr><td><code>query_engine/retriever_query_engine.py:25</code></td><td><code>RetrieverQueryEngine</code> 组合 retriever 和 response synthesizer。</td></tr>
+      </table>
+    </section>
+
+    <section id="boundary">
+      <h2>3. Monorepo 边界</h2>
+      <table>
+        <tr><th>层级</th><th>目录</th><th>作用</th><th>为什么这么拆</th></tr>
+        <tr><td>Core</td><td><code>llama-index-core</code></td><td>schema、索引、检索、查询、存储、ingestion、workflow</td><td>稳定抽象集中，避免 provider 变化污染主链路。</td></tr>
+        <tr><td>Integrations</td><td><code>llama-index-integrations</code></td><td>LLM、embedding、vector store、reader、tools</td><td>外部生态变化快，独立 package 承接版本差异。</td></tr>
+        <tr><td>Instrumentation / utils</td><td><code>llama-index-instrumentation</code>、<code>llama-index-utils</code></td><td>观测、事件、辅助能力</td><td>让 callback 和工具能力不混进核心业务抽象。</td></tr>
+      </table>
+      <p><span class="pill">设计范式</span>这是典型 Ports and Adapters：core 定义端口，integrations 实现 OpenAI、Anthropic、Qdrant、Chroma、Pinecone、Weaviate 等适配器。</p>
+      <pre><code class="language-python">from llama_index.core.llms import LLM
+from llama_index.llms.openai import OpenAI</code></pre>
+    </section>
+
+    <section id="ingestion">
+      <h2>4. 主流程一：IngestionPipeline</h2>
+      <div class="mermaid">
+flowchart TD
+    A["Reader<br/>SimpleDirectoryReader / connector<br/>读取文件、网页、数据库"] --> B["Document<br/>带文本和 metadata 的原始文档"]
+    B --> C["IngestionPipeline.run<br/>统一写入入口<br/>为什么：把切块、缓存、去重、写库放到一条链路"]
+    C --> D["Transformations<br/>NodeParser / Extractor / Embedding<br/>为什么：文档要变成可检索 nodes"]
+    D --> E["IngestionCache<br/>缓存 transformation 结果<br/>为什么：大文档重复处理成本高"]
+    D --> F["Docstore Strategy<br/>duplicates_only / upserts / upserts_and_delete<br/>为什么：更新知识库时要处理重复、增量和删除"]
+    F --> G["Docstore<br/>保存 node 文本和 metadata"]
+    D --> H["VectorStore<br/>保存 embedding 和检索字段"]
+    H --> I["StorageContext<br/>统一管理 docstore / vector_store / index_store"]
+    G --> I
+    I --> J["Index / QueryEngine<br/>后续查询复用同一份存储"]
+      </div>
+      <table>
+        <tr><th>源码位置</th><th>说明</th></tr>
+        <tr><td><code>ingestion/pipeline.py:72</code>、<code>:115</code></td><td>同步和异步 transformations 执行。</td></tr>
+        <tr><td><code>ingestion/pipeline.py:262</code></td><td><code>IngestionPipeline</code>。</td></tr>
+        <tr><td><code>ingestion/pipeline.py:321-343</code></td><td>transformations、vector_store、cache、docstore、docstore_strategy。</td></tr>
+        <tr><td><code>ingestion/pipeline.py:650-656</code></td><td>写入 vector store 和 docstore。</td></tr>
+      </table>
+      <p>设计重点：Document 是原始输入，Node 是检索单元；cache 和 docstore strategy 说明 LlamaIndex 面向的是会反复更新的知识库，而不是一次性 demo。</p>
+    </section>
+
+    <section id="index">
+      <h2>5. 主流程二：构建索引</h2>
+      <p><code>BaseIndex</code> 负责接收 nodes、维护 index struct，并提供插入、删除、查询入口。<code>VectorStoreIndex</code> 是最常用的向量索引实现。</p>
+      <pre><code class="language-python">documents = SimpleDirectoryReader("YOUR_DATA_DIRECTORY").load_data()
+index = VectorStoreIndex.from_documents(documents)
+query_engine = index.as_query_engine()
+query_engine.query("YOUR_QUESTION")
+index.storage_context.persist()</code></pre>
+      <table>
+        <tr><th>源码位置</th><th>说明</th></tr>
+        <tr><td><code>indices/base.py:89</code></td><td><code>from_documents()</code> 从 Document 创建 Index。</td></tr>
+        <tr><td><code>indices/base.py:179</code></td><td><code>_build_index_from_nodes()</code> 抽象构建入口。</td></tr>
+        <tr><td><code>indices/base.py:491</code></td><td><code>as_query_engine()</code> 创建查询引擎。</td></tr>
+        <tr><td><code>indices/vector_store/base.py:112</code></td><td><code>as_retriever()</code> 创建 vector retriever。</td></tr>
+        <tr><td><code>indices/vector_store/base.py:343</code></td><td><code>insert_nodes()</code> 支持增量写入。</td></tr>
+      </table>
+    </section>
+
+    <section id="query">
+      <h2>6. 主流程三：RAG 查询链路</h2>
+      <div class="mermaid">
+sequenceDiagram
+    participant User as 用户
+    participant Index as VectorStoreIndex
+    participant Retriever as VectorIndexRetriever
+    participant Engine as RetrieverQueryEngine
+    participant Post as NodePostprocessors
+    participant Synth as ResponseSynthesizer
+    participant LLM as LLM
+    User->>Index: index.as_query_engine()
+    Index->>Retriever: as_retriever()<br/>为什么：索引只负责提供检索器
+    Index->>Engine: RetrieverQueryEngine.from_args()
+    User->>Engine: query("问题")
+    Engine->>Retriever: retrieve(query_bundle)
+    Retriever-->>Engine: NodeWithScore 列表
+    Engine->>Post: rerank / filter / metadata 处理<br/>为什么：召回之后还要排序和清洗
+    Post-->>Engine: 精排后的 nodes
+    Engine->>Synth: synthesize(query, nodes)
+    Synth->>LLM: 按 response_mode 组织 prompt<br/>compact/refine/tree_summarize
+    LLM-->>Synth: 生成答案
+    Synth-->>Engine: Response + source nodes
+    Engine-->>User: 最终答案和来源
+      </div>
+      <table>
+        <tr><th>组件</th><th>负责什么</th><th>为什么分开</th></tr>
+        <tr><td>Retriever</td><td>找相关 nodes</td><td>可以替换成向量检索、融合检索、路由检索、递归检索。</td></tr>
+        <tr><td>NodePostprocessor</td><td>过滤、rerank、压缩召回结果</td><td>召回和最终上下文质量不是一回事。</td></tr>
+        <tr><td>ResponseSynthesizer</td><td>把 nodes 变成答案</td><td>不同答案策略适合不同上下文长度和任务。</td></tr>
+        <tr><td>QueryEngine</td><td>编排一次 query</td><td>应用只调用 <code>query()</code>，内部组件可替换。</td></tr>
+      </table>
+      <p>证据：<code>RetrieverQueryEngine</code> 构造函数接收 retriever、response_synthesizer、node_postprocessors；<code>_query()</code> 中先 retrieve，再 synthesize。<code>response_synthesizers/factory.py:38</code> 提供 refine、compact、tree_summarize 等模式。</p>
+    </section>
+
+    <section id="storage">
+      <h2>7. StorageContext</h2>
+      <p>LlamaIndex 不把存储简化成一个 vector DB。<code>StorageContext</code> 统一管理 docstore、index_store、vector_stores、graph_store 等。</p>
+      <table>
+        <tr><th>存储</th><th>职责</th><th>为什么需要</th></tr>
+        <tr><td><code>docstore</code></td><td>保存 node 文本和 metadata</td><td>向量库不一定适合保存完整文本和业务元数据。</td></tr>
+        <tr><td><code>index_store</code></td><td>保存 index struct</td><td>索引结构需要独立持久化。</td></tr>
+        <tr><td><code>vector_stores</code></td><td>保存 embedding 和检索字段</td><td>支持多个 namespace 和不同向量后端。</td></tr>
+        <tr><td><code>persist()</code></td><td>写入磁盘或后端</td><td>让索引可复用，不必每次重建。</td></tr>
+      </table>
+      <p>证据：<code>storage/storage_context.py:53</code> 定义 <code>StorageContext</code>，<code>:74</code> 定义 <code>from_defaults()</code>，<code>:151-202</code> 定义 <code>persist()</code>。</p>
+    </section>
+
+    <section id="settings">
+      <h2>8. Settings</h2>
+      <p><code>Settings</code> 是全局默认配置入口，包含 LLM、embedding、callback manager、node parser、transformations。</p>
+      <div class="grid2">
+        <div class="card"><strong>好处</strong>新手可以少写样板代码，组件内部也能拿到默认 LLM、embedding、callback 和 transformations。</div>
+        <div class="card"><strong>注意</strong>全局默认会隐藏依赖。生产项目建议显式传关键依赖，方便测试、多租户隔离和配置审计。</div>
+      </div>
+      <p>证据：<code>settings.py:35-48</code> 懒加载 LLM，<code>:63-76</code> 懒加载 embedding，<code>:278-287</code> 默认 transformations 返回 <code>[self.node_parser]</code>。</p>
+    </section>
+
+    <section id="agent">
+      <h2>9. AgentWorkflow</h2>
+      <div class="mermaid">
+flowchart TD
+    A["AgentWorkflow.run<br/>用户输入 + tools + memory"] --> B["init_run step<br/>初始化 Context、state、chat memory<br/>为什么：Agent 是多步事件流，不是单次函数调用"]
+    B --> C["Agent step<br/>FunctionAgent 或 ReActAgent 调 LLM"]
+    C --> D{"LLM 是否请求工具?"}
+    D -->|"否"| E["StopEvent<br/>返回最终响应"]
+    D -->|"是"| F["ToolCall event<br/>函数名 + 参数 + tool id"]
+    F --> G["call_tool step<br/>执行 FunctionTool / QueryEngineTool"]
+    G --> H["ToolCallResult event<br/>工具结果写回 Context"]
+    H --> I["aggregate_tool_results<br/>收集结果并判断是否继续"]
+    I --> C
+    C --> J["handoff / multi-agent<br/>可切换 active agent<br/>为什么：多个专业 Agent 共享 workflow 事件模型"]
+      </div>
+      <p>LlamaIndex 的 Agent 不是脱离 RAG 的另一套世界。它可以把 <code>QueryEngineTool</code> 或 <code>FunctionTool</code> 暴露给 Agent，让 Agent 在需要时调用索引查询。</p>
+      <table>
+        <tr><th>源码位置</th><th>说明</th></tr>
+        <tr><td><code>agent/workflow/base_agent.py:383</code></td><td><code>init_run</code> step。</td></tr>
+        <tr><td><code>agent/workflow/base_agent.py:523-624</code></td><td>agent step 和 tool call event 主路径。</td></tr>
+        <tr><td><code>agent/workflow/base_agent.py:625</code>、<code>:663</code></td><td><code>call_tool</code> 和 <code>aggregate_tool_results</code>。</td></tr>
+        <tr><td><code>agent/workflow/multi_agent_workflow.py:99</code></td><td><code>AgentWorkflow</code>。</td></tr>
+      </table>
+    </section>
+
+    <section id="patterns">
+      <h2>10. 核心设计思想和范式</h2>
+      <div class="cards">
+        <div class="card"><strong>Data-first / RAG-first</strong>中心是数据进入和数据查询，而不是单纯 agent loop。</div>
+        <div class="card"><strong>Ports and Adapters</strong>core 定义抽象，provider/vector store/reader 在 integrations 里适配。</div>
+        <div class="card"><strong>Pipeline 架构</strong>写入链路按 transformation、cache、docstore、vector store 分阶段。</div>
+        <div class="card"><strong>Retriever / Synthesizer 分离</strong>检索质量和答案合成策略可以分别优化。</div>
+        <div class="card"><strong>StorageContext</strong>docstore、index_store、vector_stores 不强行塞到一个后端。</div>
+        <div class="card"><strong>Progressive complexity</strong>入门 API 很短，但内部保留复杂 retriever、pipeline、storage 扩展点。</div>
+      </div>
+      <pre><code class="language-python">def as_query_engine(self, llm=None, **kwargs):
+    retriever = self.as_retriever(**kwargs)
+    return RetrieverQueryEngine.from_args(retriever, llm=llm, **kwargs)</code></pre>
+      <p>这段代码很好地证明了 LlamaIndex 的组合风格：index 不直接负责生成答案，而是先变成 retriever，再交给 query engine 统一编排。</p>
+    </section>
+
+    <section id="example">
+      <h2>11. 真实例子：源码分析问答助手</h2>
+      <p>假设我们想把这个仓库里的源码分析文档做成问答助手，让它回答：“Letta 的 AgentState 是怎么设计的？和 mem0 的 memory layer 有什么差别？”</p>
+      <pre><code class="language-python">from llama_index.core import SimpleDirectoryReader, VectorStoreIndex
+
+documents = SimpleDirectoryReader("docs").load_data()
+index = VectorStoreIndex.from_documents(documents)
+query_engine = index.as_query_engine(similarity_top_k=6)
+response = query_engine.query("Letta 的 AgentState 是怎么设计的？和 mem0 有什么差别？")
+print(response)</code></pre>
+      <p>链路解释：reader 读文档，index 切成 nodes 并写向量，query engine 触发 retriever 找到 Letta/mem0 相关片段，response synthesizer 再把片段合成答案并保留 source nodes。</p>
+      <div class="note">这个例子能把 LlamaIndex 的价值讲清楚：它不是帮你“写一个聊天机器人”这么简单，而是把私有知识库从 ingestion 到 query 的每个环节都抽象出来，方便替换和调优。</div>
+    </section>
+
+    <section id="compare">
+      <h2>12. 和其他框架对比</h2>
+      <table>
+        <tr><th>维度</th><th>LlamaIndex</th><th>LangChain</th><th>LangGraph</th><th>mem0</th><th>Zep / Graphiti</th><th>Letta / AutoGen / CrewAI</th></tr>
+        <tr><td>核心问题</td><td>私有数据如何进入 LLM 应用并被查询</td><td>LLM 应用组件怎么组合</td><td>状态图流程如何可控执行</td><td>长期事实怎么抽取和检索</td><td>记忆/图谱如何服务化</td><td>Agent 如何运行、协作或持久化</td></tr>
+        <tr><td>主抽象</td><td>Document、Node、Index、Retriever、QueryEngine</td><td>Runnable、Tool、Model、Prompt</td><td>StateGraph、Node、Edge、Checkpoint</td><td>Memory.add/search</td><td>Session、Graph、Episode、Fact</td><td>Agent、Task、Team、Memory、Tool</td></tr>
+        <tr><td>最强场景</td><td>RAG、数据连接、索引和检索</td><td>通用 LLM app glue</td><td>可恢复流程编排</td><td>长期偏好和事实记忆</td><td>会话记忆/时序图谱</td><td>多 Agent / Stateful Agent</td></tr>
+      </table>
+      <div class="warn">
+        <strong>和 LangGraph 组合：</strong>LangGraph 管流程状态、分支、checkpoint、人审和恢复；LlamaIndex 管知识库 ingestion、索引、检索和答案合成；mem0/Zep 管长期用户偏好和会话记忆。
+      </div>
+    </section>
+
+    <section id="limits">
+      <h2>13. 局限性和阅读注意点</h2>
+      <table>
+        <tr><th>局限 / 注意点</th><th>为什么</th><th>建议</th></tr>
+        <tr><td>抽象面很大</td><td>core + integrations 覆盖 reader、index、retriever、agent、workflow</td><td>分享时先讲 RAG 主链路，再扩展 Agent。</td></tr>
+        <tr><td>integrations 版本面广</td><td>外部 provider 和向量库变化快</td><td>精读 core 抽象，integration 只选典型 provider。</td></tr>
+        <tr><td><code>Settings</code> 可能隐藏依赖</td><td>全局默认让代码短，但测试和多租户不直观</td><td>生产代码显式传关键依赖。</td></tr>
+        <tr><td>RAG 质量不是框架自动保证</td><td>chunk、metadata、embedding、top_k、rerank、prompt 都影响答案</td><td>建立评估集，分阶段调 ingestion 和 retrieval。</td></tr>
+        <tr><td>不是长期记忆治理系统</td><td>它能做 RAG 和 storage，但不是 mem0/Zep 那类 memory governance</td><td>用户偏好、事实冲突、删除审计可交给记忆系统。</td></tr>
+      </table>
+    </section>
+
+    <section id="share">
+      <h2>14. 分享建议</h2>
+      <ol>
+        <li>开场先定边界：LlamaIndex 是 data/RAG 框架，不只是 agent 框架。</li>
+        <li>讲 monorepo：core 稳定抽象，integrations 承接外部生态。</li>
+        <li>讲主流程：Reader -> Document -> Node -> Index -> Retriever -> QueryEngine -> Synthesizer。</li>
+        <li>讲源码证据：<code>BaseIndex.from_documents()</code>、<code>VectorStoreIndex.as_retriever()</code>、<code>RetrieverQueryEngine._query()</code>。</li>
+        <li>讲 StorageContext：为什么不是只有向量库。</li>
+        <li>最后对比 LangChain、LangGraph、mem0/Zep/Letta，明确组合边界。</li>
+      </ol>
+      <div class="note">
+        <strong>开场白：</strong>“LlamaIndex 读源码不要先陷入 integrations 列表，而要抓住一条 RAG 主链路：数据先被 reader 读成 Document，再切成 Node，构建 Index，查询时 Retriever 找回 Node，ResponseSynthesizer 把片段合成答案。”
+      </div>
+    </section>
+  </main>
+</body>
+</html>
