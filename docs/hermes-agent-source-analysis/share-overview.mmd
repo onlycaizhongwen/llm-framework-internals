@@ -1,0 +1,52 @@
+flowchart TB
+  TITLE[分享主线：Hermes 是长期在线个人 Agent 产品工程]
+
+  subgraph Entry["1. 多入口接入层：把不同用户场景接进来"]
+    CLI[CLI / TUI<br/>本地交互、代码任务、worktree]
+    GW[Messaging Gateway<br/>Telegram / Discord / Slack 等]
+    ACP[ACP / Desktop<br/>编辑器与桌面客户端]
+    CRON[Cron<br/>定时任务与后台触发]
+  end
+
+  subgraph Core["2. Agent Core：复用同一套推理与工具循环"]
+    AIA[AIAgent<br/>会话状态、模型配置、工具上下文]
+    LOOP[conversation_loop<br/>模型调用、工具循环、retry/fallback]
+    PROVIDER[Provider Adapter<br/>消息/工具/参数/响应归一化]
+  end
+
+  subgraph Tools["3. 能力边缘：工具、扩展与安全边界"]
+    REG[Tool Registry<br/>schema + handler + toolset]
+    APPROVAL[Approval / Guardrails<br/>危险命令检测、审批、硬阻断]
+    EXT[Plugin / Skill / MCP<br/>运行时扩展、经验沉淀、外部服务工具化]
+  end
+
+  subgraph State["4. 长期状态：让 Agent 可恢复、可检索、可学习"]
+    DB[SessionDB<br/>sessions/messages/FTS/trigram]
+    MEMORY[Memory / Skills<br/>长期记忆、后台 review]
+    RESUME[Gateway Resume<br/>resume_pending、pending queue、generation check]
+  end
+
+  subgraph Delivery["5. 产品投递：把结果回到真实平台"]
+    ROUTER[DeliveryRouter<br/>文本/图片/文件/语音]
+    USER[用户继续对话<br/>下一轮上下文进入同一生命周期]
+  end
+
+  TITLE --> Entry
+  CLI --> AIA
+  GW --> AIA
+  ACP --> AIA
+  CRON --> AIA
+  AIA --> LOOP --> PROVIDER --> LOOP
+  LOOP --> REG --> APPROVAL --> LOOP
+  EXT --> REG
+  LOOP --> DB --> MEMORY --> LOOP
+  GW --> RESUME --> DB
+  LOOP --> ROUTER --> USER
+  USER --> Entry
+
+  classDef focus fill:#eaf3ff,stroke:#2764b0,color:#172033;
+  classDef safe fill:#fff5dc,stroke:#986b10,color:#172033;
+  classDef state fill:#eaf8f1,stroke:#217a59,color:#172033;
+  class TITLE,AIA,LOOP focus;
+  class APPROVAL safe;
+  class DB,MEMORY,RESUME state;

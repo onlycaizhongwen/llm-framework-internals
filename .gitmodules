@@ -22,3 +22,6 @@
 [submodule "sources/headroom"]
 	path = sources/headroom
 	url = https://github.com/chopratejas/headroom.git
+[submodule "sources/hermes-agent"]
+	path = sources/hermes-agent
+	url = https://github.com/NousResearch/hermes-agent.git

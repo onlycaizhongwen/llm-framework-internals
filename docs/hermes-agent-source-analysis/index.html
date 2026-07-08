@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hermes Agent 源码分析</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: "base", themeVariables: { primaryColor: "#eef6ff", primaryTextColor: "#172033", primaryBorderColor: "#7aa7d9", lineColor: "#52677a", secondaryColor: "#f6f0ff", tertiaryColor: "#f4fbf6", fontFamily: "Inter, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" } });</script>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #5d6978;
+      --line: #d9e0ea;
+      --blue: #2764b0;
+      --green: #217a59;
+      --amber: #986b10;
+      --soft-blue: #eaf3ff;
+      --soft-green: #eaf8f1;
+      --soft-amber: #fff5dc;
+      --soft-red: #fff0ef;
+      --code: #f4f6f8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.68;
+    }
+    header {
+      background: linear-gradient(180deg, #ffffff 0%, #eef6ff 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 24px; }
+    .hero { min-height: 58vh; display: grid; align-content: center; gap: 18px; }
+    .eyebrow { color: var(--blue); font-weight: 700; letter-spacing: 0; }
+    h1 { font-size: clamp(34px, 5vw, 64px); line-height: 1.08; margin: 0; letter-spacing: 0; }
+    h2 { font-size: 28px; margin: 42px 0 14px; letter-spacing: 0; }
+    h3 { font-size: 20px; margin: 26px 0 10px; letter-spacing: 0; }
+    p { margin: 10px 0; }
+    .lead { max-width: 900px; font-size: 20px; color: #29364a; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    nav a {
+      color: var(--blue);
+      text-decoration: none;
+      border: 1px solid #b8d1ee;
+      background: #fff;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    section { background: var(--paper); border-top: 1px solid var(--line); }
+    .note, .callout {
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--blue);
+      background: #fbfdff;
+      padding: 14px 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      background: #fff;
+    }
+    .card strong { color: var(--blue); }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; background: #fff; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; vertical-align: top; text-align: left; }
+    th { background: #eef3f8; }
+    code { background: var(--code); padding: 2px 5px; border-radius: 4px; font-family: Consolas, "SFMono-Regular", monospace; }
+    pre { background: #f4f6f8; border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow: auto; }
+    .diagram {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      margin: 16px 0;
+      overflow-x: auto;
+    }
+    .why { background: var(--soft-amber); border-color: #efd089; }
+    .ok { background: var(--soft-green); border-color: #b6dec9; }
+    .warn { background: var(--soft-red); border-color: #efb7b1; }
+    .evidence li { margin: 7px 0; }
+    .tag { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 12px; background: var(--soft-blue); color: var(--blue); border: 1px solid #bfd6f1; }
+    footer { color: var(--muted); padding: 24px 0 48px; }
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+      .wrap { padding: 22px 16px; }
+      h1 { font-size: 36px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap hero">
+      <div class="eyebrow">NousResearch/hermes-agent 源码分析 · 项目工程专题</div>
+      <h1>Hermes Agent：一个长期运行的个人 AI Agent 产品工程</h1>
+      <p class="lead">本文参考之前源码分析风格，但不把 Hermes Agent 纳入横向总览。它的重点不是提供开发者编排框架，而是把同一个 Agent Core 跑到 CLI、Gateway、ACP、Cron、桌面等多个产品入口，并处理长期状态、工具安全、记忆技能和平台投递。</p>
+      <nav>
+        <a href="#summary">总体结论</a>
+        <a href="#architecture">架构图</a>
+        <a href="#flows">主流程</a>
+        <a href="#tools">工具系统</a>
+        <a href="#memory">状态与记忆</a>
+        <a href="#cron-acp">Cron/ACP</a>
+        <a href="#examples">真实例子</a>
+        <a href="#provider-adapter">Provider Adapter</a>
+        <a href="#tool-security">工具安全</a>
+        <a href="#sessiondb">SessionDB</a>
+        <a href="#gateway-complex">Gateway 复杂场景</a>
+        <a href="#plugin-skill-mcp">Plugin/Skill/MCP</a>
+        <a href="#reading-route">阅读路线</a>
+        <a href="#share-overview">分享总览图</a>
+        <a href="#reading-checklist">阅读 Checklist</a>
+        <a href="#deep-dive">四类深度分析</a>
+        <a href="share-script.html">演讲稿</a>
+        <a href="#share">分享建议</a>
+      </nav>
+    </div>
+  </header>
+
+  <section id="summary">
+    <div class="wrap">
+      <h2>总体结论</h2>
+      <div class="callout">
+        <strong>一句话：</strong>Hermes Agent 不是 LangGraph、Dify、Haystack 那类“给开发者搭 Agent/RAG/Workflow 的框架”，而是一个完整的个人 AI Agent 产品工程。
+      </div>
+      <div class="grid">
+        <div class="card"><strong>核心复用</strong><br>CLI、TUI、Messaging Gateway、ACP、Desktop、Cron 最终都回到同一套 <code>AIAgent + conversation_loop</code>。</div>
+        <div class="card"><strong>能力在边缘</strong><br>工具、MCP、插件、技能、平台适配器都放在边缘，核心保持窄腰，避免工具 schema 膨胀。</div>
+        <div class="card"><strong>产品工程复杂度</strong><br>复杂性主要来自长期会话、状态恢复、平台投递、成本控制、工具安全和后台学习。</div>
+      </div>
+      <p><span class="tag">版本</span> 本地浅克隆 HEAD：<code>f64e4f4</code>，提交信息：<code>feat(gateway): generic OIDC client-credentials relay provisioning (NAS-free) (#60730)</code>。</p>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <div class="wrap">
+      <h2>最高层架构</h2>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  U[用户入口&lt;br/&gt;CLI / TUI / Gateway / ACP / Desktop / Cron]
+  CLI[CLI 主入口&lt;br/&gt;hermes / hermes-agent]
+  GW[消息网关&lt;br/&gt;Telegram / Discord / Slack / Matrix 等]
+  ACP[ACP 适配器&lt;br/&gt;编辑器/客户端接入]
+  CRON[定时任务&lt;br/&gt;后台触发 Agent]
+  CORE[Agent Core&lt;br/&gt;AIAgent + conversation_loop]
+  MODEL[Provider Adapter&lt;br/&gt;OpenAI兼容 / Anthropic / OpenRouter / Nous 等]
+  TOOLS[工具层&lt;br/&gt;Registry + Toolsets + MCP + Plugins]
+  STATE[状态层&lt;br/&gt;SQLite SessionDB + FTS5 + compression lineage]
+  MEMORY[记忆/技能&lt;br/&gt;MemoryManager + Skills + background review]
+  DELIVERY[投递层&lt;br/&gt;DeliveryRouter + Platform Adapters]
+  U --&gt; CLI
+  U --&gt; GW
+  U --&gt; ACP
+  U --&gt; CRON
+  CLI --&gt; CORE
+  GW --&gt; CORE
+  ACP --&gt; CORE
+  CRON --&gt; CORE
+  CORE --&gt; MODEL
+  CORE --&gt; TOOLS
+  CORE --&gt; STATE
+  CORE --&gt; MEMORY
+  GW --&gt; DELIVERY
+  CRON --&gt; DELIVERY
+  DELIVERY --&gt; U
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么这样设计：</strong>多入口只处理输入/投递/协议差异，Agent Core 负责统一推理与工具循环；工具、插件、技能放在边缘，减少核心 schema 膨胀；状态层支撑长期会话恢复、检索和压缩链路。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/AGENTS.md:9-14</code>：同一个 agent core 运行在 CLI、messaging gateway、TUI、Electron desktop。</li>
+        <li><code>sources/hermes-agent/AGENTS.md:19-27</code>：明确提出 prompt caching 和 narrow waist 是核心约束。</li>
+        <li><code>sources/hermes-agent/pyproject.toml:307-310</code>：暴露 <code>hermes</code>、<code>hermes-agent</code>、<code>hermes-acp</code> 三个脚本入口。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="flows">
+    <div class="wrap">
+      <h2>主流程一：CLI 一轮对话</h2>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  U[用户输入&lt;br/&gt;hermes -q 修复仓库 bug]
+  C[CLI / HermesCLI&lt;br/&gt;解析参数、toolsets、skills、provider、worktree]
+  A[AIAgent&lt;br/&gt;创建或恢复会话 Agent]
+  L[conversation_loop&lt;br/&gt;读取历史、系统提示、记忆上下文]
+  M[Provider 模型&lt;br/&gt;返回文本或 tool_calls]
+  T[Tool Registry&lt;br/&gt;分发 terminal / file / search 等工具]
+  F[turn_finalizer&lt;br/&gt;生成最终响应并收尾]
+  D[SessionDB / Memory&lt;br/&gt;持久化会话、同步记忆、后台 review]
+  O[CLI 输出&lt;br/&gt;final_response]
+  U --&gt; C --&gt; A --&gt; L --&gt; M
+  M -- tool_calls --&gt; T -- 工具结果 --&gt; L
+  M -- final text --&gt; F --&gt; D --&gt; O
+        </pre>
+      </div>
+      <p>CLI 并不是简单包一层命令行参数。它还处理 toolsets、skills、provider、resume、worktree、单次 query 与交互模式，然后把执行交给 <code>AIAgent</code>。</p>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/cli.py:15669-15726</code>：<code>main()</code> 参数覆盖 query、image、toolsets、skills、model、provider、gateway、resume、worktree。</li>
+        <li><code>sources/hermes-agent/run_agent.py:5745-5768</code>：<code>run_conversation()</code> 是薄转发，实际逻辑在 <code>agent.conversation_loop</code>。</li>
+        <li><code>sources/hermes-agent/agent/conversation_loop.py:1-10</code>：主循环覆盖 model call、tool dispatch、retry、fallback、compression、post-turn hooks、memory/skill review。</li>
+      </ul>
+
+      <h2>主流程二：Gateway 消息</h2>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  MSG[平台消息&lt;br/&gt;Telegram/Discord/Slack等]
+  ADAPTER[Platform Adapter&lt;br/&gt;标准化 MessageEvent]
+  RUNNER[GatewayRunner&lt;br/&gt;路由、鉴权、队列、生命周期]
+  KEY[Session Key&lt;br/&gt;agent:main:platform:chat_type:chat_id]
+  CACHE[每会话 AIAgent 缓存&lt;br/&gt;LRU 128 + idle TTL 1h]
+  AGENT[Agent Core&lt;br/&gt;run_conversation]
+  ROUTER[DeliveryRouter&lt;br/&gt;文本/图片/文件/语音投递]
+  OUT[平台回复]
+  MSG --&gt; ADAPTER --&gt; RUNNER --&gt; KEY --&gt; CACHE --&gt; AGENT --&gt; ROUTER --&gt; OUT
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么有每会话 AIAgent 缓存：</strong>Gateway 是长进程，同一聊天会话如果每次都重建 Agent，会重建系统提示、工具 schema 和记忆上下文，破坏 prefix prompt cache。缓存按 session_key 复用 Agent，既保留会话状态，也降低长会话成本。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/gateway/run.py:63-68</code>：AIAgent cache 上限 128，idle TTL 1 小时。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:2492-2510</code>：session key 格式是 <code>agent:main:{platform}:{chat_type}:{chat_id}[:extra]</code>。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:2774-2779</code>：<code>GatewayRunner</code> 管理平台适配器并在平台与 Agent 之间路由。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:2950-2959</code>：缓存 AIAgent 的注释直接指出是为了保护 prompt caching。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="tools">
+    <div class="wrap">
+      <h2>工具系统：Registry + Toolsets + MCP + Plugins</h2>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  TFILE[tools/*.py&lt;br/&gt;工具模块 import 时自注册]
+  REG[ToolRegistry&lt;br/&gt;schema + handler + toolset + check_fn]
+  GEN[generation 计数器&lt;br/&gt;注册/注销/别名变化即递增]
+  DEF[get_tool_definitions&lt;br/&gt;按 enabled/disabled toolsets 过滤]
+  MODEL[模型可见工具 schema]
+  DISPATCH[handle_function_call / registry.dispatch]
+  AGENTTOOLS[Agent-loop 拦截工具&lt;br/&gt;todo/memory/session_search/delegate_task]
+  PLUGIN[Plugin/MCP 工具&lt;br/&gt;边缘扩展]
+  POLICY[override opt-in&lt;br/&gt;防止插件影子覆盖核心工具]
+  TFILE --&gt; REG
+  PLUGIN --&gt; REG
+  REG --&gt; GEN
+  REG --&gt; DEF --&gt; MODEL
+  MODEL --&gt; DISPATCH
+  DISPATCH --&gt; REG
+  DISPATCH --&gt; AGENTTOOLS
+  PLUGIN --&gt; POLICY --&gt; REG
+        </pre>
+      </div>
+      <pre><code class="language-python"># sources/hermes-agent/model_tools.py:5-12
+# Thin orchestration layer over the tool registry.
+# Each tool file in tools/ self-registers its schema, handler, and metadata.</code></pre>
+      <pre><code class="language-python"># sources/hermes-agent/model_tools.py:596-600
+_AGENT_LOOP_TOOLS = {"todo", "memory", "session_search", "delegate_task"}</code></pre>
+      <div class="note ok">
+        <strong>设计范式：</strong>这是典型注册表模式 + 边缘扩展。工具定义只有一个来源，model schema、handler 分发、toolset 分组都从 registry 派生；插件/MCP 可以扩展，但覆盖核心工具需要显式授权。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/tools/registry.py:58-64</code>：扫描并 import 内置工具模块，触发自注册。</li>
+        <li><code>sources/hermes-agent/tools/registry.py:208-230</code>：<code>ToolRegistry</code> 使用 RLock 和 generation 计数器。</li>
+        <li><code>sources/hermes-agent/model_tools.py:247-261</code>：<code>get_tool_definitions()</code> 是主 schema provider，并按 registry generation 缓存。</li>
+        <li><code>sources/hermes-agent/tools/registry.py:356-448</code>：<code>register()</code> 拒绝意外 shadow，插件覆盖需要 opt-in。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="memory">
+    <div class="wrap">
+      <h2>状态、记忆与技能</h2>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  TURN[一轮对话结束]
+  FINAL[turn_finalizer]
+  SYNC[同步外部记忆 provider]
+  REVIEW[后台 memory/skill review]
+  SKILL[技能改进/提示 nudge]
+  NEXT[下一轮系统提示/用户消息注入]
+  MM[MemoryManager&lt;br/&gt;内置 provider + 最多一个外部 provider]
+  BLOCK[build_memory_context_block&lt;br/&gt;记忆上下文清洗后注入]
+  TURN --&gt; FINAL
+  FINAL --&gt; SYNC --&gt; MM
+  FINAL --&gt; REVIEW --&gt; SKILL
+  MM --&gt; BLOCK --&gt; NEXT
+  SKILL --&gt; NEXT
+        </pre>
+      </div>
+      <p>Hermes 是长期个人 Agent，所以状态不是附属模块，而是产品能力本身：会话恢复、历史搜索、压缩链路、跨平台 source tagging 都依赖它。</p>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/hermes_state.py:3-15</code>：SQLite State Store 保存 session metadata、full message history、model config，并支持 WAL、FTS5、compression parent_session_id chains。</li>
+        <li><code>sources/hermes-agent/agent/memory_manager.py:3-8</code>：MemoryManager 是单一集成点，只允许一个外部 memory provider。</li>
+        <li><code>sources/hermes-agent/agent/turn_finalizer.py:462-480</code>：每轮结束同步 external memory，响应交付后再执行 background memory/skill review。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="cron-acp">
+    <div class="wrap">
+      <h2>Cron 与 ACP：产品入口继续复用 Agent Core</h2>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  subgraph Cron["Cron 定时任务路径"]
+    TICK[tick 每 60 秒触发&lt;br/&gt;文件锁防重入]
+    DUE[找出 due jobs&lt;br/&gt;先推进 next_run_at]
+    SAFE[注入扫描 + 禁用交互/危险 toolsets]
+    RUN[临时 AIAgent 执行 prompt]
+    DELIVER[投递到 Telegram/Discord/Slack 等]
+  end
+  subgraph ACP["ACP 客户端路径"]
+    CLIENT[编辑器/客户端&lt;br/&gt;Zed/ACP client]
+    SERVER[HermesACPAgent Server]
+    PARTS[resource_link 转 OpenAI content parts&lt;br/&gt;文件/图片/文本]
+    EXEC[ThreadPoolExecutor&lt;br/&gt;同步 AIAgent 并行运行]
+  end
+  TICK --&gt; DUE --&gt; SAFE --&gt; RUN --&gt; DELIVER
+  CLIENT --&gt; SERVER --&gt; PARTS --&gt; EXEC --&gt; RUN
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么 Cron 禁用部分工具：</strong>定时任务是非交互上下文，不能等待用户澄清，也不应该通过 <code>cronjob</code> 工具递归创建定时任务。<br>
+        <strong>为什么 ACP 用线程池：</strong>ACP server 是异步协议，但 Hermes AIAgent 是同步核心，线程池把阻塞运行隔离出去。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/cron/scheduler.py:4-8</code>：Gateway 每 60 秒调用 <code>tick()</code>，文件锁防重入。</li>
+        <li><code>sources/hermes-agent/cron/scheduler.py:103-112</code>：Cron 执行前扫描完整 prompt，包括 skill 内容。</li>
+        <li><code>sources/hermes-agent/cron/scheduler.py:116-136</code>：Cron 禁用 <code>cronjob</code>、<code>messaging</code>、<code>clarify</code>。</li>
+        <li><code>sources/hermes-agent/acp_adapter/server.py:89-90</code>：ACP 用 <code>ThreadPoolExecutor(max_workers=4)</code>。</li>
+        <li><code>sources/hermes-agent/acp_adapter/server.py:216-220</code>：ACP resource_link 转 OpenAI content parts。</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="patterns">
+    <div class="wrap">
+      <h2>核心设计思想与范式</h2>
+      <table>
+        <thead><tr><th>设计思想</th><th>源码表现</th><th>为什么重要</th></tr></thead>
+        <tbody>
+          <tr><td>Narrow Waist</td><td><code>AIAgent + conversation_loop</code> 是核心</td><td>多入口复用核心，减少重复实现</td></tr>
+          <tr><td>Edge Extensibility</td><td>Tool Registry、Toolsets、MCP、Plugins、Skills</td><td>新能力不直接膨胀核心 schema</td></tr>
+          <tr><td>Prompt Cache First</td><td>Gateway 每会话缓存 AIAgent</td><td>长会话成本更低，模型调用更稳定</td></tr>
+          <tr><td>Stateful Product Agent</td><td>SQLite SessionDB、FTS5、parent_session_id chains</td><td>支持恢复、搜索、压缩、跨平台会话</td></tr>
+          <tr><td>Background Self-improvement</td><td>turn_finalizer 后台 memory/skill review</td><td>当前任务优先，长期学习滞后执行</td></tr>
+          <tr><td>Defense in Depth</td><td>插件 override opt-in、Cron prompt scanning、toolset denylist</td><td>长期在线 Agent 不能只依赖模型自觉</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="examples">
+    <div class="wrap">
+      <h2>真实例子</h2>
+      <h3>例子 1：CLI 里让 Hermes 修复仓库 bug</h3>
+      <pre><code class="language-bash">hermes -w -q "检查当前仓库测试失败原因并修复"</code></pre>
+      <p>CLI 先创建隔离 worktree，再根据代码目录选择 toolsets，随后进入 <code>AIAgent.run_conversation</code>。模型通过 file/search/terminal 等工具循环定位问题，最终响应后持久化会话并触发后台记忆/技能复盘。</p>
+
+      <h3>例子 2：Telegram 用户发“每天早上总结 GitHub issue”</h3>
+      <p>Gateway adapter 把 Telegram 消息标准化为 <code>MessageEvent</code>，<code>GatewayRunner</code> 用 session_key 找到会话 Agent。Agent 可以创建 cron job；之后 scheduler 每 60 秒检查 due jobs，禁用交互/危险 toolsets，执行结果再通过 DeliveryRouter 投递回 Telegram。</p>
+
+      <h3>例子 3：ACP/Zed 客户端带文件资源提问</h3>
+      <p>ACP server 把 resource_link 转成模型可理解的 content parts，并兼容 WSL/Windows 路径。同步 AIAgent 放到线程池里跑，避免阻塞 ACP 的异步协议处理。</p>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="wrap">
+      <h2 id="provider-adapter">补充一：Provider Adapter 细节</h2>
+      <p>Hermes 的 Provider Adapter 不是完整 Agent 抽象，而是 provider-specific data path：负责把 Hermes 内部消息和工具 schema 转成不同模型 API 能接受的格式，再把返回值归一成统一的 <code>NormalizedResponse</code>。这样做的关键收益是：模型协议变化留在 adapter，Agent 生命周期、streaming、重试、fallback、压缩、interrupt、prompt cache 仍由 <code>AIAgent</code> 统一控制。</p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  LOOP[conversation_loop&lt;br/&gt;统一推理循环]
+  AGENT[AIAgent&lt;br/&gt;client生命周期/stream/retry/fallback/cache]
+  BASE[ProviderTransport ABC&lt;br/&gt;四段数据转换契约]
+  MSG[convert_messages&lt;br/&gt;消息格式适配]
+  TOOL[convert_tools&lt;br/&gt;工具schema适配]
+  KW[build_kwargs&lt;br/&gt;请求参数适配]
+  RESP[normalize_response&lt;br/&gt;统一返回形状]
+  NORM[NormalizedResponse&lt;br/&gt;content/tool_calls/usage/provider_data]
+  LOOP --&gt; AGENT --&gt; BASE
+  BASE --&gt; MSG --&gt; KW
+  BASE --&gt; TOOL --&gt; KW
+  KW --&gt; RESP --&gt; NORM --&gt; LOOP
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么不把所有 provider 差异塞进 Agent：</strong>如果每个模型的消息格式、工具格式、stop reason、usage 字段都散落在主循环里，主循环会越来越像兼容性垃圾桶。Hermes 用 <code>ProviderTransport</code> 把协议差异收束为四个步骤，主循环只认统一响应。
+      </div>
+      <pre><code class="language-python"># sources/hermes-agent/agent/transports/base.py:1-8
+# Transport owns the provider-specific data path:
+# convert_messages -> convert_tools -> build_kwargs -> normalize_response</code></pre>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/agent/transports/base.py:16-86</code>：<code>ProviderTransport</code> 定义 provider adapter 的抽象契约。</li>
+        <li><code>sources/hermes-agent/agent/transports/types.py:91-109</code>：<code>NormalizedResponse</code> 统一 content、tool_calls、finish_reason、usage、provider_data。</li>
+        <li><code>sources/hermes-agent/agent/transports/anthropic.py:13-17</code>：Anthropic transport 包装已有 adapter 函数，避免复制旧逻辑。</li>
+        <li><code>sources/hermes-agent/agent/transports/anthropic.py:222-244</code>：adapter 抽取 cache stats 并映射 stop reason。</li>
+      </ul>
+
+      <h2 id="tool-security">补充二：工具执行安全边界</h2>
+      <p>工具层既是 Hermes 的能力扩展点，也是最大风险入口。Hermes 的安全边界不是单点开关，而是多层防御：toolset scope 限制工具暴露面，dangerous command approval 管危险命令，hardline blocklist 永久禁止高危操作，Gateway 审批前做 secret redaction，<code>session_key</code> 通过 contextvars 隔离并发会话。</p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  CALL[模型请求执行工具/命令]
+  SCOPE[Toolset Scope&lt;br/&gt;入口决定可见工具]
+  DETECT[危险模式检测&lt;br/&gt;rm -rf / sudo / curl pipe sh 等]
+  BLOCK[Hardline Blocklist&lt;br/&gt;永不执行]
+  APPROVE[Approval Policy&lt;br/&gt;CLI/Gateway/Smart/Always]
+  REDACT[Secret Redaction&lt;br/&gt;审批提示脱敏]
+  CTX[ContextVars&lt;br/&gt;session_key隔离并发状态]
+  RUN[执行工具]
+  DENY[拒绝并返回原因]
+  CALL --&gt; SCOPE --&gt; DETECT
+  DETECT -- 高危不可放行 --&gt; BLOCK --&gt; DENY
+  DETECT -- 需审批 --&gt; APPROVE --&gt; REDACT --&gt; CTX --&gt; RUN
+  DETECT -- 安全/已授权 --&gt; CTX --&gt; RUN
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么这么严：</strong>Hermes 是长期在线 Agent，既可能在 CLI 里改代码，也可能在 Gateway 里响应聊天平台消息。只靠模型“不要做危险事”不够，必须把危险命令识别、审批状态、会话隔离、平台提示脱敏都放到工具执行路径上。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/tools/approval.py:1-8</code>：dangerous command approval 是危险模式检测、每会话审批状态、CLI/Gateway 提示、smart approval、永久允许列表的单一事实源。</li>
+        <li><code>sources/hermes-agent/tools/approval.py:32-58</code>：冻结 yolo 状态与 contextvars，避免 prompt injection 或并发绕过。</li>
+        <li><code>sources/hermes-agent/tools/approval.py:289-305</code>：hardline blocklist 中的命令即使 yolo/approval off/cron approve mode 也不执行。</li>
+        <li><code>sources/hermes-agent/tools/approval.py:3016-3151</code>：Gateway/ask 场景会对整段脚本做审批，并支持 smart approval、session/always 持久化。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:340-346</code>：Gateway 审批提示发送到聊天平台前会脱敏凭据。</li>
+      </ul>
+
+      <h2 id="sessiondb">补充三：SessionDB 表结构与检索细节</h2>
+      <p><code>SessionDB</code> 是长期个人 Agent 的底座，不只是聊天记录表。<code>sessions</code> 存会话身份、模型配置、system prompt、父会话、token/cost 统计；<code>messages</code> 存消息、工具调用、reasoning、active/compacted 状态；FTS 和 trigram 索引支持英文全文检索和中文子串检索；压缩后的历史仍可参与搜索。</p>
+      <div class="diagram">
+        <pre class="mermaid">
+erDiagram
+  sessions ||--o{ messages : owns
+  sessions ||--o{ sessions : parent_session_id
+  messages ||--o{ messages_fts : indexed_by
+  messages ||--o{ messages_trigram : cjk_indexed_by
+  sessions {
+    text source
+    text session_key
+    text chat_id
+    text model
+    text model_config
+    text system_prompt
+    text parent_session_id
+    integer total_input_tokens
+    integer total_output_tokens
+    real total_cost
+  }
+  messages {
+    text role
+    text content
+    text tool_call_id
+    text tool_calls
+    text tool_name
+    text reasoning
+    integer active
+    integer compacted
+  }
+  messages_fts {
+    text content
+    text tool_name
+    text tool_calls
+  }
+  messages_trigram {
+    text content
+  }
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么同时要 FTS、trigram、active/compacted：</strong>英文/代码场景适合 FTS，中文短语和部分匹配需要 trigram；长会话压缩后不能把旧事实直接丢掉，所以查询默认要覆盖 active 行和压缩归档行。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/hermes_state.py:701-745</code>：<code>sessions</code> 表包含 source、session_key、chat_id、model、model_config、system_prompt、parent_session_id、token/cost 字段。</li>
+        <li><code>sources/hermes-agent/hermes_state.py:748-768</code>：<code>messages</code> 表包含 role、content、tool_call_id、tool_calls、tool_name、reasoning、active、compacted。</li>
+        <li><code>sources/hermes-agent/hermes_state.py:820-838</code>：FTS triggers 索引 content、tool_name、tool_calls。</li>
+        <li><code>sources/hermes-agent/hermes_state.py:840-848</code>：trigram FTS 表支持 CJK 子串搜索。</li>
+        <li><code>sources/hermes-agent/hermes_state.py:4493-4499</code>：搜索默认包含 active rows 和 compaction-archived rows。</li>
+        <li><code>sources/hermes-agent/hermes_state.py:4971-5017</code>：通过 parent_session_id 维护压缩后的 lineage。</li>
+      </ul>
+
+      <h2 id="gateway-complex">补充四：Gateway 复杂场景</h2>
+      <p>Gateway 的复杂性不在“收一条消息，回一句话”，而在聊天平台是异步、长连接、多人、多消息、多媒体、多审批的环境：用户可能连续追问，Agent 可能正在跑工具，平台可能发来图片或文件，管理员可能在审批危险命令，进程也可能重启。Hermes 用 running agents、pending messages、overflow queue、resume_pending、media auto-append 和 DeliveryRouter 去兜住这些边界。</p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  P[聊天平台&lt;br/&gt;用户连续发送文本、图片、文件]
+  G[GatewayRunner&lt;br/&gt;标准化 MessageEvent + session_key]
+  R{session 是否正在运行}
+  Q[pending / overflow queue&lt;br/&gt;追加消息，保持同会话串行]
+  A[AIAgent&lt;br/&gt;启动或复用会话 Agent]
+  AP[工具审批&lt;br/&gt;危险命令或整段脚本审批，提示脱敏]
+  D[DeliveryRouter&lt;br/&gt;文本、媒体、文件输出]
+  S[resume_pending&lt;br/&gt;重启或关闭时标记恢复]
+  P --&gt; G --&gt; R
+  R -- 是 --&gt; Q
+  R -- 否 --&gt; A
+  A -- 需要审批 --&gt; AP --&gt; A
+  A -- 产生结果 --&gt; D --&gt; P
+  A -- 当前轮结束 --&gt; Q
+  G -- 进程重启或关闭 --&gt; S -- auto continue --&gt; A
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么要队列和恢复标记：</strong>聊天平台不会等 Agent 完成才让用户继续输入。Hermes 必须保证同一会话串行化执行，同时不能丢消息；重启时也要把未完成状态标成可恢复，避免长任务半路消失。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/gateway/run.py:2909-2928</code>：维护 <code>_running_agents</code>、<code>_pending_messages</code>、overflow queue 和 session state。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:991-1148</code>：media auto-append 只追加当前轮 producer-tool 生成的媒体，避免复用旧 MEDIA 示例。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:7227-7229</code>：fresh session 会自动继续此前因 Gateway 重启/关闭被打断的任务。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:8044-8126</code>：shutdown/restart 会 drain timeout、标记 resume_pending，并 interrupt 剩余工作。</li>
+      </ul>
+
+      <h2 id="plugin-skill-mcp">补充五：Plugin / Skill / MCP 的边界</h2>
+      <p>这三者都扩展 Agent，但边界不同：Plugin 改运行时能力和接入面，可以注册工具、hook、middleware；Skill 更像经验/流程/上下文沉淀，帮助 Agent 在特定任务里按既定方式工作；MCP 把外部服务暴露为工具。最终它们要么进入 Tool Registry，要么作为 user message context 注入，而不是随意改系统提示和核心循环。</p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  PLUGIN[Plugin&lt;br/&gt;运行时扩展包]
+  SKILL[Skill&lt;br/&gt;经验/流程/上下文]
+  MCP[MCP Server&lt;br/&gt;外部服务工具化]
+  HOOK[Hooks/Middleware&lt;br/&gt;pre_llm_call等]
+  REG[Tool Registry&lt;br/&gt;统一schema与dispatch]
+  USERCTX[User message context&lt;br/&gt;保护system prompt cache]
+  CORE[AIAgent Core&lt;br/&gt;不直接感知所有扩展来源]
+  POLICY[Override Policy&lt;br/&gt;覆盖内置工具需显式授权]
+  PLUGIN -- register(ctx) --&gt; HOOK
+  PLUGIN -- tools --&gt; POLICY --&gt; REG
+  MCP -- external tools --&gt; REG
+  SKILL -- selected context --&gt; USERCTX
+  HOOK -- pre_llm_call context --&gt; USERCTX
+  REG -- tool schema/handler --&gt; CORE
+  USERCTX -- turn context --&gt; CORE
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么 pre_llm_call 注入 user message 而不是 system prompt：</strong>system prompt 是 prompt cache 的高价值前缀，如果每个插件都改 system prompt，长会话成本和稳定性都会变差。把动态上下文放进 user message，可以保留核心系统提示稳定。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/hermes_cli/plugins.py:5-31</code>：plugin 来源包括 bundled/user/project/pip，并可注册 hooks/tools。</li>
+        <li><code>sources/hermes-agent/hermes_cli/plugins.py:241-252</code>：插件默认通过 <code>plugins.enabled</code> opt-in。</li>
+        <li><code>sources/hermes-agent/hermes_cli/plugins.py:1746-1795</code>：加载 plugin 后调用 <code>register(ctx)</code>，记录 tools/hooks/middleware。</li>
+        <li><code>sources/hermes-agent/hermes_cli/plugins.py:1890-1908</code>：<code>pre_llm_call</code> context 注入 user message，而不是 system prompt，以保护 prompt cache。</li>
+        <li><code>sources/hermes-agent/tools/registry.py:393-407</code>：plugin 覆盖内置工具需要 operator opt-in，否则抛 <code>PermissionError</code>。</li>
+      </ul>
+
+      <h2 id="reading-route">补充六：源码阅读路线</h2>
+      <p>Hermes 不能按目录从上到下读，文件会显得很散。建议按“产品入口 -> Agent 核心 -> 工具/状态 -> 长期运行入口 -> 扩展机制”的顺序读，这样每个大文件都有上下文。</p>
+      <ol>
+        <li><code>AGENTS.md</code>：先读项目自述式工程约束，抓住 prompt cache、narrow waist、多入口复用。</li>
+        <li><code>pyproject.toml</code>：看脚本入口和可选依赖，确认 CLI、ACP、Gateway、desktop 的产品边界。</li>
+        <li><code>cli.py:main()</code>：从最常用入口看参数如何转成 Agent 配置。</li>
+        <li><code>run_agent.py:AIAgent</code>：看核心对象持有什么状态，哪些逻辑已下沉到 <code>agent/</code>。</li>
+        <li><code>agent/conversation_loop.py</code>：看模型调用、工具分发、retry/fallback、compression、post-turn hooks 的主脉络。</li>
+        <li><code>agent/transports/base.py</code>、<code>agent/transports/types.py</code>：看 provider adapter 的最小契约和归一化返回形状。</li>
+        <li><code>model_tools.py</code>、<code>tools/registry.py</code>、<code>toolsets.py</code>：看工具 schema 从哪里来、如何过滤、如何分发。</li>
+        <li><code>tools/approval.py</code>：单独读工具安全，因为它解释了长期 Agent 为什么不能直接执行所有命令。</li>
+        <li><code>hermes_state.py</code>：看 SessionDB、FTS、压缩 lineage、会话恢复。</li>
+        <li><code>gateway/run.py</code>：带着 session_key、pending queue、delivery、approval 的问题去读，不要试图一次性背完整文件。</li>
+        <li><code>cron/scheduler.py</code>：看非交互定时任务如何复用 Agent Core，又如何收紧工具边界。</li>
+        <li><code>acp_adapter/server.py</code>：看编辑器/客户端协议如何包装同步 AIAgent。</li>
+        <li><code>hermes_cli/plugins.py</code>、<code>agent/memory_manager.py</code>：最后看扩展机制和长期记忆，理解“能力在边缘”的落地方式。</li>
+      </ol>
+      <div class="callout">
+        <strong>分享时可这样说：</strong>我不是按文件讲 Hermes，而是按一个长期 Agent 产品的生命周期讲：请求怎么进来、模型怎么跑、工具怎么控风险、状态怎么留下、平台怎么投递、后台任务怎么恢复、扩展能力怎么不污染核心。
+      </div>
+
+      <h2 id="share-overview">分享总览大图</h2>
+      <p>这张图适合放在分享开头或结尾：开头用它建立全局地图，结尾用它回收重点。讲的时候按 1 到 5 的顺序走，不需要逐个文件背诵。</p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  TITLE[分享主线：Hermes 是长期在线个人 Agent 产品工程]
+
+  subgraph Entry["1. 多入口接入层：把不同用户场景接进来"]
+    CLI[CLI / TUI&lt;br/&gt;本地交互、代码任务、worktree]
+    GW[Messaging Gateway&lt;br/&gt;Telegram / Discord / Slack 等]
+    ACP[ACP / Desktop&lt;br/&gt;编辑器与桌面客户端]
+    CRON[Cron&lt;br/&gt;定时任务与后台触发]
+  end
+
+  subgraph Core["2. Agent Core：复用同一套推理与工具循环"]
+    AIA[AIAgent&lt;br/&gt;会话状态、模型配置、工具上下文]
+    LOOP[conversation_loop&lt;br/&gt;模型调用、工具循环、retry/fallback]
+    PROVIDER[Provider Adapter&lt;br/&gt;消息/工具/参数/响应归一化]
+  end
+
+  subgraph Tools["3. 能力边缘：工具、扩展与安全边界"]
+    REG[Tool Registry&lt;br/&gt;schema + handler + toolset]
+    APPROVAL[Approval / Guardrails&lt;br/&gt;危险命令检测、审批、硬阻断]
+    EXT[Plugin / Skill / MCP&lt;br/&gt;运行时扩展、经验沉淀、外部服务工具化]
+  end
+
+  subgraph State["4. 长期状态：让 Agent 可恢复、可检索、可学习"]
+    DB[SessionDB&lt;br/&gt;sessions/messages/FTS/trigram]
+    MEMORY[Memory / Skills&lt;br/&gt;长期记忆、后台 review]
+    RESUME[Gateway Resume&lt;br/&gt;resume_pending、pending queue、generation check]
+  end
+
+  subgraph Delivery["5. 产品投递：把结果回到真实平台"]
+    ROUTER[DeliveryRouter&lt;br/&gt;文本/图片/文件/语音]
+    USER[用户继续对话&lt;br/&gt;下一轮上下文进入同一生命周期]
+  end
+
+  TITLE --&gt; Entry
+  CLI --&gt; AIA
+  GW --&gt; AIA
+  ACP --&gt; AIA
+  CRON --&gt; AIA
+  AIA --&gt; LOOP --&gt; PROVIDER --&gt; LOOP
+  LOOP --&gt; REG --&gt; APPROVAL --&gt; LOOP
+  EXT --&gt; REG
+  LOOP --&gt; DB --&gt; MEMORY --&gt; LOOP
+  GW --&gt; RESUME --&gt; DB
+  LOOP --&gt; ROUTER --&gt; USER
+  USER --&gt; Entry
+
+  classDef focus fill:#eaf3ff,stroke:#2764b0,color:#172033;
+  classDef safe fill:#fff5dc,stroke:#986b10,color:#172033;
+  classDef state fill:#eaf8f1,stroke:#217a59,color:#172033;
+  class TITLE,AIA,LOOP focus;
+  class APPROVAL safe;
+  class DB,MEMORY,RESUME state;
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么这张图这样画：</strong>它不是目录结构图，而是分享叙事图。先说明多入口，再说明核心复用，然后强调工具安全和长期状态，最后落到产品投递和继续对话，这样听众能理解 Hermes 的工程复杂度来自“长期运行的产品生命周期”。
+      </div>
+
+      <h2 id="reading-checklist">源码阅读 Checklist</h2>
+      <p>这份 checklist 适合分享后给团队自查。读完 Hermes 后，不一定要记住所有文件，但应该能回答下面这些问题。</p>
+      <table>
+        <thead><tr><th>检查项</th><th>能回答的问题</th><th>主要源码锚点</th></tr></thead>
+        <tbody>
+          <tr><td>入口识别</td><td>CLI、Gateway、ACP、Cron 分别负责什么，哪里回到同一个 Agent Core？</td><td><code>cli.py</code>、<code>gateway/run.py</code>、<code>acp_adapter/server.py</code>、<code>cron/scheduler.py</code></td></tr>
+          <tr><td>核心循环</td><td><code>AIAgent</code> 和 <code>conversation_loop</code> 的边界是什么？谁负责模型调用、工具循环和收尾？</td><td><code>run_agent.py</code>、<code>agent/conversation_loop.py</code>、<code>agent/turn_finalizer.py</code></td></tr>
+          <tr><td>Provider 适配</td><td>不同模型 API 的消息、工具、usage、stop reason 如何被归一化？</td><td><code>agent/transports/base.py</code>、<code>agent/transports/types.py</code></td></tr>
+          <tr><td>工具系统</td><td>模型看到的工具 schema 从哪里来？工具 handler 如何注册和分发？toolset 如何收窄暴露面？</td><td><code>model_tools.py</code>、<code>tools/registry.py</code>、<code>toolsets.py</code></td></tr>
+          <tr><td>安全边界</td><td>危险命令如何检测、审批、硬阻断？Gateway 审批如何避免跨会话污染？</td><td><code>tools/approval.py</code>、<code>gateway/run.py</code></td></tr>
+          <tr><td>状态与检索</td><td>会话、消息、工具调用、FTS/trigram、压缩 lineage 分别解决什么问题？</td><td><code>hermes_state.py</code></td></tr>
+          <tr><td>Gateway 复杂性</td><td>连续消息、pending queue、长任务重启、resume_pending、投递路由如何协作？</td><td><code>gateway/run.py</code>、<code>gateway/delivery.py</code></td></tr>
+          <tr><td>扩展机制</td><td>Plugin、Skill、MCP 分别改什么边界，为什么动态上下文尽量不写 system prompt？</td><td><code>hermes_cli/plugins.py</code>、<code>agent/memory_manager.py</code></td></tr>
+          <tr><td>分享判断</td><td>能否用一句话说明 Hermes 和 LangGraph/CrewAI/AutoGen 的差异？</td><td>本页“和 LangGraph / CrewAI / AutoGen 的差异总结”</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>自查标准：</strong>如果能把“一个请求如何进入、如何调用模型、如何执行工具、如何被审批、如何写状态、如何恢复、如何投递”讲成一条线，就说明 Hermes 的源码主干已经读通了。
+      </div>
+
+      <h2 id="deep-dive">四类深度分析：从“能看懂”到“能讲清楚”</h2>
+
+      <h3>1. 一次完整调用链的源码级串联</h3>
+      <p>这条线适合做分享主线：从入口接收用户请求开始，逐步穿过 Agent Core、Provider Adapter、Tool Registry、SessionDB 和 turn finalizer。它能把 Hermes 的大文件拆成一个可讲的生命周期。</p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  U[用户请求&lt;br/&gt;CLI / Gateway / ACP]
+  C[cli.py main 或平台入口&lt;br/&gt;解析 model、provider、toolsets、skills]
+  A[run_agent.AIAgent&lt;br/&gt;会话 Agent]
+  L[agent.conversation_loop&lt;br/&gt;run_conversation]
+  P[ProviderTransport&lt;br/&gt;转换 messages / tools / kwargs]
+  N[NormalizedResponse&lt;br/&gt;统一文本、工具调用、usage]
+  T[model_tools / ToolRegistry&lt;br/&gt;handle_function_call + dispatch]
+  S[SessionDB / turn_finalizer&lt;br/&gt;持久化、记忆同步、后台 review]
+  O[最终响应&lt;br/&gt;经 CLI / Gateway / ACP 返回]
+  U --&gt; C --&gt; A --&gt; L --&gt; P --&gt; N --&gt; L
+  L -- 工具调用 --&gt; T -- 工具结果或错误 JSON --&gt; L
+  L -- 完成 --&gt; S --&gt; O
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>分享抓手：</strong>不要先讲目录，而是讲“用户一句话进入系统后经过哪些闸门”。CLI/Gateway/ACP 的入口差异只发生在前后两端，中间都尽量回到同一个 <code>AIAgent + conversation_loop</code>。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/cli.py:15669-15684</code>：CLI <code>main()</code> 接收 query、image、toolsets、skills、model、provider、compact、list_tools 等入口参数。</li>
+        <li><code>sources/hermes-agent/run_agent.py:393-399</code>：<code>AIAgent</code> 的职责是 conversation flow、tool execution、response handling。</li>
+        <li><code>sources/hermes-agent/run_agent.py:5745-5758</code>：<code>AIAgent.run_conversation()</code> 转发到 <code>agent.conversation_loop.run_conversation</code>。</li>
+        <li><code>sources/hermes-agent/agent/conversation_loop.py:523-536</code>：主循环负责一整轮带工具调用的 conversation。</li>
+        <li><code>sources/hermes-agent/agent/transports/base.py:16-86</code>、<code>agent/transports/types.py:91-109</code>：provider 差异通过 transport 和 normalized response 收口。</li>
+        <li><code>sources/hermes-agent/model_tools.py:1019-1034</code> 与 <code>sources/hermes-agent/tools/registry.py:574-589</code>：工具调用先进入 <code>handle_function_call</code>，再由 registry 分发 handler。</li>
+      </ul>
+
+      <h3>2. 工具执行真实案例：让 Hermes 修改代码</h3>
+      <p>例子：用户在 CLI 里执行 <code>hermes -w -q "检查当前仓库测试失败原因并修复"</code>。这时 Hermes 的关键不是“模型会写代码”，而是把代码任务拆成可控工具链：开启 worktree、暴露 file/search/terminal 类工具、执行前走 approval、执行后把工具事实写入会话。</p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  Q[用户代码任务&lt;br/&gt;hermes -w -q]
+  WT[worktree隔离&lt;br/&gt;降低污染主工作区风险]
+  SCHEMA[工具schema生成&lt;br/&gt;按toolsets过滤]
+  CALL[模型提出工具调用&lt;br/&gt;search/read/edit/terminal]
+  HOOK[pre_tool/plugin/edit approval hooks]
+  APPROVAL[危险命令审批&lt;br/&gt;detect + hardline + gateway/CLI prompt]
+  DISPATCH[ToolRegistry.dispatch&lt;br/&gt;执行handler]
+  RESULT[工具结果回到模型]
+  FINAL[turn_finalizer&lt;br/&gt;持久化与后台记忆]
+  Q --&gt; WT --&gt; SCHEMA --&gt; CALL --&gt; HOOK --&gt; APPROVAL --&gt; DISPATCH --&gt; RESULT --&gt; FINAL
+        </pre>
+      </div>
+      <p>这个案例最能说明 Hermes 的工具设计范式：能力通过工具扩展，但所有工具必须经过统一 schema、统一分发和统一安全闸门；长期运行场景下，危险命令审批比“工具能不能跑”更重要。</p>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/model_tools.py:279-308</code>：<code>get_tool_definitions()</code> 根据工具集和动态状态生成模型可见 schema。</li>
+        <li><code>sources/hermes-agent/model_tools.py:1164-1222</code>：工具执行前会检查 plugin hooks、approve/block directive 和 ACP/Zed edit approval。</li>
+        <li><code>sources/hermes-agent/tools/approval.py:1-8</code>：危险命令系统统一负责检测、每会话审批、CLI/Gateway 提示、smart approval、永久 allowlist。</li>
+        <li><code>sources/hermes-agent/tools/approval.py:289-305</code>：hardline blocklist 是 yolo 也不能绕过的底线。</li>
+        <li><code>sources/hermes-agent/tools/approval.py:1386-1398</code>：<code>detect_dangerous_command()</code> 遍历命令变体并匹配危险模式。</li>
+        <li><code>sources/hermes-agent/tools/approval.py:1402-1417</code>：审批状态按 session_key 维护，并支持 Gateway 多个 pending approval 排队。</li>
+      </ul>
+
+      <h3>3. Gateway 长任务恢复案例：聊天平台任务跑一半时重启</h3>
+      <p>例子：用户在 Telegram/Discord 发了一个长任务，Agent 正在执行工具；此时 Gateway 因部署或异常重启。Hermes 的处理重点是“不要丢会话，也不要把旧结果投错会话”：先标记 <code>resume_pending</code>，重启后 synthesize 一个空事件触发恢复路径，同一 session 继续串行处理。</p>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart TB
+  U[用户 / 平台&lt;br/&gt;发起长任务]
+  G[GatewayRunner&lt;br/&gt;按 session_key 管理执行]
+  A[Running AIAgent&lt;br/&gt;写入 _running_agents]
+  Q[pending / overflow queue&lt;br/&gt;任务期间继续收消息]
+  S[SessionStore&lt;br/&gt;shutdown / restart 前 mark_resume_pending]
+  I[Interrupt / Drain timeout&lt;br/&gt;中断未完成 Agent]
+  R[_schedule_resume_pending_sessions&lt;br/&gt;重启后合成空事件]
+  C[resume_pending 分支&lt;br/&gt;继续原会话]
+  D[投递结果&lt;br/&gt;当前轮结束后再取 pending 消息]
+  U --&gt; G --&gt; A
+  U -- 继续发消息 --&gt; G --&gt; Q
+  G -- 重启或关闭 --&gt; S --&gt; I --&gt; R --&gt; C --&gt; A
+  A -- 当前轮结束 --&gt; Q -- 下一条消息 --&gt; A
+  A -- 结果 --&gt; D --&gt; U
+        </pre>
+      </div>
+      <div class="note why">
+        <strong>为什么这块值得讲：</strong>这是 Hermes 和普通 demo Agent 的分水岭。真实聊天平台里，用户会连续发消息，Agent 会长时间运行，部署会重启。Hermes 用 session_key、running_agents、pending queue、resume_pending、generation check 去守住会话一致性。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/gateway/run.py:2908-2923</code>：Gateway 维护每 session 的 running agents、启动时间、pending messages 和 overflow buffer。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:6454-6473</code>：<code>_schedule_resume_pending_sessions()</code> 会在重启后合成下一轮，复用已有 resume_pending 注入路径。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:8047-8066</code>：shutdown/restart drain 前先写入 resume_pending，避免服务管理器 kill 时丢恢复信号。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:18950-18966</code>：Agent 创建完成后只在 run generation 仍当前时才提升为 running agent，避免 stale run 覆盖新会话。</li>
+        <li><code>sources/hermes-agent/gateway/run.py:19408-19420</code>：当前轮结束后按 session_key 消费 pending event，并把 overflow 事件提升，保持 FIFO。</li>
+      </ul>
+
+      <h3>4. 和 LangGraph / CrewAI / AutoGen 的差异总结</h3>
+      <p>Hermes 可以和这些项目对照讲，但不要把它强行归类为“框架”。它更像一个产品型个人 Agent：重点是长期在线、多入口接入、会话恢复、工具审批、平台投递和用户记忆。LangGraph/CrewAI/AutoGen 更适合讨论开发者如何定义 agent/graph/team/workflow。</p>
+      <table>
+        <thead><tr><th>维度</th><th>Hermes Agent</th><th>LangGraph</th><th>CrewAI</th><th>AutoGen</th></tr></thead>
+        <tbody>
+          <tr><td>核心抽象</td><td>长期个人 Agent 产品</td><td>状态图、节点、边、checkpoint</td><td>Role Agent、Task、Crew、Process</td><td>多 Agent 对话、消息路由、工具调用</td></tr>
+          <tr><td>最值得读的主线</td><td>入口 -> AIAgent -> 工具安全 -> 状态恢复 -> 投递</td><td>graph compile/run/checkpoint</td><td>任务分派与 agent 协作</td><td>agent chat loop 与 runtime</td></tr>
+          <tr><td>复杂性来源</td><td>产品运行时复杂性</td><td>可控编排与状态持久化</td><td>角色协作和任务过程</td><td>多 Agent 通信和执行环境</td></tr>
+          <tr><td>分享定位</td><td>“如何把 Agent 做成长期可用产品”</td><td>“如何用图表达 Agent 工作流”</td><td>“如何组织多角色协作”</td><td>“如何构建多 Agent 会话系统”</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>推荐讲法：</strong>如果 LangGraph 讲的是“怎么编排 Agent”，CrewAI 讲的是“怎么分配角色和任务”，AutoGen 讲的是“怎么让多个 Agent 对话协作”，那么 Hermes 讲的是“一个 Agent 真正长期在线以后，产品工程要补哪些层”。
+      </div>
+      <ul class="evidence">
+        <li><code>sources/hermes-agent/AGENTS.md:9-14</code>：Hermes 自身定位为 personal AI agent，并强调同一 core 跨 CLI、Gateway、TUI、Desktop 运行。</li>
+        <li><code>sources/hermes-agent/AGENTS.md:19-27</code>：项目级约束强调 prompt caching 和 narrow waist，说明它首先在优化长期会话产品运行时。</li>
+        <li>本页“为什么不纳入横向总览”章节：将 Hermes 定位为项目工程专题，而非 LangGraph/Dify/Haystack 一类框架横向比较对象。</li>
+      </ul>
+
+      <h2>为什么不纳入横向总览</h2>
+      <table>
+        <thead><tr><th>对比点</th><th>Hermes Agent</th><th>LangGraph / Dify / Haystack 等</th></tr></thead>
+        <tbody>
+          <tr><td>目标用户</td><td>终端用户、个人 Agent 用户、运维 Agent 产品的人</td><td>开发者、企业应用构建者</td></tr>
+          <tr><td>核心对象</td><td>长期运行的个人 Agent 产品</td><td>编排图、工作流、Pipeline、RAG 组件</td></tr>
+          <tr><td>复杂性来源</td><td>多入口、长期状态、平台投递、工具安全、记忆技能</td><td>抽象 API、节点编排、组件组合、部署平台</td></tr>
+          <tr><td>分享方式</td><td>按“一次请求生命周期”讲</td><td>按“框架抽象和扩展点”讲</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="share">
+    <div class="wrap">
+      <h2>分享叙述建议</h2>
+      <div class="callout">
+        <strong>可直接演讲版本：</strong>已整理成独立页面 <a href="share-script.html">Hermes Agent 源码分享稿</a>，包含开场、核心观点、三条主线、真实案例、对比和总结。
+      </div>
+      <ol>
+        <li>先定性：Hermes Agent 是完整个人 Agent 产品工程，不是横向框架比较对象。</li>
+        <li>再讲两个设计约束：prompt cache 优先、core narrow waist。</li>
+        <li>然后讲三条主流程：CLI 一轮对话、Gateway 消息、Cron/ACP 扩展入口。</li>
+        <li>中间穿插工具系统：Registry、Toolsets、MCP、Plugins 说明为什么能力放边缘。</li>
+        <li>再讲状态和长期学习：SQLite/FTS5、compression lineage、MemoryManager、background review。</li>
+        <li>最后用真实例子收束：代码修复、Telegram 定时总结、ACP 文件资源请求。</li>
+      </ol>
+      <div class="callout">
+        <strong>推荐收尾：</strong>Hermes Agent 的源码价值，不在于它抽象出一个漂亮的 Agent 框架，而在于它展示了一个长期运行、跨入口、可扩展、可恢复、要控制成本和风险的个人 Agent 产品，工程上到底需要补齐哪些层。
+      </div>
+      <div class="note warn">
+        <strong>阅读注意：</strong><code>cli.py</code>、<code>run_agent.py</code>、<code>gateway/run.py</code> 仍然很大。分享时不要按目录背诵，要按入口和生命周期切：CLI 一轮、Gateway 消息、Cron job、ACP 请求、工具注册、记忆收尾。
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">生成位置：<code>docs/hermes-agent-source-analysis/index.html</code>。源码目录：<code>sources/hermes-agent</code>。</div>
+  </footer>
+</body>
+</html>

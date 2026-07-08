@@ -1,0 +1,36 @@
+flowchart TB
+  U[用户入口<br/>CLI / TUI / Gateway / ACP / Desktop / Cron]
+  CLI[CLI 主入口<br/>hermes / hermes-agent]
+  GW[消息网关<br/>Telegram / Discord / Slack / Matrix 等]
+  ACP[ACP 适配器<br/>编辑器/客户端接入]
+  CRON[定时任务<br/>后台触发 Agent]
+  CORE[Agent Core<br/>AIAgent + conversation_loop]
+  MODEL[Provider Adapter<br/>OpenAI兼容 / Anthropic / OpenRouter / Nous 等]
+  TOOLS[工具层<br/>Registry + Toolsets + MCP + Plugins]
+  STATE[状态层<br/>SQLite SessionDB + FTS5 + compression lineage]
+  MEMORY[记忆/技能<br/>MemoryManager + Skills + background review]
+  DELIVERY[投递层<br/>DeliveryRouter + Platform Adapters]
+
+  U --> CLI
+  U --> GW
+  U --> ACP
+  U --> CRON
+  CLI --> CORE
+  GW --> CORE
+  ACP --> CORE
+  CRON --> CORE
+  CORE --> MODEL
+  CORE --> TOOLS
+  CORE --> STATE
+  CORE --> MEMORY
+  GW --> DELIVERY
+  CRON --> DELIVERY
+  DELIVERY --> U
+
+  WHY1[为什么这样设计：<br/>同一个 Agent Core 被多个产品入口复用，<br/>入口只负责上下文和投递差异]
+  WHY2[为什么这样设计：<br/>工具/插件/技能放在边缘，<br/>避免核心工具 schema 无限膨胀]
+  WHY3[为什么这样设计：<br/>长期会话需要状态、搜索、压缩链路，<br/>否则无法支撑跨入口恢复和历史检索]
+
+  CORE -.-> WHY1
+  TOOLS -.-> WHY2
+  STATE -.-> WHY3

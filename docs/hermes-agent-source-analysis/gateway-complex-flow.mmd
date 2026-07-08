@@ -1,0 +1,25 @@
+flowchart TB
+  IN[平台消息进入]
+  PRE[预处理<br/>鉴权/配对/插件 middleware/媒体与语音]
+  RUNNING{会话是否已有<br/>running agent?}
+  QUEUE[排队/合并/中断处理<br/>pending messages]
+  AGENT[缓存或创建 AIAgent<br/>绑定 session_key]
+  APPROVE[危险操作审批<br/>按钮或文本 fallback]
+  TIMEOUT[超时/重启/关机 drain<br/>resume_pending]
+  MEDIA[当前 turn 媒体自动追加<br/>只信任 producer tools]
+  SEND[DeliveryRouter 投递]
+
+  IN --> PRE --> RUNNING
+  RUNNING -- 是 --> QUEUE
+  RUNNING -- 否 --> AGENT
+  QUEUE --> AGENT
+  AGENT --> APPROVE
+  AGENT --> TIMEOUT
+  AGENT --> MEDIA --> SEND
+  APPROVE --> SEND
+  TIMEOUT --> SEND
+
+  WHY1[为什么复杂：<br/>聊天平台不是同步 HTTP 请求，用户可能连续发消息、点审批按钮、上传媒体，<br/>Agent 也可能长时间运行或被重启打断]
+  WHY2[为什么只追加当前 turn 媒体：<br/>历史工具结果可能包含旧 MEDIA 标签或文档示例，<br/>不能每轮重复发送旧附件]
+  PRE -.-> WHY1
+  MEDIA -.-> WHY2

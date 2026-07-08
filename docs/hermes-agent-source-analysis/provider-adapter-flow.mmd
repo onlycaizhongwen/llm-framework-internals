@@ -1,0 +1,26 @@
+flowchart TB
+  LOOP[conversation_loop<br/>统一 Agent 主循环]
+  BASE[ProviderTransport ABC<br/>convert_messages / convert_tools / build_kwargs / normalize_response]
+  CHAT[ChatCompletionsTransport<br/>OpenAI-compatible 路径]
+  ANTH[AnthropicTransport<br/>Messages API + cache stats + thinking blocks]
+  BEDROCK[BedrockTransport<br/>Converse API]
+  CODEX[Codex / Codex app-server<br/>事件投影为 OpenAI 形状]
+  NORM[NormalizedResponse<br/>content / tool_calls / usage / provider_data]
+  RETRY[Retry/Fallback/Compression<br/>仍由 AIAgent 主循环掌控]
+
+  LOOP --> BASE
+  BASE --> CHAT
+  BASE --> ANTH
+  BASE --> BEDROCK
+  BASE --> CODEX
+  CHAT --> NORM
+  ANTH --> NORM
+  BEDROCK --> NORM
+  CODEX --> NORM
+  NORM --> LOOP
+  LOOP --> RETRY
+
+  WHY1[为什么这样设计：<br/>Provider 差异集中在格式转换和响应归一化，<br/>不要把重试、缓存、client 生命周期分散到每个 adapter]
+  WHY2[为什么保留 provider_data：<br/>共享字段保持最小，协议特有信息放旁路，<br/>例如 Anthropic thinking blocks / Codex items]
+  BASE -.-> WHY1
+  NORM -.-> WHY2

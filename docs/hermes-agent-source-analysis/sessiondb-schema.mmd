@@ -1,0 +1,46 @@
+erDiagram
+  SESSIONS ||--o{ MESSAGES : contains
+  SESSIONS ||--o{ SESSIONS : parent_session_id
+  MESSAGES ||--|| MESSAGES_FTS : rowid
+  MESSAGES ||--|| MESSAGES_FTS_TRIGRAM : rowid
+
+  SESSIONS {
+    text id PK
+    text source
+    text session_key
+    text chat_id
+    text model
+    text model_config
+    text system_prompt
+    text parent_session_id FK
+    real started_at
+    real ended_at
+    text end_reason
+    int message_count
+    int tool_call_count
+    int input_tokens
+    int output_tokens
+    real cost_actual
+  }
+
+  MESSAGES {
+    int id PK
+    text session_id FK
+    text role
+    text content
+    text tool_call_id
+    text tool_calls
+    text tool_name
+    real timestamp
+    text reasoning
+    int active
+    int compacted
+  }
+
+  MESSAGES_FTS {
+    text content
+  }
+
+  MESSAGES_FTS_TRIGRAM {
+    text content
+  }

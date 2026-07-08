@@ -1,0 +1,27 @@
+sequenceDiagram
+  participant User as 用户
+  participant CLI as CLI / HermesCLI
+  participant Agent as AIAgent
+  participant Loop as conversation_loop
+  participant Model as Provider模型
+  participant Tool as Tool Registry
+  participant Final as turn_finalizer
+  participant DB as SessionDB/Memory
+
+  User->>CLI: hermes -q "修复这个仓库里的 bug"
+  CLI->>CLI: 解析 model/provider/toolsets/skills/worktree
+  CLI->>Agent: 创建或恢复 AIAgent
+  Agent->>Loop: run_conversation(user_message)
+  Loop->>DB: 读取历史、系统提示、记忆上下文
+  Loop->>Model: 发起模型调用
+  Model-->>Loop: 返回文本或 tool_calls
+  Loop->>Tool: 按工具名分发 terminal/file/search 等工具
+  Tool-->>Loop: 返回工具结果
+  Loop->>Model: 携带工具结果继续推理
+  Loop->>Final: 生成最终响应并收尾
+  Final->>DB: 持久化会话、同步外部记忆、触发后台 review
+  Final-->>CLI: final_response
+  CLI-->>User: 输出结果
+
+  Note over Loop,Tool: 中文说明：工具循环不是一次模型调用结束，<br/>而是模型-工具-模型的多轮执行。
+  Note over Final,DB: 为什么这样设计：后台记忆/技能复盘放在响应之后，<br/>不抢当前用户任务的模型注意力。

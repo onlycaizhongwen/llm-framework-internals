@@ -1,0 +1,23 @@
+flowchart TB
+  subgraph Cron["Cron 定时任务路径"]
+    TICK[tick 每 60 秒触发<br/>文件锁防重入]
+    DUE[找出 due jobs<br/>先推进 next_run_at]
+    SAFE[注入扫描 + 禁用交互/危险 toolsets]
+    RUN[临时 AIAgent 执行 prompt]
+    DELIVER[投递到 Telegram/Discord/Slack 等]
+  end
+
+  subgraph ACP["ACP 客户端路径"]
+    CLIENT[编辑器/客户端<br/>Zed/ACP client]
+    SERVER[HermesACPAgent Server]
+    PARTS[resource_link 转 OpenAI content parts<br/>文件/图片/文本]
+    EXEC[ThreadPoolExecutor<br/>同步 AIAgent 并行运行]
+  end
+
+  TICK --> DUE --> SAFE --> RUN --> DELIVER
+  CLIENT --> SERVER --> PARTS --> EXEC --> RUN
+
+  WHY1[为什么 Cron 要禁用 clarify/messaging/cronjob：<br/>定时任务是非交互上下文，不能等待用户澄清，<br/>也不应该自我递归创建新定时任务]
+  WHY2[为什么 ACP 用线程池：<br/>Hermes AIAgent 是同步核心，ACP server 是异步协议，<br/>线程池把阻塞运行隔离出去]
+  SAFE -.-> WHY1
+  EXEC -.-> WHY2

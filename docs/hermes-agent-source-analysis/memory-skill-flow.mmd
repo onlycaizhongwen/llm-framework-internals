@@ -1,0 +1,22 @@
+flowchart LR
+  TURN[一轮对话结束]
+  FINAL[turn_finalizer]
+  SYNC[同步外部记忆 provider]
+  REVIEW[后台 memory/skill review]
+  SKILL[技能改进/提示 nudge]
+  NEXT[下一轮系统提示/用户消息注入]
+  MM[MemoryManager<br/>内置 provider + 最多一个外部 provider]
+  BLOCK[build_memory_context_block<br/>记忆上下文清洗后注入]
+
+  TURN --> FINAL
+  FINAL --> SYNC --> MM
+  FINAL --> REVIEW --> SKILL
+  MM --> BLOCK --> NEXT
+  SKILL --> NEXT
+
+  WHY1[为什么只允许一个外部记忆 provider：<br/>减少工具 schema 膨胀，避免多个记忆后端互相冲突]
+  WHY2[为什么后台 review 在响应后：<br/>用户当前任务优先，长期学习放到收尾阶段]
+  WHY3[为什么技能以用户消息方式注入：<br/>尽量保持系统提示稳定，保护 prompt cache]
+  MM -.-> WHY1
+  REVIEW -.-> WHY2
+  NEXT -.-> WHY3

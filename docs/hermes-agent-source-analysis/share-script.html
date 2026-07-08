@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hermes Agent 源码分享稿</title>
+  <style>
+    :root {
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #172033;
+      --muted: #5d6978;
+      --line: #d9e0ea;
+      --blue: #2764b0;
+      --soft-blue: #eaf3ff;
+      --soft-amber: #fff5dc;
+      --code: #f4f6f8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.72;
+    }
+    header {
+      background: linear-gradient(180deg, #ffffff 0%, #eef6ff 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 24px; }
+    .hero { min-height: 42vh; display: grid; align-content: center; gap: 16px; }
+    .eyebrow { color: var(--blue); font-weight: 700; }
+    h1 { font-size: clamp(34px, 5vw, 58px); line-height: 1.1; margin: 0; }
+    h2 { font-size: 28px; margin: 38px 0 12px; }
+    h3 { font-size: 20px; margin: 24px 0 8px; }
+    p { margin: 10px 0; }
+    .lead { max-width: 860px; font-size: 20px; color: #29364a; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    nav a {
+      color: var(--blue);
+      text-decoration: none;
+      border: 1px solid #b8d1ee;
+      background: #fff;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    section { background: var(--paper); border-top: 1px solid var(--line); }
+    .callout {
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--blue);
+      background: #fbfdff;
+      padding: 14px 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .speaker {
+      background: var(--soft-amber);
+      border: 1px solid #efd089;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 16px 0;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; background: #fff; }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+    th { background: #eef3f8; }
+    code { background: var(--code); padding: 2px 5px; border-radius: 4px; font-family: Consolas, "SFMono-Regular", monospace; }
+    pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow: auto; }
+    li { margin: 6px 0; }
+    footer { color: var(--muted); padding: 24px 0 48px; }
+    @media (max-width: 860px) {
+      .wrap { padding: 22px 16px; }
+      h1 { font-size: 36px; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap hero">
+      <div class="eyebrow">Hermes Agent 源码分析 · 分享材料</div>
+      <h1>Hermes Agent 源码分享稿</h1>
+      <p class="lead">把现有源码分析整理成“开场、核心观点、三条主线、真实案例、总结”的讲述口径，适合团队内部分享。</p>
+      <nav>
+        <a href="#opening">开场</a>
+        <a href="#viewpoint">核心观点</a>
+        <a href="#lines">三条主线</a>
+        <a href="#cases">真实案例</a>
+        <a href="#compare">框架对比</a>
+        <a href="#summary">总结</a>
+        <a href="index.html">返回分析页</a>
+      </nav>
+    </div>
+  </header>
+
+  <section id="opening">
+    <div class="wrap">
+      <h2>开场</h2>
+      <div class="speaker">
+        今天分享的是 <code>NousResearch/hermes-agent</code>。先定个位：它不是 LangGraph、Dify、Haystack 那种“给开发者搭 Agent/RAG/Workflow 的框架”，而是一个完整的个人 AI Agent 产品工程。
+      </div>
+      <p>它关心的是：一个 Agent 如何同时跑在 CLI、Gateway、ACP、Cron、Desktop 里；长期会话如何恢复和检索；工具执行如何审批；Gateway 重启后任务如何继续；插件、技能、MCP 如何接入但不污染核心循环。</p>
+    </div>
+  </section>
+
+  <section id="viewpoint">
+    <div class="wrap">
+      <h2>核心观点</h2>
+      <p>Hermes 的源码价值，不在于它抽象出一个漂亮的 Agent 框架，而在于它展示了一个长期在线、跨入口、可扩展、可恢复、要控制成本和风险的个人 Agent 产品，工程上到底需要补齐哪些层。</p>
+      <ol>
+        <li>多入口接入层：CLI、Gateway、ACP、Cron、Desktop。</li>
+        <li>Agent Core：<code>AIAgent + conversation_loop</code>。</li>
+        <li>能力边缘：Tool Registry、Toolsets、Plugin、Skill、MCP。</li>
+        <li>长期状态：SessionDB、FTS/trigram、memory、compression lineage。</li>
+        <li>产品投递与恢复：DeliveryRouter、pending queue、resume_pending。</li>
+      </ol>
+      <div class="callout">两个关键词：<strong>Prompt cache first</strong> 和 <strong>Core narrow waist</strong>。</div>
+    </div>
+  </section>
+
+  <section id="lines">
+    <div class="wrap">
+      <h2>三条主线</h2>
+      <h3>主线一：多入口最终回到同一个 Agent Core</h3>
+      <p>CLI、TUI、Messaging Gateway、ACP、Cron、Desktop 看起来分散，但最终都尽量回到同一个核心：<code>AIAgent + conversation_loop</code>。入口处理协议差异，核心处理 Agent 生命周期。</p>
+      <div class="speaker">推荐话术：Hermes 的入口很多，但核心只有一个。入口负责把不同场景接进来，Agent Core 负责把一轮任务跑完整。</div>
+
+      <h3>主线二：工具能力放在边缘，但安全边界必须前置</h3>
+      <p>工具通过 Tool Registry 管理，schema、handler、toolset 有统一来源。插件和 MCP 可以扩展工具，但仍然进入统一 registry。危险命令审批、hardline blocklist、session_key 隔离、secret redaction 让工具执行保持可控。</p>
+      <div class="speaker">推荐话术：Hermes 的工具系统不是单纯为了让模型多做事，而是为了让模型在可控边界内做事。</div>
+
+      <h3>主线三：长期状态和 Gateway 恢复是产品复杂度的核心</h3>
+      <p>SessionDB 支撑会话、消息、工具调用、全文检索、中文检索和压缩 lineage。Gateway 通过 running agents、pending queue、resume_pending、generation check 处理连续消息、长任务和重启恢复。</p>
+      <div class="speaker">推荐话术：Hermes 和普通 Agent demo 的差异，不在模型调用，而在长期运行时的会话一致性、恢复、排队、审批和投递。</div>
+    </div>
+  </section>
+
+  <section id="cases">
+    <div class="wrap">
+      <h2>真实案例</h2>
+      <h3>案例一：CLI 里让 Hermes 修复仓库 bug</h3>
+      <pre><code>hermes -w -q "检查当前仓库测试失败原因并修复"</code></pre>
+      <p>CLI 解析参数，创建隔离 worktree，创建或恢复 <code>AIAgent</code>，进入 <code>conversation_loop</code>。模型通过工具 schema 调用 file/search/terminal，工具执行前经过 hook、edit approval、dangerous command approval，最终结果持久化并触发后台 review。</p>
+
+      <h3>案例二：Telegram 里创建定时总结任务</h3>
+      <p>Telegram adapter 标准化消息，GatewayRunner 生成 session_key，Agent 创建 cron job。scheduler 每 60 秒 tick，执行时禁用不适合非交互场景的工具，结果通过 DeliveryRouter 回到 Telegram。</p>
+
+      <h3>案例三：Gateway 长任务执行中重启</h3>
+      <p>Gateway 在 shutdown/restart 前标记 <code>resume_pending</code>，drain 超时后中断剩余 Agent。重启后 <code>_schedule_resume_pending_sessions()</code> 合成空事件，让原会话继续执行，并在当前轮结束后处理 pending queue。</p>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="wrap">
+      <h2>和 LangGraph / CrewAI / AutoGen 的区别</h2>
+      <table>
+        <thead><tr><th>项目</th><th>更适合讲什么</th></tr></thead>
+        <tbody>
+          <tr><td>LangGraph</td><td>状态图、节点、边、checkpoint、中断恢复。</td></tr>
+          <tr><td>CrewAI</td><td>Role Agent、Task、Crew、Process，多角色协作。</td></tr>
+          <tr><td>AutoGen</td><td>多 Agent 对话、消息路由、工具调用 runtime。</td></tr>
+          <tr><td>Hermes Agent</td><td>长期个人 Agent 产品，多入口、工具安全、状态恢复、平台投递。</td></tr>
+        </tbody>
+      </table>
+      <div class="speaker">推荐话术：LangGraph 讲怎么编排 Agent，CrewAI 讲怎么分配角色和任务，AutoGen 讲怎么让多个 Agent 对话协作，而 Hermes 讲的是一个 Agent 真正长期在线以后，产品工程要补哪些层。</div>
+    </div>
+  </section>
+
+  <section id="summary">
+    <div class="wrap">
+      <h2>总结</h2>
+      <p>Hermes 给我们的启发有三点：</p>
+      <ol>
+        <li>Agent 产品的复杂度不只在模型调用，而在多入口、多会话、长时间运行、工具安全、状态恢复和平台投递。</li>
+        <li>核心要保持窄腰，入口、provider、tool、plugin、skill、MCP、platform adapter 都放在边缘扩展。</li>
+        <li>长期在线 Agent 必须默认考虑风险，审批、硬阻断、会话隔离、脱敏、恢复都属于产品可用性的基础。</li>
+      </ol>
+      <div class="callout">推荐结尾：Hermes 的源码价值，不在于它给了我们一个新的 Agent 框架 API，而在于它把一个长期运行、跨入口、可恢复、可扩展、要控制成本和风险的个人 Agent 产品，拆成了可以学习的工程层次。</div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">生成位置：<code>docs/hermes-agent-source-analysis/share-script.html</code></div>
+  </footer>
+</body>
+</html>

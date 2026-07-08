@@ -1,0 +1,26 @@
+flowchart TB
+  TFILE[tools/*.py<br/>工具模块 import 时自注册]
+  REG[ToolRegistry<br/>schema + handler + toolset + check_fn]
+  GEN[generation 计数器<br/>注册/注销/别名变化即递增]
+  DEF[get_tool_definitions<br/>按 enabled/disabled toolsets 过滤]
+  MODEL[模型可见工具 schema]
+  DISPATCH[handle_function_call / registry.dispatch]
+  AGENTTOOLS[Agent-loop 拦截工具<br/>todo/memory/session_search/delegate_task]
+  PLUGIN[Plugin/MCP 工具<br/>边缘扩展]
+  POLICY[override opt-in<br/>防止插件影子覆盖核心工具]
+
+  TFILE --> REG
+  PLUGIN --> REG
+  REG --> GEN
+  REG --> DEF --> MODEL
+  MODEL --> DISPATCH
+  DISPATCH --> REG
+  DISPATCH --> AGENTTOOLS
+  PLUGIN --> POLICY --> REG
+
+  WHY1[为什么这样设计：<br/>工具定义只有一个来源，避免 schema、handler、toolset 三套结构漂移]
+  WHY2[为什么要 generation：<br/>Gateway 长进程要缓存工具 schema，<br/>但插件/MCP 动态变化后必须自动失效]
+  WHY3[为什么插件覆盖要 opt-in：<br/>边缘可扩展，同时核心工具名不被意外劫持]
+  REG -.-> WHY1
+  GEN -.-> WHY2
+  POLICY -.-> WHY3

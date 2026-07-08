@@ -1,0 +1,24 @@
+flowchart LR
+  CORE[Agent Core<br/>保持窄腰]
+  PLUGIN[Plugin<br/>运行时扩展：hooks / tools / middleware / platform]
+  SKILL[Skill<br/>经验沉淀：指导语、流程、可复用做法]
+  MCP[MCP<br/>外部服务工具目录]
+  REG[Tool Registry<br/>统一工具 schema/handler 来源]
+  HOOK[Plugin Hooks<br/>pre_llm_call / post_llm_call / gateway_message 等]
+  USERMSG[用户消息注入<br/>保护 system prompt cache]
+
+  CORE --> REG
+  PLUGIN --> REG
+  PLUGIN --> HOOK
+  SKILL --> USERMSG
+  MCP --> REG
+  HOOK --> USERMSG
+  USERMSG --> CORE
+  REG --> CORE
+
+  WHY1[Plugin：改运行时能力和接入面，<br/>但覆盖核心工具要 operator opt-in]
+  WHY2[Skill：不一定注册工具，<br/>更像把经验变成可复用上下文]
+  WHY3[MCP：把外部服务暴露为工具，<br/>仍要进入 toolset scope]
+  PLUGIN -.-> WHY1
+  SKILL -.-> WHY2
+  MCP -.-> WHY3

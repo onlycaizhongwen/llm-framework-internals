@@ -1,0 +1,23 @@
+flowchart TB
+  CALL[模型发起工具调用<br/>terminal / file / browser / execute_code / MCP]
+  SCOPE[会话 toolset scope<br/>enabled/disabled toolsets]
+  APPROVAL[tools.approval<br/>危险命令检测 + 用户审批 + allowlist]
+  HARD[Hardline blocklist<br/>无论 yolo/cron/off 都不能执行]
+  SMART[Smart approval<br/>辅助 LLM 判断低风险命令]
+  REDACT[Secret redaction<br/>审批提示/网关输出/浏览器输入脱敏]
+  DISPATCH[registry.dispatch<br/>执行被授权工具]
+  DENY[拒绝或等待审批]
+
+  CALL --> SCOPE
+  SCOPE --> APPROVAL
+  APPROVAL --> HARD
+  APPROVAL --> SMART
+  APPROVAL --> REDACT
+  HARD --> DENY
+  SMART --> DISPATCH
+  REDACT --> DISPATCH
+
+  WHY1[为什么这样设计：<br/>长期在线 Agent 会触达终端、文件和平台消息，<br/>必须在工具层做 fail-closed 防线]
+  WHY2[为什么审批按 session_key：<br/>Gateway 并发会话不能共用全局审批状态，<br/>否则一个会话可能影响另一个会话]
+  APPROVAL -.-> WHY1
+  SCOPE -.-> WHY2

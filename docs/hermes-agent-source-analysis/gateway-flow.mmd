@@ -1,0 +1,19 @@
+flowchart LR
+  MSG[平台消息<br/>Telegram/Discord/Slack等]
+  ADAPTER[Platform Adapter<br/>标准化 MessageEvent]
+  RUNNER[GatewayRunner<br/>路由、鉴权、队列、生命周期]
+  KEY[Session Key<br/>agent:main:platform:chat_type:chat_id]
+  CACHE[每会话 AIAgent 缓存<br/>LRU 128 + idle TTL 1h]
+  AGENT[Agent Core<br/>run_conversation]
+  ROUTER[DeliveryRouter<br/>文本/图片/文件/语音投递]
+  OUT[平台回复]
+
+  MSG --> ADAPTER --> RUNNER --> KEY --> CACHE --> AGENT --> ROUTER --> OUT
+  RUNNER --> Q[排队/中断/审批/超时]
+  RUNNER --> CFG[profile/config/secret scope]
+  AGENT --> STATE[SessionDB + 历史恢复]
+
+  WHY1[为什么有 Agent 缓存：<br/>同一聊天会话复用系统提示和工具 schema，<br/>保护 prompt cache，降低长会话成本]
+  WHY2[为什么要 session_key：<br/>把平台差异统一成稳定会话身份，<br/>后续投递、恢复、审批都围绕它路由]
+  CACHE -.-> WHY1
+  KEY -.-> WHY2
