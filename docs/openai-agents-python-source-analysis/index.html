@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenAI Agents Python 源码分析</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f7f9fc;
+      --paper: #ffffff;
+      --ink: #1f2937;
+      --muted: #5f6b7a;
+      --line: #d9e1ec;
+      --accent: #2563eb;
+      --accent-soft: #e7f0ff;
+      --green: #0f766e;
+      --orange: #b45309;
+      --shadow: 0 10px 28px rgba(31, 41, 55, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+    }
+    header {
+      background: linear-gradient(135deg, #ffffff 0%, #eaf2ff 62%, #f4fbf8 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .hero {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 46px 24px 34px;
+    }
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(30px, 5vw, 48px);
+      letter-spacing: 0;
+      line-height: 1.12;
+    }
+    .lead {
+      max-width: 930px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .meta div {
+      background: rgba(255,255,255,0.74);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .meta strong { display: block; font-size: 13px; color: var(--muted); }
+    .layout {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 24px 56px;
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      gap: 24px;
+    }
+    nav {
+      position: sticky;
+      top: 16px;
+      align-self: start;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    nav a {
+      display: block;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 7px 8px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    nav a:hover { background: var(--accent-soft); color: var(--accent); }
+    main { min-width: 0; }
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+    }
+    h2 { margin: 0 0 14px; font-size: 24px; }
+    h3 { margin: 24px 0 8px; font-size: 18px; }
+    p { margin: 10px 0; }
+    code {
+      background: #eef2f7;
+      padding: 2px 5px;
+      border-radius: 5px;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow: auto;
+      background: #172033;
+      color: #eef6ff;
+      border-radius: 8px;
+      padding: 16px;
+      line-height: 1.55;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px;
+      vertical-align: top;
+    }
+    th { background: #f1f5fb; text-align: left; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfdff;
+    }
+    .card strong { color: var(--accent); }
+    .why {
+      border-left: 4px solid var(--green);
+      background: #ecfdf5;
+      padding: 10px 14px;
+      border-radius: 6px;
+      color: #064e3b;
+    }
+    .warn {
+      border-left: 4px solid var(--orange);
+      background: #fff7ed;
+      padding: 10px 14px;
+      border-radius: 6px;
+      color: #7c2d12;
+    }
+    .mermaid {
+      background: #fcfdff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      margin: 16px 0;
+      overflow: auto;
+    }
+    ul { padding-left: 22px; }
+    @media (max-width: 860px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>OpenAI Agents Python 源码分析</h1>
+      <p class="lead">从源码看 OpenAI Agents SDK：它把 Agent、Runner、工具、handoff、guardrail、session、tracing、MCP、realtime 和 sandbox 组合成一个轻量但工程化的多 Agent SDK。</p>
+      <div class="meta">
+        <div><strong>源码路径</strong><span>sources/openai-agents-python</span></div>
+        <div><strong>当前提交</strong><span>158b2f489ecf2f9aeea7a84cb53cc03fe930daea</span></div>
+        <div><strong>版本</strong><span>v0.18.0-7-g158b2f48 / openai-agents 0.18.0</span></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <a href="#position">定位</a>
+      <a href="#architecture">架构</a>
+      <a href="#layers">源码分层</a>
+      <a href="#run-loop">主流程</a>
+      <a href="#agent">Agent 设计</a>
+      <a href="#control">工具 / Handoff / Guardrail</a>
+      <a href="#mcp">MCP / Session / Tracing</a>
+      <a href="#provider">模型适配</a>
+      <a href="#realtime">Realtime / Sandbox</a>
+      <a href="#case">真实示例</a>
+      <a href="#compare">横向对比</a>
+      <a href="#streaming-deep">Streaming 细节</a>
+      <a href="#resume-hitl">Resume / HITL</a>
+      <a href="#sandbox-codex">Sandbox / Codex</a>
+      <a href="#composition-case">组合案例</a>
+      <a href="#summary">设计思想</a>
+    </nav>
+
+    <main>
+      <section id="position">
+        <h2>1. 一句话定位</h2>
+        <p>OpenAI Agents Python 是一个轻量但覆盖面很宽的多 Agent SDK。它不是 Dify 这种低代码平台，也不是 LangGraph 这种显式状态图运行时；它更像“代码优先的 Agent loop + OpenAI 原生模型能力 + 工具、handoff、guardrail、session、tracing、realtime、sandbox 的 SDK 套件”。</p>
+        <p class="why">为什么这么设计：源码把最常用的 Agent 工作流收敛到 <code>Agent</code> 和 <code>Runner</code>，让开发者用 Python 对象声明 instructions、tools、handoffs、guardrails、output_type，再由 Runner 统一处理模型调用、工具执行、转交、流式事件、会话持久化和 tracing。</p>
+      </section>
+
+      <section id="architecture">
+        <h2>2. 总体架构图</h2>
+        <div class="mermaid">
+flowchart TB
+    App["业务应用<br>客服、审批、代码任务、语音助手"] --> Runner["Runner / AgentRunner<br>统一运行入口"]
+    Runner --> Agent["Agent / SandboxAgent / RealtimeAgent<br>声明式智能体配置"]
+    Agent --> Model["ModelProvider / Model<br>Responses、Chat Completions、WebSocket、第三方模型"]
+    Agent --> Tools["Tools<br>function、hosted、computer、shell、apply_patch、MCP"]
+    Agent --> Handoff["Handoffs<br>把转交建模成模型可调用工具"]
+    Agent --> Guardrails["Guardrails<br>输入、输出、工具输入、工具输出拦截"]
+    Runner --> Session["Sessions<br>本地历史、OpenAI Conversation、compaction"]
+    Runner --> Trace["Tracing<br>task、turn、agent、generation、function、handoff、guardrail"]
+    Runner --> Stream["Streaming<br>raw response events + run item events"]
+    Tools --> MCP["MCP Server<br>stdio、SSE、streamable HTTP、approval、resources"]
+    Agent --> Sandbox["Sandbox runtime<br>manifest、capabilities、filesystem、shell、patch"]
+    Agent --> Realtime["Realtime runner<br>WebSocket、双向音频/消息、工具和 handoff"]
+    Model --> OpenAI["OpenAI provider<br>Responses / Chat Completions / Responses WebSocket"]
+    Model --> Other["扩展 Provider<br>LiteLLM、any-llm、自定义 Model"]
+        </div>
+      </section>
+
+      <section id="layers">
+        <h2>3. 源码分层</h2>
+        <table>
+          <tr><th>层级</th><th>关键文件</th><th>作用</th></tr>
+          <tr><td>Public API</td><td><code>src/agents/__init__.py</code></td><td>统一导出 Agent、Runner、工具、模型、session、tracing、realtime、sandbox 等能力。</td></tr>
+          <tr><td>Agent 定义</td><td><code>src/agents/agent.py</code></td><td>声明 instructions、tools、mcp_servers、handoffs、model、guardrails、output_type、tool_use_behavior。</td></tr>
+          <tr><td>运行入口</td><td><code>src/agents/run.py</code></td><td><code>Runner.run/run_sync/run_streamed</code> 和内部 <code>AgentRunner</code>。</td></tr>
+          <tr><td>运行内核</td><td><code>src/agents/run_internal/*</code></td><td>turn preparation、run loop、tool planning、tool execution、session persistence、streaming、resume。</td></tr>
+          <tr><td>工具系统</td><td><code>src/agents/tool.py</code></td><td>FunctionTool、hosted tools、shell/computer/apply_patch、工具输入输出 guardrail。</td></tr>
+          <tr><td>模型适配</td><td><code>src/agents/models/*</code></td><td>OpenAI Responses、Chat Completions、WebSocket、第三方模型扩展。</td></tr>
+          <tr><td>Realtime / Sandbox</td><td><code>src/agents/realtime/*</code>、<code>src/agents/sandbox/*</code></td><td>实时语音/消息 Agent 和长任务工作区 Agent。</td></tr>
+        </table>
+      </section>
+
+      <section id="run-loop">
+        <h2>4. 主流程：Runner 如何驱动 Agent</h2>
+        <div class="mermaid">
+flowchart TB
+    Start["Runner.run / run_sync / run_streamed"] --> Prepare["准备上下文<br>RunContext、RunConfig、Session、Trace"]
+    Prepare --> InputGuard["输入 guardrail<br>可并行，也可先于模型执行"]
+    InputGuard --> Turn["单轮 turn<br>收集 instructions、prompt、tools、handoffs、output schema"]
+    Turn --> ModelCall["调用模型<br>Responses / Chat Completions / WebSocket"]
+    ModelCall --> Process["解析 ModelResponse<br>message、reasoning、tool call、handoff、final output"]
+    Process --> Decision{"下一步是什么"}
+    Decision -->|"final output"| OutputGuard["输出 guardrail + final hooks"]
+    OutputGuard --> Done["保存 session<br>返回 RunResult"]
+    Decision -->|"handoff"| Handoff["切换 current_agent<br>构造下一位 agent 输入"]
+    Handoff --> Turn
+    Decision -->|"tool calls"| Plan["ToolExecutionPlan<br>函数、computer、shell、patch、MCP approval 分组"]
+    Plan --> Interrupt{"需要人工审批或 MCP approval?"}
+    Interrupt -->|"是"| Pause["NextStepInterruption<br>返回可恢复 RunState"]
+    Interrupt -->|"否"| Exec["并发/顺序执行工具<br>生成 ToolCallOutputItem"]
+    Exec --> Turn
+    Decision -->|"run again"| Turn
+    Turn --> Limit{"超过 max_turns?"}
+    Limit -->|"是"| Error["MaxTurnsExceeded / error handler"]
+    Limit -->|"否"| ModelCall
+        </div>
+        <ul>
+          <li><code>src/agents/run.py:197</code> 定义 Runner，<code>run.py:199</code> 是异步 run，<code>run.py:283</code> 是 run_sync，<code>run.py:365</code> 是 run_streamed。</li>
+          <li><code>src/agents/run.py:217-224</code> 的注释说明循环：模型调用、final output、handoff、工具调用、再次运行。</li>
+          <li><code>src/agents/run_internal/tool_planning.py:178</code> 定义 ToolExecutionPlan，把多类工具执行和 interruption 分组。</li>
+        </ul>
+      </section>
+
+      <section id="agent">
+        <h2>5. Agent 设计：声明式配置对象</h2>
+        <p><code>Agent</code> 是 dataclass，核心字段包括 instructions、prompt、tools、mcp_servers、handoffs、model、model_settings、input/output guardrails、output_type 和 tool_use_behavior。</p>
+        <div class="grid">
+          <div class="card"><strong>模型配置</strong><p><code>model</code> 和 <code>model_settings</code> 让 Agent 选择不同模型实现和采样参数。</p></div>
+          <div class="card"><strong>工具与 MCP</strong><p><code>tools</code> 是本地或 hosted tools，<code>mcp_servers</code> 会在运行时拉取工具列表。</p></div>
+          <div class="card"><strong>输出契约</strong><p><code>output_type</code> 支持 Python type、Pydantic、TypedDict 或自定义 schema。</p></div>
+          <div class="card"><strong>运行策略</strong><p><code>tool_use_behavior</code> 决定工具结果回灌模型还是直接成为最终结果。</p></div>
+        </div>
+        <p>源码证据：<code>src/agents/agent.py:173</code> 定义 AgentBase，<code>agent.py:270</code> 定义 Agent；<code>agent.py:285-379</code> 覆盖 instructions、prompt、handoffs、model、guardrails、output_type 和 tool_use_behavior。</p>
+      </section>
+
+      <section id="control">
+        <h2>6. 工具、Handoff、Guardrail 的控制流</h2>
+        <div class="mermaid">
+flowchart LR
+    Agent["Agent 配置"] --> Tools["tools 列表<br>FunctionTool / hosted tools / MCP"]
+    Agent --> Handoffs["handoffs 列表<br>目标 Agent 或 Handoff 对象"]
+    Agent --> Guardrails["guardrails<br>input / output / tool input / tool output"]
+    Handoffs --> TransferTool["transfer_to_xxx<br>handoff 被包装成工具"]
+    Tools --> Schema["JSON schema<br>Pydantic / TypeAdapter / strict schema"]
+    Guardrails --> Tripwire["tripwire_triggered<br>触发即中断运行"]
+    TransferTool --> Model["模型看到的是工具集合"]
+    Schema --> Model
+    Model --> ToolCall["模型选择 tool call"]
+    ToolCall --> Planner["tool planning<br>去重、approval、resume 处理"]
+    Planner --> Exec["tool execution<br>函数、shell、computer、MCP、patch"]
+    Exec --> Items["RunItem<br>ToolCallItem、ToolCallOutputItem、HandoffOutputItem"]
+    Items --> Next["回灌模型或形成最终输出"]
+        </div>
+        <h3>Handoff</h3>
+        <p>Handoff 本质是把“转交给另一个 Agent”包装成模型可调用工具。<code>src/agents/handoffs/__init__.py:94</code> 定义 Handoff，<code>handoffs/__init__.py:168-172</code> 生成默认工具名 <code>transfer_to_{agent.name}</code>，<code>handoffs/__init__.py:285-292</code> 用 TypeAdapter 和 strict schema 校验输入。</p>
+        <h3>Guardrail</h3>
+        <p>Guardrail 是 tripwire。<code>src/agents/guardrail.py:19-28</code> 定义 <code>GuardrailFunctionOutput</code>，核心字段是 <code>tripwire_triggered</code>；<code>guardrail.py:72</code> 是 InputGuardrail，<code>guardrail.py:134</code> 是 OutputGuardrail。</p>
+        <p class="why">为什么这么设计：handoff、tool、guardrail 都被转成“模型可感知或运行时可拦截的边界对象”。模型负责选择，SDK 负责验证、执行和恢复。</p>
+      </section>
+
+      <section id="mcp">
+        <h2>7. MCP、Session、Tracing</h2>
+        <div class="mermaid">
+flowchart TB
+    Agent["Agent.mcp_servers"] --> MCPUtil["MCPUtil.get_all_function_tools<br>运行时拉取 server tools"]
+    MCPUtil --> Server["MCPServer<br>connect、list_tools、call_tool、resources、prompts"]
+    Server --> Approval["require_approval<br>always / never / tool map / callback"]
+    Approval --> Planner["ToolExecutionPlan<br>callback approval 或人工 interruption"]
+    Planner --> RunItems["MCPApprovalRequestItem / MCPApprovalResponseItem / ToolOutput"]
+    Runner["Runner"] --> Session["Session Protocol<br>get_items、add_items、pop_item、clear_session"]
+    Session --> Persistence["session_persistence<br>准备输入、保存 turn、resume 后修正历史"]
+    Runner --> Trace["Tracing spans"]
+    Trace --> Task["TaskSpan<br>一次 Runner.run"]
+    Trace --> Turn["TurnSpan<br>一次 agent loop turn"]
+    Trace --> AgentSpan["AgentSpan<br>tools、handoffs、output_type"]
+    Trace --> Function["FunctionSpan<br>工具输入输出，含 MCP data"]
+    Trace --> Guardrail["GuardrailSpan<br>triggered 状态"]
+        </div>
+        <ul>
+          <li>MCP：<code>src/agents/mcp/server.py:224</code> 定义 MCPServer，<code>server.py:244-259</code> 支持 approval policy、failure error function、metadata 和 custom data。</li>
+          <li>Session：<code>src/agents/memory/session.py:11</code> 定义 Session Protocol，<code>session.py:22-49</code> 定义 get/add/pop/clear。</li>
+          <li>Tracing：<code>src/agents/tracing/span_data.py</code> 定义 AgentSpan、TaskSpan、TurnSpan、FunctionSpan、HandoffSpan、GuardrailSpan。</li>
+        </ul>
+      </section>
+
+      <section id="provider">
+        <h2>8. Model Provider：OpenAI 原生优先，但接口可扩展</h2>
+        <p><code>Model</code> 抽象只有两个核心方法：<code>get_response()</code> 和 <code>stream_response()</code>。<code>OpenAIProvider</code> 再根据配置选择 Responses、Chat Completions 或 Responses WebSocket。</p>
+        <ul>
+          <li><code>src/agents/models/interface.py:31</code> 定义 Model。</li>
+          <li><code>interface.py:48-108</code> 定义 get_response 和 stream_response。</li>
+          <li><code>src/agents/models/openai_provider.py:36</code> 定义 OpenAIProvider。</li>
+          <li><code>openai_provider.py:68-87</code> 支持 Responses、WebSocket、strict feature validation、agent registration、buffer streamed tool calls。</li>
+          <li><code>openai_provider.py:120-137</code> 懒加载 AsyncOpenAI client，并共享 httpx client。</li>
+        </ul>
+      </section>
+
+      <section id="realtime">
+        <h2>9. Realtime 与 Sandbox</h2>
+        <div class="mermaid">
+flowchart LR
+    SandboxAgent["SandboxAgent<br>继承 Agent"] --> Manifest["Manifest<br>GitRepo、文件、挂载、制品"]
+    SandboxAgent --> Cap["Capabilities<br>filesystem、shell、skills、memory、compaction"]
+    Runner["Runner + RunConfig.sandbox"] --> Runtime["SandboxRuntime<br>创建/复用 sandbox session"]
+    Runtime --> Tools["模型可见工具<br>shell、read/write、apply_patch、view_image"]
+    Tools --> Workspace["受控工作区<br>长任务、文件修改、命令执行"]
+    RealtimeAgent["RealtimeAgent"] --> RealtimeRunner["RealtimeRunner"]
+    RealtimeRunner --> Session["RealtimeSession<br>持久 WebSocket 连接"]
+    Session --> Voice["双向音频/消息<br>工具、guardrail、handoff"]
+    Voice --> App["语音客服、实时助手、互动应用"]
+        </div>
+        <p><code>src/agents/sandbox/sandbox_agent.py:15</code> 定义 SandboxAgent，扩展 default_manifest、capabilities、run_as 等长任务工作区配置。<code>src/agents/realtime/runner.py:18</code> 定义 RealtimeRunner，源码说明它维护持久连接、执行工具、运行 guardrail 并支持 handoff。</p>
+      </section>
+
+      <section id="case">
+        <h2>10. 真实示例：客服分流 + 工具 + Guardrail</h2>
+        <pre><code class="language-python">from dataclasses import dataclass
+from agents import Agent, Runner, GuardrailFunctionOutput, input_guardrail, function_tool
+
+@dataclass
+class UserContext:
+    user_id: str
+    vip: bool
+
+@input_guardrail
+def block_sensitive(ctx, agent, user_input):
+    text = user_input if isinstance(user_input, str) else str(user_input)
+    blocked = "导出全部用户" in text
+    return GuardrailFunctionOutput(
+        output_info={"reason": "敏感批量数据导出"} if blocked else {},
+        tripwire_triggered=blocked,
+    )
+
+@function_tool
+def lookup_order(order_id: str) -> str:
+    return f"订单 {order_id} 当前状态：已付款，待发货"
+
+billing_agent = Agent(
+    name="Billing",
+    instructions="处理账单、退款、发票问题。",
+    tools=[lookup_order],
+)
+
+triage_agent = Agent(
+    name="Triage",
+    instructions="判断客户问题类型，账单问题转交 Billing。",
+    handoffs=[billing_agent],
+    input_guardrails=[block_sensitive],
+)
+
+result = Runner.run_sync(
+    triage_agent,
+    "帮我查一下订单 A100，并看看能不能退款",
+    context=UserContext(user_id="u1", vip=True),
+)
+print(result.final_output)</code></pre>
+        <p>这个例子对应三条源码主线：handoff 被包装成 <code>transfer_to_billing</code> 工具；<code>lookup_order</code> 被包装成 FunctionTool 并进入 ToolExecutionPlan；guardrail 的 tripwire 触发后中断运行。</p>
+      </section>
+
+      <section id="compare">
+        <h2>11. 和其他框架对比</h2>
+        <div class="mermaid">
+flowchart TB
+    Need["选型问题"] --> OpenAI["OpenAI Agents SDK<br>轻量代码 SDK + OpenAI 原生能力"]
+    Need --> LangGraph["LangGraph<br>复杂状态图和 checkpoint"]
+    Need --> PydanticAI["PydanticAI<br>typed Agent 和结构化输出"]
+    Need --> Agno["Agno<br>AgentOS 平台化 API / MCP / 审批"]
+    Need --> Dify["Dify<br>低代码应用平台"]
+    OpenAI --> O1["适合：快速写多 Agent 工作流、handoff、guardrail、MCP、tracing、realtime、sandbox"]
+    LangGraph --> L1["适合：复杂状态机、显式节点边、持久 checkpoint、人审恢复"]
+    PydanticAI --> P1["适合：强类型业务依赖、Pydantic 输出契约、评测闭环"]
+    Agno --> A1["适合：把 Agent/Team/Workflow 直接服务化成平台资源"]
+    Dify --> D1["适合：产品经理可配置、知识库、发布、运营观测"]
+    O1 --> Combo["组合边界<br>OpenAI Agents 做内层 agent loop；LangGraph 做外层状态机；Dify/Agno 做产品入口；Haystack/LlamaIndex 做重 RAG"]
+        </div>
+        <table>
+          <tr><th>对比对象</th><th>OpenAI Agents SDK 的优势</th><th>对方更强的地方</th></tr>
+          <tr><td>LangGraph</td><td>更轻，Agent/handoff/tool/guardrail 上手快，OpenAI Responses / realtime / tracing 原生。</td><td>显式状态图、checkpoint、复杂中断恢复。</td></tr>
+          <tr><td>PydanticAI</td><td>OpenAI 原生能力、handoff、realtime、sandbox、MCP 和 tracing 覆盖更完整。</td><td>typed deps、Pydantic 输出契约、evals 更聚焦。</td></tr>
+          <tr><td>Agno</td><td>SDK 更轻，适合直接嵌入 Python 代码和 OpenAI 原生功能。</td><td>AgentOS 平台化 API、服务入口、调度、审批管理更完整。</td></tr>
+          <tr><td>Dify</td><td>更适合工程代码控制和自定义运行逻辑。</td><td>低代码配置、产品发布、运营后台、知识库 UI。</td></tr>
+        </table>
+      </section>
+
+      <section id="streaming-deep">
+        <h2>13. 专题一：Streaming 细节</h2>
+        <div class="mermaid">
+flowchart TB
+    App["业务代码调用 Runner.run_streamed<br>为什么：前端和服务端要边生成边响应"] --> Result["RunResultStreaming<br>保存 current_agent、final_output、interruptions、队列"]
+    Result --> Queue["asyncio event_queue<br>为什么：run loop 后台推进，消费端异步读取"]
+    Model["模型 stream_response"] --> Raw["RawResponsesStreamEvent<br>原始 Responses 流事件，适合 token/UI 打字机"]
+    Raw --> Queue
+    Step["run loop 解析模型输出"] --> Items["RunItemStreamEvent<br>message、tool_called、tool_output、handoff、MCP approval"]
+    Items --> Queue
+    Handoff["发生 handoff"] --> AgentUpdate["AgentUpdatedStreamEvent<br>告诉消费端当前 Agent 已切换"]
+    AgentUpdate --> Queue
+    Queue --> Consumer["stream_events 消费端<br>CLI、FastAPI NDJSON、Web UI"]
+    Consumer --> UI["展示策略<br>raw 负责即时文本，RunItem 负责可解释步骤，AgentUpdated 负责状态栏"]
+        </div>
+        <p>源码里 Streaming 不是“把 token 原样吐出去”，而是三类事件并行服务不同目标：<code>RawResponsesStreamEvent</code> 做即时文本，<code>RunItemStreamEvent</code> 做工具、handoff、MCP approval 等语义步骤，<code>AgentUpdatedStreamEvent</code> 做多 Agent 切换提示。</p>
+        <p class="why">为什么这么设计：原始 token 流解决“快”，语义 RunItem 解决“可解释”，AgentUpdated 解决“多 Agent 状态可见”。如果只暴露 token，工具调用、handoff、审批、MCP 列表都会变成黑盒。</p>
+        <ul>
+          <li><code>src/agents/result.py:445-500</code> 定义 <code>RunResultStreaming</code>，包含 <code>_event_queue</code>、guardrail queue、<code>interruptions</code> 和 <code>_last_processed_response</code>。</li>
+          <li><code>src/agents/stream_events.py:10-61</code> 定义 raw response、run item、agent updated 三类 StreamEvent。</li>
+          <li><code>src/agents/run_internal/streaming.py:28-65</code> 把 message、tool call、tool output、handoff、MCP approval 映射成语义事件，并跳过 <code>ToolApprovalItem</code>。</li>
+          <li><code>src/agents/run_internal/run_loop.py:589</code> 运行开始时先发 AgentUpdated；<code>run_loop.py:1484-1485</code> 把模型原始流事件包装成 RawResponsesStreamEvent。</li>
+          <li><code>tests/fastapi/streaming_app.py:21</code> 演示用 NDJSON 把 stream events 暴露给 HTTP 客户端。</li>
+        </ul>
+        <p class="warn">分享口径：OpenAI Agents Python 的 Streaming 是“前台体验 + 后台可观测”一体化设计。前端拿 raw event 做即时输出，工程侧拿 run item event 做工具链路、handoff、MCP 审批可视化。</p>
+      </section>
+
+      <section id="resume-hitl">
+        <h2>14. 专题二：Resume / HITL 细节</h2>
+        <div class="mermaid">
+flowchart TB
+    Call["模型请求工具"] --> NeedApproval{"工具需要审批吗"}
+    NeedApproval -->|否| Execute["直接执行工具<br>进入 ToolExecutionPlan"]
+    NeedApproval -->|是| Approval["ToolApprovalItem<br>记录 raw tool call、tool_name、namespace"]
+    Approval --> Interrupt["NextStepInterruption<br>为什么：暂停 run，但保留可恢复状态"]
+    Interrupt --> Human["人审或策略审批<br>approve / reject / always approve"]
+    Human --> Resume["Runner 用 RunState 恢复<br>读取 last_processed_response 和 generated_items"]
+    Resume --> Plan["build_plan_for_resume_turn<br>为什么：只补执行已批准部分，保留未决审批"]
+    Plan --> Execute
+    Execute --> Continue["继续 run loop<br>可能 final output、handoff 或再次 interruption"]
+        </div>
+        <p>Resume / HITL 的核心是：审批不是异常退出，而是运行时的一种合法下一步。模型已经产出了工具调用，SDK 把需要审批的调用放进 <code>ToolApprovalItem</code>，再用 <code>NextStepInterruption</code> 暂停 run。</p>
+        <p class="why">为什么这么设计：人审场景最怕“重新跑一遍模型导致工具调用漂移”。源码保存上一轮模型响应和生成项，在 resume turn 里重建执行计划，保证恢复时执行的是原先等待审批的工具。</p>
+        <ul>
+          <li><code>src/agents/items.py:509-535</code> 定义 <code>ToolApprovalItem</code>，保存 raw tool call、tool_name、tool_namespace、tool_origin 等审批追踪信息。</li>
+          <li><code>src/agents/items.py:632-635</code> 明确 ToolApprovalItem 不能直接转成 API input，说明它是 SDK 内部恢复/审批状态。</li>
+          <li><code>src/agents/run_internal/run_steps.py:170-174</code> 定义 <code>NextStepInterruption</code>，代表工具审批导致的 run 暂停。</li>
+          <li><code>src/agents/run_internal/tool_planning.py:178-193</code> 的 <code>ToolExecutionPlan</code> 保存 pending interruptions、approved MCP responses、callback approval requests。</li>
+          <li><code>src/agents/run_internal/tool_planning.py:266-299</code> 的 <code>_build_plan_for_resume_turn</code> 专门为恢复轮次构建执行计划。</li>
+          <li><code>src/agents/run_internal/run_loop.py:731-800</code> 检测中断后调用 <code>resolve_interrupted_turn</code>，恢复后仍有审批则再次 finalize interruption。</li>
+        </ul>
+        <p class="warn">真实例子：客服退款 Agent 调用 <code>refund_order(order_id, amount)</code> 前需要人工确认。主管批准后 resume，同一个 tool call 被执行；如果还有“发票作废”审批，则再次 interruption，而不是丢失上下文。</p>
+      </section>
+
+      <section id="sandbox-codex">
+        <h2>15. 专题三：Sandbox / Codex 扩展</h2>
+        <div class="mermaid">
+flowchart TB
+    Agent["SandboxAgent<br>声明 default_manifest、capabilities、run_as"] --> Prepare["runtime_agent_preparation<br>检查 capability 依赖"]
+    Prepare --> Tools["capability.tools<br>filesystem、shell、apply_patch、skills、memory"]
+    Prepare --> Prompt["build_sandbox_instructions<br>为什么：把工作区规则和能力说明注入模型"]
+    Prepare --> Context["prepare_sandbox_input<br>让 capability 处理上下文"]
+    Tools --> Session["Sandbox session<br>受控工作区和用户身份 run_as"]
+    Session --> Work["代码修改、文件分析、命令执行、补丁应用"]
+    Agent --> Codex["experimental codex_tool<br>把 Codex CLI 封装成 FunctionTool"]
+    Codex --> Thread{"是否有 thread_id"}
+    Thread -->|有| ResumeThread["resume_thread<br>延续同一代码任务上下文"]
+    Thread -->|无| StartThread["start_thread<br>新建 Codex 任务线程"]
+    ResumeThread --> Stream["run_streamed + on_stream<br>为什么：保留进度事件并汇总结果"]
+    StartThread --> Stream
+        </div>
+        <p>SandboxAgent 面向长任务工作区：文件读写、shell、apply_patch、skills、memory、compaction 等能力不是硬编码进 Runner，而是通过 capability 注入工具、说明和上下文处理逻辑。Codex 扩展则把 Codex CLI 作为 FunctionTool 接入普通 Agent 流程。</p>
+        <p class="why">为什么这么设计：Sandbox 和 Codex 都属于高权限、长上下文、可能有副作用的能力。源码通过 manifest、run_as、thread_id、on_stream、tool name collision validation 做边界控制，避免和普通函数工具混在一起失控。</p>
+        <ul>
+          <li><code>src/agents/sandbox/sandbox_agent.py:15-38</code> 定义 <code>SandboxAgent</code>，扩展 <code>default_manifest</code>、<code>base_instructions</code>、<code>capabilities</code>、<code>run_as</code>。</li>
+          <li><code>src/agents/sandbox/runtime_agent_preparation.py:74-82</code> 检查 capability 依赖并收集 capability tools。</li>
+          <li><code>src/agents/sandbox/runtime_agent_preparation.py:148-190</code> 构建 sandbox instructions，把基础说明、Agent instructions、capability instructions 合并。</li>
+          <li><code>src/agents/extensions/experimental/codex/codex_tool.py:236-258</code> 暴露 thread、sandbox_mode、working_directory、persist_session、on_stream 等配置。</li>
+          <li><code>src/agents/extensions/experimental/codex/codex_tool.py:346-400</code> 解析或创建 Codex thread，调用 <code>thread.run_streamed</code>，消费事件并汇总 usage。</li>
+          <li><code>src/agents/agent.py:95-117</code> 校验 Codex tool 名称冲突，避免多个 Codex 工具复用同名导致运行歧义。</li>
+        </ul>
+        <p class="warn">真实例子：内部研发助手先查工单和权限，再把“分析仓库并给补丁”的任务交给 SandboxAgent 或 codex_tool。Sandbox/Codex 在受控 workspace 内读文件、跑命令、应用 patch；主 Agent 继续负责审批、解释和结果汇总。</p>
+      </section>
+
+      <section id="composition-case">
+        <h2>16. 专题四：真实组合案例</h2>
+        <div class="mermaid">
+flowchart TB
+    User["用户提交复杂工单<br>退款、合规、资料检索、代码或数据修复"] --> Entry["Dify / Agno / 自研入口<br>负责表单、权限、发布、运营"]
+    Entry --> Graph["LangGraph 外层状态机<br>负责节点顺序、checkpoint、人审恢复"]
+    Graph --> Triage["OpenAI Agents Triage Agent<br>分类、guardrail、handoff"]
+    Triage --> Rag["RAG 工具<br>Haystack / LlamaIndex 检索知识库"]
+    Triage --> Billing["Billing Agent<br>调用订单、退款、发票工具"]
+    Triage --> Ops["Sandbox / Codex Agent<br>必要时分析文件、执行受控 patch"]
+    Billing --> Approval["HITL 审批节点<br>高风险退款或写操作暂停"]
+    Ops --> Approval
+    Approval --> Graph
+    Graph --> Trace["Tracing + 日志<br>为什么：把外层流程和内层 agent loop 串起来排查"]
+    Trace --> Answer["给用户结果<br>同时沉淀审计证据和可复盘步骤"]
+        </div>
+        <p>推荐组合边界：Dify / Agno / 自研前台负责入口、权限、表单、发布和运营；LangGraph 做外层确定性流程和 checkpoint；OpenAI Agents Python 做内层智能体执行；Haystack / LlamaIndex 作为 RAG 工具后端；Tracing 串联每次 Agent run 的工具调用、handoff、审批和模型响应。</p>
+        <p class="why">为什么这么组合：LangGraph 擅长“流程确定性和恢复”，Dify/Agno 擅长“产品入口和运营”，OpenAI Agents Python 擅长“内层 Agent loop 和 OpenAI 原生能力”。不要让一个框架承担所有职责，边界清楚后，分享和落地都会更稳。</p>
+        <p class="warn">演讲口径：如果听众问“有 LangGraph 了为什么还要 OpenAI Agents Python”，可以回答：LangGraph 管外层流程状态，OpenAI Agents 管节点内部的模型、工具、handoff、guardrail、MCP、streaming、tracing。两者不是替代关系，更像“流程引擎 + Agent 执行单元”。</p>
+      </section>
+
+      <section id="summary">
+        <h2>17. 设计思想总结</h2>
+        <div class="grid">
+          <div class="card"><strong>声明式 Agent</strong><p>Agent 只是配置，不直接执行；执行统一交给 Runner。</p></div>
+          <div class="card"><strong>工具化控制流</strong><p>handoff、MCP、hosted tool 都进入统一工具集合。</p></div>
+          <div class="card"><strong>Runtime 承担确定性</strong><p>模型负责选择，SDK 负责 schema、approval、guardrail、session、trace、resume。</p></div>
+          <div class="card"><strong>OpenAI 原生优先</strong><p>Responses、Conversation、WebSocket、tracing、agent registration 被纳入 provider。</p></div>
+          <div class="card"><strong>可扩展边界清晰</strong><p>Model、ModelProvider、Session、MCPServer、TracingProcessor 都可替换。</p></div>
+          <div class="card"><strong>生产调试优先</strong><p>RunItem 和 Span 让一次 agent run 可以被回放、解释和定位。</p></div>
+        </div>
+        <p class="warn">分享口径：OpenAI Agents SDK 不是“又一个 prompt wrapper”，它标准化了 Agent 应用最常见的控制点。复杂状态机交给 LangGraph，产品入口交给 Dify/Agno，自身作为内层 agent loop 非常合适。</p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "default",
+      flowchart: { htmlLabels: true, curve: "basis", nodeSpacing: 36, rankSpacing: 48 }
+    });
+  </script>
+</body>
+</html>

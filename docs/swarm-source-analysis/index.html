@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenAI Swarm 源码分析</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f7f9fc;
+      --paper: #ffffff;
+      --ink: #1f2937;
+      --muted: #5f6b7a;
+      --line: #d9e1ec;
+      --accent: #2563eb;
+      --accent-soft: #e7f0ff;
+      --green: #0f766e;
+      --orange: #b45309;
+      --shadow: 0 10px 28px rgba(31, 41, 55, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; color: var(--ink); background: var(--bg); line-height: 1.72; }
+    header { background: linear-gradient(135deg, #ffffff 0%, #eaf2ff 62%, #f4fbf8 100%); border-bottom: 1px solid var(--line); }
+    .hero { max-width: 1180px; margin: 0 auto; padding: 46px 24px 34px; }
+    h1 { margin: 0 0 14px; font-size: clamp(30px, 5vw, 48px); letter-spacing: 0; line-height: 1.12; }
+    .lead { max-width: 930px; margin: 0; color: var(--muted); font-size: 18px; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 24px; }
+    .meta div { background: rgba(255,255,255,0.74); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+    .meta strong { display: block; font-size: 13px; color: var(--muted); }
+    .layout { max-width: 1180px; margin: 0 auto; padding: 28px 24px 56px; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; }
+    nav { position: sticky; top: 16px; align-self: start; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 14px; box-shadow: var(--shadow); }
+    nav a { display: block; color: var(--muted); text-decoration: none; padding: 7px 8px; border-radius: 6px; font-size: 14px; }
+    nav a:hover { background: var(--accent-soft); color: var(--accent); }
+    main { min-width: 0; }
+    section { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
+    h2 { margin: 0 0 14px; font-size: 24px; }
+    h3 { margin: 24px 0 8px; font-size: 18px; }
+    p { margin: 10px 0; }
+    code { background: #eef2f7; padding: 2px 5px; border-radius: 5px; font-family: "Cascadia Code", Consolas, monospace; font-size: 0.92em; }
+    pre { overflow: auto; background: #172033; color: #eef6ff; border-radius: 8px; padding: 16px; line-height: 1.55; }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+    th, td { border: 1px solid var(--line); padding: 10px; vertical-align: top; }
+    th { background: #f1f5fb; text-align: left; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .why { border-left: 4px solid var(--green); background: #ecfdf5; padding: 10px 14px; border-radius: 6px; color: #064e3b; }
+    .warn { border-left: 4px solid var(--orange); background: #fff7ed; padding: 10px 14px; border-radius: 6px; color: #7c2d12; }
+    .quote { background: #f8fafc; border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 6px; }
+    .diagram-wrap { overflow-x: auto; overflow-y: visible; border-radius: 8px; }
+    .mermaid { background: #fcfdff; border: 1px solid var(--line); border-radius: 8px; padding: 18px; margin: 16px 0; overflow: visible; min-width: 860px; }
+    .wide .mermaid { min-width: 1280px; padding: 28px; }
+    .wide .mermaid svg { width: 1280px !important; max-width: none !important; height: auto !important; }
+    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .card { background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+    @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } nav { position: static; } .mermaid { min-width: 720px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>OpenAI Swarm 源码分析</h1>
+      <p class="lead">Swarm 是一个实验性、教育性质的轻量多 Agent 编排框架。它用 Agent、Python functions、context variables 和 handoff，把多 Agent 协作的最小闭环讲得非常清楚。</p>
+      <div class="meta">
+        <div><strong>源码路径</strong><span>sources/swarm</span></div>
+        <div><strong>源码来源</strong><span>main codeload snapshot，短 SHA 6af0b4c</span></div>
+        <div><strong>状态口径</strong><span>README 建议生产用例迁移到 OpenAI Agents SDK</span></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <a href="#position">定位</a>
+      <a href="#architecture">总体架构</a>
+      <a href="#layers">源码分层</a>
+      <a href="#types">核心抽象</a>
+      <a href="#run-loop">Run Loop</a>
+      <a href="#handoff">Tool / Handoff</a>
+      <a href="#context">Context</a>
+      <a href="#streaming">Streaming</a>
+      <a href="#evals">Evals</a>
+      <a href="#case">真实例子</a>
+      <a href="#migration">迁移关系</a>
+      <a href="#compare">对比分析</a>
+      <a href="#limits">局限性</a>
+      <a href="#ideas">设计思想</a>
+      <a href="#reading-route">阅读路线</a>
+      <a href="#share">分享口径</a>
+    </nav>
+
+    <main>
+      <section id="position">
+        <h2>1. 一句话定位</h2>
+        <p>OpenAI Swarm 是一个极轻量、教育性质的多 Agent 编排框架。它用两个核心抽象讲清楚一件事：<code>Agent</code> 包含 instructions 和 functions，函数可以返回另一个 <code>Agent</code>，于是 handoff 就变成了普通工具调用的结果。</p>
+        <p class="warn">README 明确标注 Swarm 是 experimental / educational，并说明它已被 OpenAI Agents SDK 替代，生产用例建议迁移。</p>
+      </section>
+
+      <section id="architecture">
+        <h2>2. 总体架构图</h2>
+        <div class="diagram-wrap wide"><div class="mermaid">
+%%{init: {"flowchart": {"nodeSpacing": 68, "rankSpacing": 86}, "themeVariables": {"fontSize": "17px"}} }%%
+flowchart TB
+    App["业务代码 / Demo Loop<br>调用 client.run"] --> Swarm["Swarm<br>轻量客户端编排器"]
+    Swarm --> Agent["Agent<br>name / model / instructions / functions / tool_choice"]
+    Agent --> Prompt["System Prompt<br>instructions 字符串或函数<br>为什么：切换 Agent 时只切换系统提示，不重建线程"]
+    Agent --> Tools["Python functions -> JSON tools<br>function_to_json 反射签名"]
+    Swarm --> Chat["OpenAI Chat Completions API<br>stateless messages in / messages out"]
+    Chat --> Decision{"模型返回什么?"}
+    Decision -->|"普通回答"| Response["Response<br>messages / active agent / context_variables"]
+    Decision -->|"tool_calls"| ToolExec["handle_tool_calls<br>执行 Python 函数"]
+    ToolExec --> Result["Result 归一化<br>str / Result / Agent"]
+    Result -->|"返回 Agent"| Handoff["Handoff<br>切换 active_agent"]
+    Result -->|"返回 context_variables"| Context["更新上下文变量"]
+    Handoff --> Chat
+    Context --> Chat
+    Swarm --> Stream["run_and_stream<br>merge_chunk 合并 delta 和 tool_calls"]
+    Note["为什么这么设计：<br>Swarm 用最少抽象演示多 Agent 协作，核心是函数返回 Agent 实现 handoff"] -.说明.-> Handoff
+        </div></div>
+      </section>
+
+      <section id="layers">
+        <h2>3. 源码分层</h2>
+        <table>
+          <tr><th>层级</th><th>文件</th><th>作用</th></tr>
+          <tr><td>项目定位</td><td><code>README.md</code></td><td>说明 Swarm 是 experimental / educational，并建议迁移到 OpenAI Agents SDK</td></tr>
+          <tr><td>核心循环</td><td><code>swarm/core.py</code></td><td><code>Swarm.run</code>、<code>get_chat_completion</code>、<code>handle_tool_calls</code>、<code>run_and_stream</code></td></tr>
+          <tr><td>数据模型</td><td><code>swarm/types.py</code></td><td><code>Agent</code>、<code>Response</code>、<code>Result</code></td></tr>
+          <tr><td>工具 schema / streaming 合并</td><td><code>swarm/util.py</code></td><td><code>function_to_json</code>、<code>merge_chunk</code>、<code>debug_print</code></td></tr>
+          <tr><td>测试</td><td><code>tests/test_core.py</code></td><td>覆盖普通回复、工具调用、<code>execute_tools=False</code>、handoff</td></tr>
+          <tr><td>示例</td><td><code>examples/basic</code>、<code>triage_agent</code>、<code>airline</code></td><td>函数调用、上下文变量、路由、客服场景和 evals</td></tr>
+        </table>
+      </section>
+
+      <section id="types">
+        <h2>4. 核心抽象</h2>
+        <ul>
+          <li><code>swarm/types.py:14</code> 定义 <code>Agent</code>，字段只有 <code>name</code>、<code>model</code>、<code>instructions</code>、<code>functions</code>、<code>tool_choice</code>、<code>parallel_tool_calls</code>。</li>
+          <li><code>swarm/types.py:23</code> 定义 <code>Response</code>，返回新增 <code>messages</code>、最后的 <code>agent</code>、更新后的 <code>context_variables</code>。</li>
+          <li><code>swarm/types.py:29</code> 定义 <code>Result</code>，用于函数返回值归一化。</li>
+          <li><code>swarm/core.py:26</code> 定义 <code>Swarm</code>，构造时默认创建 <code>OpenAI()</code> client。</li>
+        </ul>
+        <p class="why">关键理解：Agent 不是服务端线程，也不是 Assistants API 的 Assistant；它只是一次 Chat Completions 调用的 prompt + tools 配置。</p>
+      </section>
+
+      <section id="run-loop">
+        <h2>5. Run Loop 主流程</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Start["client.run(agent, messages)"] --> Copy["复制 messages 和 context_variables<br>避免直接改调用方对象"]
+    Copy --> Completion["get_chat_completion<br>当前 Agent instructions + history + tools"]
+    Completion --> Append["assistant message 写入 history<br>附加 sender=active_agent.name"]
+    Append --> HasTool{"有 tool_calls 且 execute_tools=True?"}
+    HasTool -->|"否"| Return["返回 Response<br>新增 messages + 当前 agent + context_variables"]
+    HasTool -->|"是"| ToolExec["handle_tool_calls<br>按函数名查找并执行"]
+    ToolExec --> ToolMessage["tool result message 写入 history"]
+    ToolExec --> Context["合并 Result.context_variables"]
+    ToolExec --> Switch{"Result.agent 不为空?"}
+    Switch -->|"是"| NewAgent["active_agent = result.agent"]
+    Switch -->|"否"| SameAgent["保持当前 Agent"]
+    NewAgent --> Limit{"未超过 max_turns?"}
+    SameAgent --> Limit
+    Limit -->|"继续"| Completion
+    Limit -->|"结束"| Return
+        </div></div>
+        <ul>
+          <li><code>core.py:32</code> 的 <code>get_chat_completion</code> 构造 system prompt、history 和 tools。</li>
+          <li><code>core.py:50-56</code> 用 <code>function_to_json</code> 把 Python 函数转成 tools，并隐藏 <code>context_variables</code> 参数。</li>
+          <li><code>core.py:231</code> 的 <code>run</code> 是普通非流式主入口。</li>
+          <li><code>core.py:275-286</code> 处理停止条件、工具执行、上下文合并和 Agent 切换。</li>
+        </ul>
+      </section>
+
+      <section id="handoff">
+        <h2>6. Tool / Handoff 机制</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    User["用户请求<br>我要退款 / 我要销售咨询"] --> Triage["Triage Agent<br>只负责识别意图"]
+    Triage --> ToolCall["模型选择 transfer_to_refunds / transfer_to_sales"]
+    ToolCall --> Function["Python transfer 函数"]
+    Function --> AgentObj["返回另一个 Agent 对象"]
+    AgentObj --> Normalize["handle_function_result<br>Agent -> Result(value={assistant:name}, agent=Agent)"]
+    Normalize --> Switch["Swarm.run 更新 active_agent"]
+    Switch --> NewPrompt["下一轮 ChatCompletion<br>使用新 Agent instructions"]
+    NewPrompt --> Specialist["专业 Agent 回复或继续调用工具"]
+    Note["为什么这么设计：<br>handoff 不是独立协议，而是普通工具函数返回 Agent；实现简单，也便于测试"] -.说明.-> Function
+        </div></div>
+        <ul>
+          <li><code>core.py:71-84</code> 的 <code>handle_function_result</code> 把 <code>Result</code>、<code>Agent</code>、普通值统一成 <code>Result</code>。</li>
+          <li><code>core.py:89-134</code> 的 <code>handle_tool_calls</code> 查找并执行 Python 函数，写回 tool message。</li>
+          <li><code>examples/triage_agent/agents.py</code> 展示 <code>transfer_to_sales</code>、<code>transfer_to_refunds</code> 返回不同 Agent。</li>
+          <li><code>tests/test_core.py:122-140</code> 验证函数返回 <code>agent2</code> 后，<code>response.agent == agent2</code>。</li>
+        </ul>
+      </section>
+
+      <section id="context">
+        <h2>7. Context Variables</h2>
+        <p>Swarm 的上下文变量不是持久 memory，而是一次 <code>run</code> 输入、工具函数可读写、最终随 <code>Response</code> 带回的显式状态。</p>
+        <ul>
+          <li><code>core.py:35-40</code> 如果 <code>agent.instructions</code> 是函数，会把 <code>context_variables</code> 传进去生成动态 system prompt。</li>
+          <li><code>core.py:51-55</code> 把工具 schema 里的 <code>context_variables</code> 参数隐藏，不暴露给模型填写。</li>
+          <li><code>core.py:118-119</code> 如果 Python 函数签名里包含 <code>context_variables</code>，执行工具时由框架注入。</li>
+          <li><code>core.py:128-131</code> 合并 <code>Result.context_variables</code>。</li>
+        </ul>
+      </section>
+
+      <section id="streaming">
+        <h2>8. Streaming 细节</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Start["run(stream=True)"] --> Stream["run_and_stream"]
+    Stream --> Completion["Chat Completions stream=True"]
+    Completion --> StartDelim["yield {'delim':'start'}"]
+    StartDelim --> Chunk["逐个接收 delta"]
+    Chunk --> YieldDelta["yield delta 给调用方 UI"]
+    Chunk --> Merge["merge_chunk<br>累积 content 和 tool_calls 参数片段"]
+    Merge --> EndDelim["yield {'delim':'end'}"]
+    EndDelim --> HasTool{"合并后的 message 有 tool_calls?"}
+    HasTool -->|"否"| Final["yield {'response': Response}"]
+    HasTool -->|"是"| ToolExec["转换成 ChatCompletionMessageToolCall<br>执行 handle_tool_calls"]
+    ToolExec --> NextTurn["追加 tool messages，继续下一轮"]
+    NextTurn --> Completion
+        </div></div>
+        <ul>
+          <li><code>core.py:139</code> 定义 <code>run_and_stream</code>。</li>
+          <li><code>core.py:176-187</code> 对外 yield delta，并用 <code>merge_chunk</code> 累积完整 message。</li>
+          <li><code>core.py:202-212</code> 把流式合并出来的 tool call dict 转回 <code>ChatCompletionMessageToolCall</code> 对象。</li>
+          <li><code>util.py:21-29</code> 的 <code>merge_chunk</code> 负责合并 content 和 tool call 参数片段。</li>
+        </ul>
+      </section>
+
+      <section id="evals">
+        <h2>9. Evals / 可测试性</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Query["测试 query"] --> Run["client.run(..., execute_tools=False)"]
+    Run --> Model["模型只返回 tool_calls<br>不真正执行工具"]
+    Model --> Assert["断言 tool_calls 名称 / 数量"]
+    Assert --> Pass["通过：路由或工具选择符合预期"]
+    Assert --> Fail["失败：prompt / tool description / agent instructions 需要调整"]
+    Note["为什么这么设计：<br>Swarm 强调可测试，execute_tools=False 让测试能只验证模型是否选对工具"] -.说明.-> Run
+        </div></div>
+        <p><code>execute_tools=False</code> 让测试只验证“模型是否选对工具/路由”，不用真的调用外部系统。</p>
+        <ul>
+          <li><code>tests/test_core.py:70-116</code> 验证 <code>execute_tools=False</code> 时不会执行工具，但会返回 tool_calls。</li>
+          <li><code>examples/weather_agent/evals.py</code> 验证天气问题是否调用 <code>get_weather</code>。</li>
+          <li><code>examples/triage_agent/evals.py</code> 验证 triage agent 是否选中正确 transfer function。</li>
+        </ul>
+      </section>
+
+      <section id="case">
+        <h2>10. 真实例子：电商退款/销售分流</h2>
+        <ol>
+          <li><code>Triage Agent</code> 只判断用户应该去 sales 还是 refunds。</li>
+          <li><code>transfer_to_refunds()</code> 返回 <code>refunds_agent</code>，Swarm 自动切换 active agent。</li>
+          <li><code>refunds_agent</code> 有 <code>process_refund</code> 和 <code>apply_discount</code> 两个函数。</li>
+          <li>如果用户跑题，<code>transfer_back_to_triage()</code> 返回 triage agent。</li>
+        </ol>
+        <pre><code class="language-python">from swarm import Agent
+
+def process_refund(item_id, reason="NOT SPECIFIED"):
+    """Refund an item. Ask for user confirmation before processing the refund."""
+    return "Success!"
+
+refunds_agent = Agent(
+    name="Refunds Agent",
+    instructions="Help the user with a refund. If it was too expensive, offer a refund code.",
+    functions=[process_refund],
+)
+
+def transfer_to_refunds():
+    return refunds_agent</code></pre>
+        <h3>Airline 客服案例：更接近真实业务的 handoff 网络</h3>
+        <p>只讲退款/销售分流会显得太简化，<code>examples/airline</code> 更适合分享真实客服流程：triage 先判断大类，flight modification 再判断取消还是改签，最后由 cancel / change / lost baggage 这些专门 Agent 绑定具体 policy 和业务工具。</p>
+        <ol>
+          <li><code>triage_agent</code> 只暴露 <code>transfer_to_flight_modification</code> 和 <code>transfer_to_lost_baggage</code>。</li>
+          <li><code>flight_modification</code> 继续判断用户要取消航班还是改签航班。</li>
+          <li><code>flight_cancel</code> 绑定退款、航班积分、人工升级、结案等工具。</li>
+          <li>任一专门 Agent 发现用户跑题，可以调用 <code>transfer_to_triage</code> 回到总分流。</li>
+          <li><code>context_variables</code> 注入 customer context 和 flight context，但不会暴露给模型填写。</li>
+        </ol>
+        <p class="why">为什么这么设计：Airline 示例把客服 SOP 拆成多个小 Agent，每个 Agent 只暴露自己阶段允许调用的工具。这样模型不用在巨大工具列表里选择，handoff 也天然变成权限收缩和任务聚焦。</p>
+        <pre><code class="language-python">def transfer_to_flight_modification():
+    return flight_modification
+
+def transfer_to_flight_cancel():
+    return flight_cancel
+
+def triage_instructions(context_variables):
+    customer_context = context_variables.get("customer_context")
+    flight_context = context_variables.get("flight_context")
+    return f"Route the user request. Customer: {customer_context}; flight: {flight_context}"
+
+triage_agent = Agent(
+    name="Triage Agent",
+    instructions=triage_instructions,
+    functions=[transfer_to_flight_modification, transfer_to_lost_baggage],
+)
+
+flight_modification = Agent(
+    name="Flight Modification Agent",
+    instructions="Determine whether the user wants to cancel or change their flight.",
+    functions=[transfer_to_flight_cancel, transfer_to_flight_change],
+    parallel_tool_calls=False,
+)</code></pre>
+      </section>
+
+      <section id="migration">
+        <h2>11. 与 OpenAI Agents Python 的迁移关系</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Swarm["OpenAI Swarm<br>experimental / educational"] --> Assets["可迁移资产<br>Agent instructions / Python functions / handoff topology / evals"]
+    Assets --> AgentsSDK["OpenAI Agents SDK<br>production-ready evolution"]
+    Assets --> Agent["Agent instructions -> Agents SDK Agent"]
+    Assets --> Tools["functions -> tools"]
+    Assets --> Handoff["返回 Agent 的 transfer 函数 -> handoff"]
+    Assets --> Context["context_variables -> session/context/deps"]
+    Assets --> Evals["execute_tools=False evals -> tracing/evals/guardrails 测试"]
+    AgentsSDK --> Prod["补齐生产能力<br>tracing / guardrails / MCP / sessions / realtime / hosted tools"]
+    Note["判断口径：<br>README 明确建议生产用例迁移到 OpenAI Agents SDK，Swarm 更适合学习和原型"] -.说明.-> Swarm
+        </div></div>
+        <table>
+          <tr><th>Swarm 资产</th><th>OpenAI Agents Python 对应物</th><th>迁移说明</th></tr>
+          <tr><td><code>Agent.instructions</code></td><td>Agent instructions</td><td>保留角色和任务说明，但补 guardrails 和输出约束</td></tr>
+          <tr><td><code>Agent.functions</code></td><td>tools</td><td>普通 Python 函数迁为 tool；补输入 schema、错误处理和权限</td></tr>
+          <tr><td>transfer 函数返回 Agent</td><td>handoff</td><td>从“工具返回 Agent 对象”迁为显式 handoff</td></tr>
+          <tr><td><code>context_variables</code></td><td>session / context / deps</td><td>明确哪些是用户上下文、运行依赖、会话状态</td></tr>
+          <tr><td><code>execute_tools=False</code> evals</td><td>tool choice / trace / evals</td><td>保留“只测路由”的思路，结合 tracing 做更细验证</td></tr>
+          <tr><td><code>run_and_stream</code></td><td>streaming / events</td><td>迁为 SDK 的事件流，区分 token、tool call、handoff、final result</td></tr>
+        </table>
+        <h3>能力差异表</h3>
+        <table>
+          <tr><th>能力维度</th><th>Swarm</th><th>OpenAI Agents Python</th><th>分享时怎么讲</th></tr>
+          <tr><td>项目定位</td><td>experimental / educational</td><td>production-ready agent SDK</td><td>Swarm 适合理解原理，Agents Python 适合落生产</td></tr>
+          <tr><td>Agent 定义</td><td><code>Agent</code> dataclass，字段很少</td><td>Agent + handoff + tool + guardrail 等更完整运行时概念</td><td>Swarm 的抽象更薄，学习成本低</td></tr>
+          <tr><td>Handoff</td><td>工具函数返回 <code>Agent</code></td><td>显式 handoff 能力</td><td>Swarm 展示 handoff 本质，SDK 补工程化表达</td></tr>
+          <tr><td>状态</td><td><code>messages</code> 和 <code>context_variables</code> 由调用方传入传出</td><td>session / context / tracing 等能力更完整</td><td>Swarm 是 stateless loop，生产要补状态治理</td></tr>
+          <tr><td>工具</td><td>Python function 反射成 Chat Completions tools</td><td>tools、hosted tools、MCP 等更丰富</td><td>Swarm 工具接入简单，但边界和权限较弱</td></tr>
+          <tr><td>Streaming</td><td><code>run_and_stream</code> 合并 chunk 和 tool call delta</td><td>事件流更细，便于 UI、trace、handoff 观察</td><td>Swarm 能看懂原理，SDK 更适合复杂前端</td></tr>
+          <tr><td>测试观</td><td><code>execute_tools=False</code> 先测 tool choice</td><td>evals、tracing、guardrails 组合验证</td><td>Swarm 的测试思路值得保留</td></tr>
+          <tr><td>生产能力</td><td>缺少 guardrails、tracing、MCP、session、realtime</td><td>补齐这些能力</td><td>README 建议生产迁移的核心原因</td></tr>
+        </table>
+      </section>
+
+      <section id="compare">
+        <h2>12. 对比分析</h2>
+        <table>
+          <tr><th>框架</th><th>与 Swarm 的关系</th></tr>
+          <tr><td>OpenAI Agents Python</td><td>Swarm 的生产级演进方向，补齐 handoff、guardrails、tracing、MCP、session、realtime 等能力</td></tr>
+          <tr><td>LangGraph</td><td>LangGraph 是显式状态图和 checkpoint runtime；Swarm 是无状态轻量 loop</td></tr>
+          <tr><td>AutoGen</td><td>AutoGen 更偏多 Agent 消息运行时和团队对话；Swarm 更强调 handoff 作为工具返回值</td></tr>
+          <tr><td>CrewAI</td><td>CrewAI 用角色、任务、流程表达协作；Swarm 用 Agent + function + handoff 最小抽象表达</td></tr>
+          <tr><td>PydanticAI</td><td>PydanticAI 强类型输出和 deps 更强；Swarm schema 主要来自函数签名反射</td></tr>
+          <tr><td>Semantic Kernel</td><td>SK 用 KernelPlugin/KernelFunction 做应用内工具容器；Swarm 用 Python functions 直接变 tools</td></tr>
+        </table>
+      </section>
+
+      <section id="limits">
+        <h2>13. 局限性</h2>
+        <ol>
+          <li>README 已明确它是 experimental / educational，不建议生产使用。</li>
+          <li>无内置持久 session、memory、checkpoint、权限、审计、tracing、guardrails。</li>
+          <li><code>function_to_json</code> 的类型映射很简单，复杂 schema、嵌套对象、枚举、Pydantic 模型都不是重点。</li>
+          <li>handoff 依赖工具函数返回 <code>Agent</code>，表达力简洁，但缺少显式图结构和可视化状态。</li>
+          <li>错误处理偏轻量，生产环境需要补超时、重试、幂等、工具副作用治理。</li>
+        </ol>
+      </section>
+
+      <section id="ideas">
+        <h2>14. 核心设计思想</h2>
+        <div class="grid2">
+          <div class="card"><strong>Minimal Primitives</strong><br>用 Agent 和 handoff 解释多 Agent 协作。</div>
+          <div class="card"><strong>Handoff as Function Result</strong><br>Agent 切换不是图边，而是工具函数返回另一个 Agent。</div>
+          <div class="card"><strong>Stateless by Default</strong><br>messages 和 context variables 由调用方传入和带回。</div>
+          <div class="card"><strong>Functions as Tools</strong><br>Python 函数签名和 docstring 被反射成 Chat Completions tools。</div>
+          <div class="card"><strong>Testable Routing</strong><br><code>execute_tools=False</code> 让测试可以只验证工具选择和路由。</div>
+          <div class="card"><strong>Educational over Production</strong><br>源码短、概念清楚，生产能力交给 OpenAI Agents SDK。</div>
+        </div>
+      </section>
+
+      <section id="reading-route">
+        <h2>15. 源码阅读路线</h2>
+        <p>推荐按“先模型、再转换、再循环、最后看案例”的顺序读。不要一开始就陷进所有 examples，先把 <code>core.py</code> 的主循环串起来。</p>
+        <table>
+          <tr><th>顺序</th><th>文件 / 入口</th><th>重点看什么</th><th>看完应该理解什么</th></tr>
+          <tr><td>1</td><td><code>swarm/types.py</code></td><td><code>Agent</code>、<code>Response</code>、<code>Result</code></td><td>Swarm 的全部核心状态都在这三个对象里</td></tr>
+          <tr><td>2</td><td><code>swarm/util.py:function_to_json</code></td><td>函数签名和 docstring 如何变成 tool schema</td><td>为什么普通函数能被模型选择调用</td></tr>
+          <tr><td>3</td><td><code>swarm/core.py:get_chat_completion</code></td><td>system prompt、tools、tool_choice 如何组装</td><td>Agent 如何变成一次 Chat Completions 请求</td></tr>
+          <tr><td>4</td><td><code>swarm/core.py:handle_tool_calls</code></td><td>函数映射、参数解析、上下文注入、Result 归一化</td><td>tool call 如何落到本地 Python 函数</td></tr>
+          <tr><td>5</td><td><code>swarm/core.py:run</code></td><td>while loop、tool message、active agent 切换、max_turns</td><td>Swarm 主循环如何推进多轮对话</td></tr>
+          <tr><td>6</td><td><code>run_and_stream</code> / <code>merge_chunk</code></td><td>token delta 和 tool call delta 如何合并</td><td>streaming 为什么要先展示 UI，再凑齐工具调用</td></tr>
+          <tr><td>7</td><td><code>examples/basic</code></td><td>bare minimum、function calling、context variables、handoff</td><td>每个机制的最小可运行形态</td></tr>
+          <tr><td>8</td><td><code>examples/triage_agent</code> / <code>examples/airline</code></td><td>transfer 函数、客服路由、function evals</td><td>Swarm 如何表达业务分流和可测试路由</td></tr>
+        </table>
+      </section>
+
+      <section id="share">
+        <h2>16. 分享口径</h2>
+        <p>开场可以说：Swarm 的价值不是“又一个大框架”，而是用很少代码把多 Agent 协作最核心的问题讲清楚：谁当前负责、能调用哪些函数、什么时候把对话交给另一个 Agent。</p>
+        <ol>
+          <li><strong>Agent 主线：</strong>instructions + functions 如何变成一次 Chat Completions 调用。</li>
+          <li><strong>run loop 主线：</strong>模型返回 tool_calls 后，Swarm 如何执行工具、写回 tool message、继续下一轮。</li>
+          <li><strong>handoff 主线：</strong>函数返回 Agent，Swarm 就切换 active agent；这既是最巧妙也最轻量的设计。</li>
+        </ol>
+        <p class="quote">总结句：Swarm 适合用来理解 Agent handoff 的原理；真正做生产项目，应把这些概念迁移到 OpenAI Agents Python 或其他具备 session、tracing、guardrails、checkpoint 的运行时里。</p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: "loose",
+      theme: "base",
+      themeVariables: {
+        fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Microsoft YaHei, sans-serif",
+        primaryColor: "#eef6ff",
+        primaryTextColor: "#1f2937",
+        primaryBorderColor: "#93b8e8",
+        lineColor: "#6b7280",
+        secondaryColor: "#ecfdf5",
+        tertiaryColor: "#fff7ed",
+        clusterBkg: "#ffffff",
+        clusterBorder: "#d9e2ef"
+      }
+    });
+  </script>
+</body>
+</html>

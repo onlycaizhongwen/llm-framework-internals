@@ -1,0 +1,11 @@
+flowchart TB
+    Start["员工提交报销问题<br>发票 + 金额 + 城市"] --> Intake["Step 1 识别票据与费用类型"]
+    Intake --> Policy["Step 2 检索制度<br>VectorSearch search function"]
+    Policy --> Check["Step 3 调用 ExpensePolicyPlugin.check_limit"]
+    Check --> Decision{"是否超限 / 高风险?"}
+    Decision -->|"否"| Draft["Step 4 生成报销建议"]
+    Decision -->|"是"| Approval["Step 4 触发人工审批事件"]
+    Approval --> Resume["外部审批结果进入 on_input_event"]
+    Resume --> Draft
+    Draft --> Notify["Step 5 通知员工并记录审计"]
+    Note["为什么不用纯 AgentGroupChat：<br>报销审批有固定业务拓扑、人工事件和状态恢复，Process 更适合表达"] -.说明.-> Approval

@@ -1,0 +1,11 @@
+flowchart TB
+    Parent["Chat LlmAgent<br>协调者"] --> SubAgents["sub_agents<br>single_turn 或 task mode"]
+    SubAgents --> Build["LlmAgent 初始化时包装子 Agent"]
+    Build --> Single["_SingleTurnAgentTool<br>适合无状态一次性子任务"]
+    Build --> Task["_TaskAgentTool<br>多轮任务委派，占用独立 isolation_scope"]
+    Parent --> Model["模型选择调用哪个工具"]
+    Model --> Call["function_call 带 task brief"]
+    Call --> ToolCtx["ToolContext.run_node<br>按 function_call_id 构造 branch/run_id"]
+    ToolCtx --> Child["子 Agent 作为 node 运行<br>可产生自己的 Event、工具调用、HITL"]
+    Child --> Result["结果回到父 Agent<br>single_turn 直接结果，task 可延迟完成"]
+    Result --> Parent

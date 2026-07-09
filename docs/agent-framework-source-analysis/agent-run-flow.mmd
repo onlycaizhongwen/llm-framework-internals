@@ -1,0 +1,16 @@
+flowchart TB
+    Start["用户输入 / 上游系统消息"] --> AgentRun["Agent.run / AIAgent.RunAsync<br>统一进入 Agent 执行"]
+    AgentRun --> Merge["合并 options<br>模型参数、工具、middleware、session、response_format"]
+    Merge --> Context["构建上下文<br>AgentContext / ChatContext / FunctionInvocationContext"]
+    Context --> MW1["Agent middleware 前置<br>为什么：可做鉴权、注入上下文、短路、审计"]
+    MW1 --> Chat["ChatClient get_response / stream_response"]
+    Chat --> Provider["Provider adapter 调模型<br>Foundry / OpenAI / Azure / 其他 provider"]
+    Provider --> Decide{"模型返回什么"}
+    Decide -->|"final answer"| Final["AgentResponse<br>写入 session / 返回业务方"]
+    Decide -->|"tool call"| Tool["FunctionInvocationLayer<br>并发或顺序执行工具"]
+    Tool --> Approval{"需要审批或安全拦截?"}
+    Approval -->|"是"| Pause["function_approval_request<br>暂停等待人或策略响应"]
+    Approval -->|"否"| ToolResult["function result 写回消息"]
+    ToolResult --> Chat
+    Decide -->|"streaming update"| Stream["AgentResponseUpdate<br>边生成边向 UI / API 输出"]
+    Stream --> Final

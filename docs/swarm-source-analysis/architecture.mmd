@@ -1,0 +1,16 @@
+flowchart TB
+    App["业务代码 / Demo Loop<br>调用 client.run"] --> Swarm["Swarm<br>轻量客户端编排器"]
+    Swarm --> Agent["Agent<br>name / model / instructions / functions / tool_choice"]
+    Agent --> Prompt["System Prompt<br>instructions 字符串或函数<br>为什么：切换 Agent 时只切换系统提示，不重建线程"]
+    Agent --> Tools["Python functions -> JSON tools<br>function_to_json 反射签名"]
+    Swarm --> Chat["OpenAI Chat Completions API<br>stateless messages in / messages out"]
+    Chat --> Decision{"模型返回什么?"}
+    Decision -->|"普通回答"| Response["Response<br>messages / active agent / context_variables"]
+    Decision -->|"tool_calls"| ToolExec["handle_tool_calls<br>执行 Python 函数"]
+    ToolExec --> Result["Result 归一化<br>str / Result / Agent"]
+    Result -->|"返回 Agent"| Handoff["Handoff<br>切换 active_agent"]
+    Result -->|"返回 context_variables"| Context["更新上下文变量"]
+    Handoff --> Chat
+    Context --> Chat
+    Swarm --> Stream["run_and_stream<br>merge_chunk 合并 delta 和 tool_calls"]
+    Note["为什么这么设计：<br>Swarm 用最少抽象演示多 Agent 协作，核心是函数返回 Agent 实现 handoff"] -.说明.-> Handoff

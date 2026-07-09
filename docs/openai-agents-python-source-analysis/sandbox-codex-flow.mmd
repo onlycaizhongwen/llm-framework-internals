@@ -1,0 +1,13 @@
+flowchart TB
+    Agent["SandboxAgent<br>声明 default_manifest、capabilities、run_as"] --> Prepare["runtime_agent_preparation<br>检查 capability 依赖"]
+    Prepare --> Tools["capability.tools<br>filesystem、shell、apply_patch、skills、memory"]
+    Prepare --> Prompt["build_sandbox_instructions<br>为什么：把工作区规则和能力说明注入模型"]
+    Prepare --> Context["prepare_sandbox_input<br>让 capability 处理上下文"]
+    Tools --> Session["Sandbox session<br>受控工作区和用户身份 run_as"]
+    Session --> Work["代码修改、文件分析、命令执行、补丁应用"]
+    Agent --> Codex["experimental codex_tool<br>把 Codex CLI 封装成 FunctionTool"]
+    Codex --> Thread{"是否有 thread_id"}
+    Thread -->|有| ResumeThread["resume_thread<br>延续同一代码任务上下文"]
+    Thread -->|无| StartThread["start_thread<br>新建 Codex 任务线程"]
+    ResumeThread --> Stream["run_streamed + on_stream<br>为什么：保留进度事件并汇总结果"]
+    StartThread --> Stream

@@ -1,0 +1,13 @@
+flowchart TB
+    Caller["外部调用方<br>HTTP / Console / Orchestration"] --> Proxy["DurableAIAgentProxy / DurableAIAgent"]
+    Proxy --> Entity["AgentEntity<br>每个 agent session 映射到一个 Durable Entity"]
+    Entity --> State["DurableAgentState<br>完整 conversation history、pending requests、checkpoint"]
+    Entity --> RealAgent["真实 AIAgent / Python Agent<br>加载注册名对应的 agent"]
+    RealAgent --> Tools["工具 / MCP / 长任务"]
+    Tools --> Pending{"长任务或人工输入?"}
+    Pending -->|"是"| Persist["持久化状态并返回 continuation / request"]
+    Pending -->|"否"| Response["AgentResponse"]
+    Persist --> Resume["后续调用恢复 entity state"]
+    Resume --> RealAgent
+    Response --> Caller
+    Azure["Azure Functions Hosting<br>自动生成 /api/agents/{agentName}/run"] --> Proxy

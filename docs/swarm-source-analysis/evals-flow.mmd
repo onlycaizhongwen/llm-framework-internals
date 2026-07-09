@@ -1,0 +1,7 @@
+flowchart TB
+    Query["测试 query"] --> Run["client.run(..., execute_tools=False)"]
+    Run --> Model["模型只返回 tool_calls<br>不真正执行工具"]
+    Model --> Assert["断言 tool_calls 名称 / 数量"]
+    Assert --> Pass["通过：路由或工具选择符合预期"]
+    Assert --> Fail["失败：prompt / tool description / agent instructions 需要调整"]
+    Note["为什么这么设计：<br>Swarm 强调可测试，execute_tools=False 让测试能只验证模型是否选对工具"] -.说明.-> Run

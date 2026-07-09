@@ -1,0 +1,13 @@
+flowchart TB
+    Builder["ProcessBuilder<br>定义流程名称、版本、步骤"] --> Step["add_step<br>注册 ProcessStepBuilder"]
+    Step --> Event["on_input_event / on_event<br>声明事件入口"]
+    Event --> Edge["link_to<br>把事件连接到目标 step function"]
+    Edge --> Build["build<br>生成 KernelProcess"]
+    Build --> Metadata["State Metadata<br>校验、迁移、按版本恢复状态"]
+    Metadata --> Runtime["Process Runtime<br>事件驱动执行"]
+    Runtime --> StepRun["Step Function 执行<br>可调用 Kernel / Plugin / 外部服务"]
+    StepRun --> Emit["产生事件或函数结果"]
+    Emit --> Route["按 Edge 路由到下一步"]
+    Route --> Runtime
+    Emit --> End["结束事件 / 输出结果"]
+    Note["为什么这么设计：<br>Agent loop 适合模型自主决策；Process 适合业务已知拓扑、需要恢复和版本迁移的流程"] -.说明.-> Builder

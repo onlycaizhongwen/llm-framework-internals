@@ -1,0 +1,12 @@
+flowchart TB
+    Start["Runner.run_async<br>传入 user_id、session_id、new_message、invocation_id"] --> Session["获取或创建 Session<br>为什么：所有 Event 和状态都落到会话历史"]
+    Session --> RootType{"root 是 LlmAgent 还是 Workflow/BaseNode"}
+    RootType -->|"LlmAgent chat"| AgentPath["选择当前 Agent<br>恢复场景会找未结束的子 Agent"]
+    RootType -->|"Workflow / BaseNode"| NodePath["进入 _run_node_async<br>统一 node runtime"]
+    AgentPath --> Ctx["构建 InvocationContext<br>session、branch、run_config、services、plugins"]
+    NodePath --> Ctx
+    Ctx --> Exec["执行 ctx.agent.run_async 或 node.run<br>事件流不断产生"]
+    Exec --> Plugin["plugin 包裹运行<br>before/after/error callback 与 telemetry"]
+    Plugin --> Persist["append_event 写回 session<br>state_delta、agent_state、tool response、node output"]
+    Persist --> Compact["可选事件压缩<br>长会话滑动窗口压缩"]
+    Compact --> Done["返回 Event 流给 CLI/Web/API 客户端"]

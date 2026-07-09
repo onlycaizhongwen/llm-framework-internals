@@ -1,0 +1,17 @@
+flowchart TB
+    Source["函数来源"] --> Decorator["Python @kernel_function<br>写入 __kernel_function__ 和参数元数据"]
+    Source --> Attribute[".NET [KernelFunction]<br>反射扫描方法"]
+    Source --> Prompt["Prompt Template<br>CreateFromPrompt / from_prompt"]
+    Source --> External["OpenAPI / MCP / VectorSearch<br>外部能力包装"]
+    Decorator --> MethodFunction["KernelFunctionFromMethod"]
+    Attribute --> MethodFunction
+    Prompt --> PromptFunction["KernelFunctionFromPrompt"]
+    External --> SearchFunction["可搜索/外部工具函数"]
+    MethodFunction --> Plugin["KernelPlugin<br>按 plugin_name 聚合"]
+    PromptFunction --> Plugin
+    SearchFunction --> Plugin
+    Plugin --> Kernel["Kernel.Plugins"]
+    Kernel --> Metadata["Function metadata<br>name / plugin_name / description / parameters / return"]
+    Metadata --> Model["模型侧工具 schema<br>为什么：LLM 不关心实现，只需要可调用协议"]
+    Model --> Call["tool call"]
+    Call --> KernelInvoke["Kernel 按 plugin/function 路由回真实实现"]

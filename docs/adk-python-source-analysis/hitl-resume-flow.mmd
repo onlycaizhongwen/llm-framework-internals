@@ -1,0 +1,14 @@
+flowchart TB
+    Node["FunctionNode / Workflow Node"] --> NeedUser["需要用户输入或凭证"]
+    NeedUser --> Request["yield RequestInput<br>包含 interrupt_id、message、payload、response_schema"]
+    Request --> Event["create_request_input_event<br>转成 adk_request_input function_call"]
+    Event --> Long["Event.long_running_tool_ids<br>为什么：客户端知道 run 已暂停且等待哪个 id"]
+    Long --> UI["ADK Web / CLI / API 客户端展示给用户"]
+    UI --> Response["用户返回 FunctionResponse<br>id 匹配 interrupt_id"]
+    Response --> Runner["Runner.run_async(invocation_id=...)"]
+    Runner --> Rehydrate["rehydration 扫描 session events<br>找 interrupt_owner、resolved_responses、schema"]
+    Rehydrate --> NodeAgain{"rerun_on_resume?"}
+    NodeAgain -->|"True"| Rerun["节点重跑<br>ctx.resume_inputs 提供用户输入"]
+    NodeAgain -->|"False"| Complete["用用户输入作为节点输出<br>避免重复执行副作用"]
+    Rerun --> Continue["Workflow 继续调度下游节点"]
+    Complete --> Continue

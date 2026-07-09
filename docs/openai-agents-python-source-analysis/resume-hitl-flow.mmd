@@ -1,0 +1,10 @@
+flowchart TB
+    Call["模型请求工具"] --> NeedApproval{"工具需要审批吗"}
+    NeedApproval -->|否| Execute["直接执行工具<br>进入 ToolExecutionPlan"]
+    NeedApproval -->|是| Approval["ToolApprovalItem<br>记录 raw tool call、tool_name、namespace"]
+    Approval --> Interrupt["NextStepInterruption<br>为什么：暂停 run，但保留可恢复状态"]
+    Interrupt --> Human["人审或策略审批<br>approve / reject / always approve"]
+    Human --> Resume["Runner 用 RunState 恢复<br>读取 last_processed_response 和 generated_items"]
+    Resume --> Plan["build_plan_for_resume_turn<br>为什么：只补执行已批准部分，保留未决审批"]
+    Plan --> Execute
+    Execute --> Continue["继续 run loop<br>可能 final output、handoff 或再次 interruption"]

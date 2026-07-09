@@ -1,0 +1,20 @@
+flowchart TB
+    Start["Runner.run / run_sync / run_streamed"] --> Prepare["准备上下文<br>RunContext、RunConfig、Session、Trace"]
+    Prepare --> InputGuard["输入 guardrail<br>可并行，也可先于模型执行"]
+    InputGuard --> Turn["单轮 turn<br>收集 instructions、prompt、tools、handoffs、output schema"]
+    Turn --> ModelCall["调用模型<br>Responses / Chat Completions / WebSocket"]
+    ModelCall --> Process["解析 ModelResponse<br>message、reasoning、tool call、handoff、final output"]
+    Process --> Decision{"下一步是什么"}
+    Decision -->|"final output"| OutputGuard["输出 guardrail + final hooks"]
+    OutputGuard --> Done["保存 session<br>返回 RunResult"]
+    Decision -->|"handoff"| Handoff["切换 current_agent<br>构造下一位 agent 输入"]
+    Handoff --> Turn
+    Decision -->|"tool calls"| Plan["ToolExecutionPlan<br>函数、computer、shell、patch、MCP approval 分组"]
+    Plan --> Interrupt{"需要人工审批或 MCP approval?"}
+    Interrupt -->|"是"| Pause["NextStepInterruption<br>返回可恢复 RunState"]
+    Interrupt -->|"否"| Exec["并发/顺序执行工具<br>生成 ToolCallOutputItem"]
+    Exec --> Turn
+    Decision -->|"run again"| Turn
+    Turn --> Limit{"超过 max_turns?"}
+    Limit -->|"是"| Error["MaxTurnsExceeded / error handler"]
+    Limit -->|"否"| ModelCall

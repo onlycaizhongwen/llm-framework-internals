@@ -17,6 +17,9 @@
 | LangChain | `sources/langchain` | `eb2dabb8b7102fbedb33016dcf10fe475efde88e` | `docs/langchain-source-analysis/index.html` | `docs/langchain-source-analysis/index.md` | `core`、`langchain_v1`、`partners`、`classic` 边界；Agent middleware、provider adapter、RAG、classic 迁移关系 |
 | LangGraph | `sources/langgraph` | `d57a74f950b87bfb9cb51240cc8dccf34b5edfaa` | `docs/langgraph-source-analysis/index.html` | `docs/langgraph-source-analysis/index.md` | StateGraph、Pregel 执行模型、checkpoint、中断恢复、prebuilt Agent |
 | Spring AI Alibaba | `sources/spring-ai-alibaba` | `4a823250415e7a42deb650410edf6948c35875bd` | `docs/spring-ai-alibaba-source-analysis/index.html` | `docs/spring-ai-alibaba-source-analysis/index.md` | Java / Spring Boot Agentic AI、Graph Core、ReactAgent、FlowAgent、Hook / Interceptor、Checkpoint、Nacos、A2A、MCP、Observation |
+| Google ADK Python | `sources/adk-python` | `2de8a53525261a0dcf53588fbbb5ebd7d4c3a9c2` | `docs/adk-python-source-analysis/index.html` | `docs/adk-python-source-analysis/index.md` | Google Agent Development Kit 2.0、Agent / Workflow / Runner、Event / Session、Task API、HITL / Resume、ADK Web / API Server、Evaluation、Gemini / Vertex / Google Cloud 生态 |
+| Microsoft Agent Framework | `sources/agent-framework` | `23bfa4957521c50326ad68daee93c9f5b251f38c` | `docs/agent-framework-source-analysis/index.html` | `docs/agent-framework-source-analysis/index.md` | Python / .NET 生产级 Agent / Workflow 框架、Agent / AIAgent、ChatClient / provider adapter、middleware、tools、Workflow / orchestration、Durable Agents、Azure Functions、OpenTelemetry、Evaluation |
+| Semantic Kernel | `sources/semantic-kernel` | `main codeload snapshot, short SHA 83bffe1, full SHA unavailable due API rate limit` | `docs/semantic-kernel-source-analysis/index.html` | `docs/semantic-kernel-source-analysis/index.md` | Microsoft 应用内 AI Kernel：Kernel / Plugin / KernelFunction / FunctionChoiceBehavior / AgentGroupChat / Process Framework / Vector Search，并说明与 Microsoft Agent Framework 的后继迁移关系 |
 | CrewAI | `sources/crewai` | `2b90117e887ef68a22ccf9552a58ffaf96de1fc4` | `docs/crewai-source-analysis/index.html` | `docs/crewai-source-analysis/index.md` | Crew / Agent / Task 编排、Flow 流程、工具调用、与 LangGraph 对比 |
 | AutoGen | `sources/autogen` | `027ecf0a379bcc1d09956d46d12d44a3ad9cee14` | `docs/autogen-source-analysis/index.html` | `docs/autogen-source-analysis/index.md` | AssistantAgent、消息运行时、GroupChat、团队协作范式、与 LangGraph 对比 |
 | mem0 | `sources/mem0` | `cd79fa8914b5b1cf66daacc957d826065df57df8` | `docs/mem0-source-analysis/index.html` | `docs/mem0-source-analysis/index.md` | 记忆抽取、向量检索、图谱记忆、生命周期、与 LangGraph 组合方式 |
@@ -27,6 +30,8 @@
 | LlamaIndex | `sources/llama_index` | `7fd33e00a8947183327e75aef14687c499d5c150` | `docs/llama-index-source-analysis/index.html` | `docs/llama-index-source-analysis/index.md` | RAG 数据框架、IngestionPipeline、VectorStoreIndex、RetrieverQueryEngine、StorageContext、AgentWorkflow |
 | Haystack | `sources/haystack` | `08e8885794687bd60ea5a59a672a428e7528b48a` | `docs/haystack-source-analysis/index.html` | `docs/haystack-source-analysis/index.md` | Component、Pipeline、AsyncPipeline、DocumentStore、Hybrid RAG、Agent、ToolInvoker、Serialization、Breakpoint、Tracing |
 | PydanticAI | `sources/pydantic-ai` | `6a6d83d95d9c1fc37fcd808b3633241d7d2656ce` | `docs/pydantic-ai-source-analysis/index.html` | `docs/pydantic-ai-source-analysis/index.md` | typed Agent、Pydantic schema、tool/function schema、provider adapter、pydantic_graph、pydantic_evals、MCP、Logfire/OTel |
+| OpenAI Agents Python | `sources/openai-agents-python` | `158b2f489ecf2f9aeea7a84cb53cc03fe930daea` | `docs/openai-agents-python-source-analysis/index.html` | `docs/openai-agents-python-source-analysis/index.md` | 轻量多 Agent SDK、Agent / Runner、handoff、guardrail、tools、MCP、session、tracing、realtime、sandbox、OpenAI Responses / WebSocket |
+| OpenAI Swarm | `sources/swarm` | `main codeload snapshot, short SHA 6af0b4c, full SHA unavailable` | `docs/swarm-source-analysis/index.html` | `docs/swarm-source-analysis/index.md` | experimental / educational 多 Agent 编排原型：Agent、function tools、handoff、context_variables、streaming、execute_tools=False evals，以及向 OpenAI Agents Python 的迁移关系 |
 | Agno | `sources/agno` | `02f13bb182fe2afdf8a6ceea80b36b14d14b5f38` | `docs/agno-source-analysis/index.html` | `docs/agno-source-analysis/index.md` | Agent platform SDK、Agent / Team / Workflow / AgentOS、生产 API、MCP、审批、记忆、知识、调度、与 LangGraph / CrewAI / PydanticAI / Dify 对比 |
 | n8n | `sources/n8n` | `b000bbd2773d402ce879434b42a5b9fb8f7f106a` | `docs/n8n-source-analysis/index.html` | `docs/n8n-source-analysis/index.md` | 可视化工作流平台、WorkflowExecute、ActiveWorkflowManager、WebhookService、Queue/Worker、节点和凭证生态 |
 | Dify | `sources/dify` | `main codeload snapshot, version 1.15.0, commit SHA unavailable` | `docs/dify-source-analysis/index.html` | `docs/dify-source-analysis/index.md` | LLM 应用开发平台、AI Workflow、RAG Pipeline、Agent v2、Model Provider、Plugin、dify-agent、graphon runtime |
@@ -85,6 +90,9 @@ git submodule update --init --recursive
 
 - 补充 LangChain 专题分析：Agent middleware、provider adapter、RAG 细节、classic 迁移关系。
 - 新增 Spring AI Alibaba 源码分析：Java / Spring Boot Agentic AI 框架、Graph Core 状态图运行时、ReactAgent、FlowAgent、上下文工程 Hook / Interceptor、Checkpoint、Nacos Config、A2A、MCP 和 Observation，并已融入横向总览。
+- 新增 Google ADK Python 源码分析：ADK 2.0 Agent / Workflow / Runner 主链路、Event / Session 事件模型、Workflow 图式运行时、RequestInput HITL / Resume、Task API / AgentTool、ADK Web / API Server、Evaluation 评测闭环，以及与 LangGraph / OpenAI Agents Python / Agno / Dify 的边界。
+- 新增 Microsoft Agent Framework 源码分析：Python / .NET 双语 Agent runtime、AIAgent / AgentResponse、ChatClient provider adapter、middleware/context/session、tool approval/security、Workflow / orchestration、Durable Agents / Azure Functions hosting、OpenTelemetry / Evaluation，并已融入横向总览。
+- 新增 Semantic Kernel 源码分析：Kernel 应用内 AI 容器、Plugin / KernelFunction 工具化、FunctionChoiceBehavior 自动工具调用、ChatCompletionAgent / AgentGroupChat、Process Framework、Vector Search / RAG 工具化，以及与 Microsoft Agent Framework 的后继迁移关系。
 - 新增 Headroom 源码分析：上下文压缩、代理网关、MCP / CCR 适配、Rust 压缩核心、应用场景和对比分析。
 - 新增 Letta 源码分析：legacy Agent server、AgentState、Memory 分层、工具调用、Provider Adapter、Streaming / Run / Step。
 - 新增 LlamaIndex 源码分析：core / integrations 边界、ingestion、index / retriever / query engine、StorageContext、AgentWorkflow。
@@ -93,6 +101,8 @@ git submodule update --init --recursive
 - 新增 Dify 源码分析：LLM 应用平台架构、Workflow App 主流程、graphon 节点运行时、RAG Pipeline、Agent v2 / dify-agent、Plugin / Model Provider 治理、真实客服场景和与 LangGraph / n8n 对比。
 - 新增 Hermes Agent 项目工程专题：长期个人 Agent 产品、多入口复用、Provider Adapter、工具执行安全边界、SessionDB 检索、Gateway 长任务恢复、Plugin / Skill / MCP 边界，并补充分享总览图、阅读 checklist 和演讲稿。
 - 新增 Agno 源码分析：Agent platform SDK、Agent / Team / Workflow / AgentOS 四层架构、Agent 主运行链路、Team 协作模式、Workflow HITL、AgentOS 服务化、审批/记忆/知识、真实应用场景，以及与 LangGraph / CrewAI / PydanticAI / Dify 的对比。
+- 新增 OpenAI Agents Python 源码分析：Agent / Runner 主循环、handoff 工具化、guardrail tripwire、ToolExecutionPlan、MCP approval、session / compaction、tracing spans、RealtimeRunner、SandboxAgent，以及与 LangGraph / PydanticAI / Agno / Dify 的边界。
+- 新增 OpenAI Swarm 源码分析：experimental / educational 多 Agent 编排原型、Agent / Result / Response、Chat Completions run loop、function tools、handoff as function result、context_variables、streaming、execute_tools=False evals，以及向 OpenAI Agents Python 的迁移关系。
 - 新增横向总览材料：总览对比矩阵、框架选型指南、组合架构专题、源码设计范式、真实案例合集。
 - README 更新为总导航页，方便直接从 GitHub 进入 HTML / Markdown / 源码目录。
 

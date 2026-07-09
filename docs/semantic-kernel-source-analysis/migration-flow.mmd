@@ -1,0 +1,11 @@
+flowchart TB
+    SK["Semantic Kernel 存量工程"] --> Keep["保留价值<br>KernelFunction / Plugin / Prompt Template / RAG Search"]
+    SK --> AgentNeed{"是否需要生产级多 Agent / Durable / A2A / MCP 互操作?"}
+    AgentNeed -->|"暂不需要"| Continue["继续使用 SK<br>适合应用内 AI kernel、插件化函数和轻量 Agent"]
+    AgentNeed -->|"需要"| MAF["迁移到 Microsoft Agent Framework"]
+    Keep --> Tools["迁移为 MAF Tools / AIFunctions<br>函数签名和 schema 可复用"]
+    Keep --> Context["迁移 prompt 与上下文策略<br>重新接入 middleware/session"]
+    MAF --> Workflow["复杂编排迁移到 Workflow / Durable Agents"]
+    MAF --> Provider["模型接入迁移到 ChatClient / Provider Adapter"]
+    MAF --> Ops["补齐生产治理<br>checkpoint、observability、evaluation、approval"]
+    Warning["判断口径：README 已明确 MAF 是 SK 的 enterprise-ready successor；不要把两者讲成完全平行的新旧框架"] -.提醒.-> MAF

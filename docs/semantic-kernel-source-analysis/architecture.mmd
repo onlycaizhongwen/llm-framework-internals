@@ -1,0 +1,17 @@
+flowchart TB
+    App["业务应用入口<br>Python 服务 / .NET 服务 / Copilot 插件 / 企业助手"] --> Kernel["Kernel<br>AI 应用容器"]
+    Kernel --> Services["AI Services<br>ChatCompletion / Embedding / Text / Audio<br>为什么：把模型供应商接入点集中管理"]
+    Kernel --> Selector["AI Service Selector<br>为什么：同一个 Kernel 可按 settings 选择不同模型服务"]
+    Kernel --> Plugins["KernelPluginCollection<br>插件集合"]
+    Plugins --> Functions["KernelFunction<br>Prompt 函数 / Native 方法 / OpenAPI / MCP / Search"]
+    Kernel --> Filters["Filters<br>Function / Prompt / AutoFunctionInvocation<br>为什么：把审计、鉴权、重试、改写放在横切链路"]
+    Kernel --> Arguments["KernelArguments / ExecutionSettings<br>为什么：单次调用可覆盖模型参数、工具策略和上下文变量"]
+    Functions --> FCB["FunctionChoiceBehavior<br>Auto / Required / None<br>为什么：控制模型是否能自动选择并调用工具"]
+    Kernel --> Agents["Agent 层<br>ChatCompletionAgent / AgentGroupChat"]
+    Agents --> Group["SelectionStrategy + TerminationStrategy<br>为什么：多 Agent 需要选择谁发言、何时停止"]
+    Kernel --> Process["Process Framework<br>ProcessBuilder / Step / Event Edge"]
+    Process --> State["State Metadata / Version Migration<br>为什么：业务流程需要恢复、升级和事件驱动"]
+    Kernel --> Vector["Vector Store / Vector Search<br>Collection / SearchOptions / Search Function"]
+    Vector --> RagTool["检索函数工具化<br>为什么：RAG 最终也要变成模型可调用的 KernelFunction"]
+    SK["Semantic Kernel 现状"] --> MAF["Microsoft Agent Framework<br>README 明确为 enterprise-ready successor"]
+    Kernel -.迁移方向.-> MAF

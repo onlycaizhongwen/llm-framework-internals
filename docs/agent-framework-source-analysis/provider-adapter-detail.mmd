@@ -1,0 +1,10 @@
+flowchart TB
+    Agent["Agent / Workflow<br>只关心 messages、tools、options、response"] --> Core["Core ChatClient Protocol<br>统一 get_response / stream / default_options"]
+    Core --> ProviderPkg["Provider 包<br>OpenAI / Azure / Foundry / Anthropic / Gemini"]
+    ProviderPkg --> Normalize["适配层转换<br>模型名、response_format、tool schema、stream event"]
+    Normalize --> Capability{"能力协议检测<br>为什么：不同供应商能力不完全一致"}
+    Capability --> Native["Native hosted tools<br>web search / code interpreter / file search / MCP / shell"]
+    Capability --> Function["普通函数工具<br>FunctionTool / schema / approval"]
+    Native --> Model["真实模型或托管 Agent"]
+    Function --> Model
+    Model --> Finalize["ChatResponse / AgentResponse<br>把 provider 返回重新收敛成框架对象"]

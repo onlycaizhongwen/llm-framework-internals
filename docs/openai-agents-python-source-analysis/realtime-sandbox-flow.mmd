@@ -1,0 +1,10 @@
+flowchart LR
+    SandboxAgent["SandboxAgent<br>继承 Agent"] --> Manifest["Manifest<br>GitRepo、文件、挂载、制品"]
+    SandboxAgent --> Cap["Capabilities<br>filesystem、shell、skills、memory、compaction"]
+    Runner["Runner + RunConfig.sandbox"] --> Runtime["SandboxRuntime<br>创建/复用 sandbox session"]
+    Runtime --> Tools["模型可见工具<br>shell、read/write、apply_patch、view_image"]
+    Tools --> Workspace["受控工作区<br>长任务、文件修改、命令执行"]
+    RealtimeAgent["RealtimeAgent"] --> RealtimeRunner["RealtimeRunner"]
+    RealtimeRunner --> Session["RealtimeSession<br>持久 WebSocket 连接"]
+    Session --> Voice["双向音频/消息<br>工具、guardrail、handoff"]
+    Voice --> App["语音客服、实时助手、互动应用"]

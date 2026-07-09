@@ -1,0 +1,15 @@
+flowchart TB
+    User["用户输入 / ChatHistory"] --> Agent["ChatCompletionAgent"]
+    Agent --> Settings["PromptExecutionSettings<br>如果未设置则使用默认 FunctionChoiceBehavior.Auto"]
+    Settings --> Kernel["Kernel + Plugins + Services"]
+    Kernel --> Model["ChatCompletionService"]
+    Model --> ToolOrAnswer{"模型输出"}
+    ToolOrAnswer -->|"tool call"| Tool["KernelFunction 自动调用<br>受 max auto invoke attempts 控制"]
+    Tool --> Model
+    ToolOrAnswer -->|"assistant message"| Thread["ChatHistoryAgentThread<br>写入对话线程"]
+    Thread --> Group["AgentGroupChat"]
+    Group --> Select["SelectionStrategy.next<br>选择下一个 Agent"]
+    Select --> Agent
+    Thread --> Terminate["TerminationStrategy.should_terminate<br>判断是否完成"]
+    Terminate -->|"未完成且未超过 maximum_iterations"| Select
+    Terminate -->|"完成"| Done["返回消息流 / 最终对话"]

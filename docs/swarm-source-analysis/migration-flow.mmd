@@ -1,0 +1,10 @@
+flowchart TB
+    Swarm["OpenAI Swarm<br>experimental / educational"] --> Assets["可迁移资产<br>Agent instructions / Python functions / handoff topology / evals"]
+    Assets --> AgentsSDK["OpenAI Agents SDK<br>production-ready evolution"]
+    Assets --> Agent["Agent instructions -> Agents SDK Agent"]
+    Assets --> Tools["functions -> tools"]
+    Assets --> Handoff["返回 Agent 的 transfer 函数 -> handoff"]
+    Assets --> Context["context_variables -> session/context/deps"]
+    Assets --> Evals["execute_tools=False evals -> tracing/evals/guardrails 测试"]
+    AgentsSDK --> Prod["补齐生产能力<br>tracing / guardrails / MCP / sessions / realtime / hosted tools"]
+    Note["判断口径：<br>README 明确建议生产用例迁移到 OpenAI Agents SDK，Swarm 更适合学习和原型"] -.说明.-> Swarm

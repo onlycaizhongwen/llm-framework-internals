@@ -1,0 +1,14 @@
+flowchart TB
+    Start["run(stream=True)"] --> Stream["run_and_stream"]
+    Stream --> Completion["Chat Completions stream=True"]
+    Completion --> StartDelim["yield {'delim':'start'}"]
+    StartDelim --> Chunk["逐个接收 delta"]
+    Chunk --> YieldDelta["yield delta 给调用方 UI"]
+    Chunk --> Merge["merge_chunk<br>累积 content 和 tool_calls 参数片段"]
+    Merge --> EndDelim["yield {'delim':'end'}"]
+    EndDelim --> HasTool{"合并后的 message 有 tool_calls?"}
+    HasTool -->|"否"| Final["yield {'response': Response}"]
+    HasTool -->|"是"| ToolExec["转换成 ChatCompletionMessageToolCall<br>执行 handle_tool_calls"]
+    ToolExec --> NextTurn["追加 tool messages，继续下一轮"]
+    NextTurn --> Completion
+    Note["为什么这么设计：<br>流式输出先服务 UI，再把 delta 合并成完整 tool call 供后续执行"] -.说明.-> Merge

@@ -1,0 +1,12 @@
+flowchart TB
+    Need["选型问题"] --> ADK["Google ADK Python<br>Agent + Workflow + Task API + Google 生态部署"]
+    Need --> LangGraph["LangGraph<br>checkpoint-first 状态图运行时"]
+    Need --> OpenAI["OpenAI Agents Python<br>OpenAI 原生轻量 Agent loop"]
+    Need --> Agno["Agno<br>Agent platform SDK / AgentOS"]
+    Need --> Dify["Dify<br>低代码 LLM 应用平台"]
+    ADK --> A1["适合：Gemini/Vertex/Google Cloud 生态、多 Agent + workflow、ADK Web 调试、评测和部署一体"]
+    LangGraph --> L1["适合：更纯粹的代码级状态图、checkpoint、复杂中断恢复"]
+    OpenAI --> O1["适合：OpenAI Responses、handoff、guardrail、realtime、sandbox"]
+    Agno --> G1["适合：AgentOS、API 化、平台治理、Teams"]
+    Dify --> D1["适合：产品经理配置、知识库、发布、运营界面"]
+    ADK --> Combo["组合边界<br>ADK 做 Google 生态 Agent 应用内核；LangGraph 做跨系统强 checkpoint；Dify/n8n 做产品入口或自动化入口"]

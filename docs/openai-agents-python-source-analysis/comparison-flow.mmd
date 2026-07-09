@@ -1,0 +1,12 @@
+flowchart TB
+    Need["选型问题"] --> OpenAI["OpenAI Agents SDK<br>轻量代码 SDK + OpenAI 原生能力"]
+    Need --> LangGraph["LangGraph<br>复杂状态图和 checkpoint"]
+    Need --> PydanticAI["PydanticAI<br>typed Agent 和结构化输出"]
+    Need --> Agno["Agno<br>AgentOS 平台化 API / MCP / 审批"]
+    Need --> Dify["Dify<br>低代码应用平台"]
+    OpenAI --> O1["适合：快速写多 Agent 工作流、handoff、guardrail、MCP、tracing、realtime、sandbox"]
+    LangGraph --> L1["适合：复杂状态机、显式节点边、持久 checkpoint、人审恢复"]
+    PydanticAI --> P1["适合：强类型业务依赖、Pydantic 输出契约、评测闭环"]
+    Agno --> A1["适合：把 Agent/Team/Workflow 直接服务化成平台资源"]
+    Dify --> D1["适合：产品经理可配置、知识库、发布、运营观测"]
+    O1 --> Combo["组合边界<br>OpenAI Agents 做内层 agent loop；LangGraph 做外层状态机；Dify/Agno 做产品入口；Haystack/LlamaIndex 做重 RAG"]

@@ -1,0 +1,7 @@
+flowchart LR
+    SK["Semantic Kernel 存量<br>plugins / functions / planner"] --> KeepSK["保留可复用插件<br>函数能力继续作为 tools"]
+    KeepSK --> MAF["Microsoft Agent Framework<br>AgentResponse / middleware / workflow / durable"]
+    AutoGen["AutoGen 存量<br>多 Agent 对话 / group chat / research experiments"] --> KeepAuto["保留探索式协作模式<br>沉淀稳定流程和角色边界"]
+    KeepAuto --> MAF
+    MAF --> NewBuild["新项目建议<br>用 MAF 承接生产 runtime、托管、审计、恢复"]
+    MAF --> Compose["组合而非一刀切替代<br>SK 插件生态 / AutoGen 实验能力可按场景保留"]

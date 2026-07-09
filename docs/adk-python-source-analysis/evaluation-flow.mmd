@@ -1,0 +1,7 @@
+flowchart TB
+    Cases["EvalCase / EvalSet<br>用户输入、参考输出、期望工具轨迹"] --> Generate["AgentEvaluator 运行 Agent<br>生成 actual invocations"]
+    Generate --> Service["LocalEvalService / Vertex facade<br>对每个 inference result 评估"]
+    Service --> Metrics["EvalMetric<br>tool_trajectory、response_match、final_response_v2、safety、hallucination、rubric"]
+    Metrics --> Evaluators["Evaluator 实现<br>规则匹配、ROUGE、LLM-as-judge、Rubric"]
+    Evaluators --> Result["EvalCaseResult<br>分数、失败原因、每轮结果"]
+    Result --> CI["CLI / pytest / ADK Web<br>为什么：把 Agent 质量从主观体验变成可回归指标"]

@@ -1,0 +1,12 @@
+flowchart TB
+    User["用户提交复杂工单<br>退款、合规、资料检索、代码或数据修复"] --> Entry["Dify / Agno / 自研入口<br>负责表单、权限、发布、运营"]
+    Entry --> Graph["LangGraph 外层状态机<br>负责节点顺序、checkpoint、人审恢复"]
+    Graph --> Triage["OpenAI Agents Triage Agent<br>分类、guardrail、handoff"]
+    Triage --> Rag["RAG 工具<br>Haystack / LlamaIndex 检索知识库"]
+    Triage --> Billing["Billing Agent<br>调用订单、退款、发票工具"]
+    Triage --> Ops["Sandbox / Codex Agent<br>必要时分析文件、执行受控 patch"]
+    Billing --> Approval["HITL 审批节点<br>高风险退款或写操作暂停"]
+    Ops --> Approval
+    Approval --> Graph
+    Graph --> Trace["Tracing + 日志<br>为什么：把外层流程和内层 agent loop 串起来排查"]
+    Trace --> Answer["给用户结果<br>同时沉淀审计证据和可复盘步骤"]

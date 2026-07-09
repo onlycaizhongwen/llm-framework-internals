@@ -1,0 +1,14 @@
+flowchart LR
+    Agent["Agent 配置"] --> Tools["tools 列表<br>FunctionTool / hosted tools / MCP"]
+    Agent --> Handoffs["handoffs 列表<br>目标 Agent 或 Handoff 对象"]
+    Agent --> Guardrails["guardrails<br>input / output / tool input / tool output"]
+    Handoffs --> TransferTool["transfer_to_xxx<br>handoff 被包装成工具"]
+    Tools --> Schema["JSON schema<br>Pydantic / TypeAdapter / strict schema"]
+    Guardrails --> Tripwire["tripwire_triggered<br>触发即中断运行"]
+    TransferTool --> Model["模型看到的是工具集合"]
+    Schema --> Model
+    Model --> ToolCall["模型选择 tool call"]
+    ToolCall --> Planner["tool planning<br>去重、approval、resume 处理"]
+    Planner --> Exec["tool execution<br>函数、shell、computer、MCP、patch"]
+    Exec --> Items["RunItem<br>ToolCallItem、ToolCallOutputItem、HandoffOutputItem"]
+    Items --> Next["回灌模型或形成最终输出"]

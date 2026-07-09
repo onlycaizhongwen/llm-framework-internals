@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);SKEXP0001;SKEXP0010</NoWarn>
+    <UserSecretsId>c4203b00-7179-47c1-8701-ee352e381412</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+    <PackageReference Include="PdfPig" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.AzureAISearch" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.CosmosMongoDB" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.CosmosNoSql" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.InMemory" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Qdrant" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Redis" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Weaviate" />
+    <PackageReference Include="SharpCompress" /> <!-- Pin to patched version; overrides transitive 0.30.1 from MongoDB.Driver (GHSA-6c8g-7p36-r338) -->
+    <PackageReference Include="Snappier" /> <!-- Pin to patched version; overrides transitive 1.0.0 from MongoDB.Driver (GHSA-pggp-6c3x-2xmx) -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Connectors\Connectors.AzureOpenAI\Connectors.AzureOpenAI.csproj" />
+    <ProjectReference Include="..\..\..\src\Extensions\PromptTemplates.Handlebars\PromptTemplates.Handlebars.csproj" />
+    <ProjectReference Include="..\..\..\src\SemanticKernel.Core\SemanticKernel.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

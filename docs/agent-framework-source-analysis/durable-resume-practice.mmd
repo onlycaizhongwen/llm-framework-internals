@@ -1,0 +1,13 @@
+flowchart TB
+    User["用户或业务系统<br>提交报销审批请求"] --> Http["HTTP endpoint<br>/api/agents/{agentName}/run"]
+    Http --> Proxy["DurableAIAgentProxy<br>外部调用代理"]
+    Proxy --> Entity["AgentEntity<br>按 AgentSessionId 找到 Durable Entity"]
+    Entity --> Load["加载 DurableAgentState<br>历史消息、pending request、checkpoint"]
+    Load --> RealAgent["调用真实 AIAgent / Python Agent"]
+    RealAgent --> Risk{"需要人工审批或长工具?"}
+    Risk -->|"是"| Pending["写入 pending request<br>返回 202 / continuation / thread id"]
+    Pending --> Human["财务或系统回调审批结果"]
+    Human --> Resume["再次调用同一 session<br>为什么：不依赖原进程继续存活"]
+    Resume --> Entity
+    Risk -->|"否"| Persist["追加请求和响应<br>持久化新状态"]
+    Persist --> Done["返回 AgentResponse"]

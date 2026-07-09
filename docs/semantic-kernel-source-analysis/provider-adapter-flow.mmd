@@ -1,0 +1,10 @@
+flowchart TB
+    Kernel["Kernel.services<br>service_id -> AIServiceClientBase"] --> Add["add_service(service)<br>注册 OpenAI / Azure OpenAI / Gemini 等服务"]
+    Add --> Args["KernelArguments.execution_settings<br>单次调用指定 service_id 和模型参数"]
+    Args --> Selector["AIServiceSelector.select_ai_service<br>先看 arguments，再看 function 默认 settings"]
+    Selector --> Service{"匹配 service_id + 类型?"}
+    Service -->|"ChatCompletion"| Chat["ChatCompletionClientBase / IChatCompletionService"]
+    Service -->|"Text / Image / Audio"| Other["TextCompletion / Image / Audio service"]
+    Chat --> Provider["具体 Provider Connector<br>OpenAI / Azure OpenAI / Google / Bedrock 等"]
+    Provider --> Model["模型 API"]
+    Note["为什么这么设计：<br>Kernel 不直接绑定 provider；业务代码只面向 service_id、settings 和统一服务接口"] -.说明.-> Selector

@@ -1,0 +1,11 @@
+flowchart TB
+    Patterns["高级 Orchestration 模板<br>基于 WorkflowBuilder 封装常用多 Agent 拓扑"] --> Seq["Sequential<br>共享对话上下文，顺序交给多个 Agent"]
+    Patterns --> Con["Concurrent<br>fan-out 并行处理，再 fan-in 聚合"]
+    Patterns --> Hand["Handoff<br>Agent 通过 handoff tool 自主转交控制权"]
+    Patterns --> Group["GroupChat<br>管理者选择发言者，参与者广播上下文"]
+    Patterns --> Mag["Magentic<br>经理 Agent 规划，多个执行 Agent 协作"]
+    Seq --> Why1["为什么：业务流水线清晰，适合撰写、审核、润色"]
+    Con --> Why2["为什么：互不依赖的校验并行化，适合风控、资料核验"]
+    Hand --> Why3["为什么：客服/工单需要根据问题动态转专业 Agent"]
+    Group --> Why4["为什么：多人讨论式任务需要共享历史和轮次控制"]
+    Mag --> Why5["为什么：复杂开放任务需要 planner-manager-executor 模式"]

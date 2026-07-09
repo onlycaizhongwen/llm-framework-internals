@@ -1,0 +1,10 @@
+flowchart TB
+    User["用户请求<br>我要退款 / 我要销售咨询"] --> Triage["Triage Agent<br>只负责识别意图"]
+    Triage --> ToolCall["模型选择 transfer_to_refunds / transfer_to_sales"]
+    ToolCall --> Function["Python transfer 函数"]
+    Function --> AgentObj["返回另一个 Agent 对象"]
+    AgentObj --> Normalize["handle_function_result<br>Agent -> Result(value={assistant:name}, agent=Agent)"]
+    Normalize --> Switch["Swarm.run 更新 active_agent"]
+    Switch --> NewPrompt["下一轮 ChatCompletion<br>使用新 Agent instructions"]
+    NewPrompt --> Specialist["专业 Agent 回复或继续调用工具"]
+    Note["为什么这么设计：<br>handoff 不是独立协议，而是普通工具函数返回 Agent；实现简单，也便于测试"] -.说明.-> Function

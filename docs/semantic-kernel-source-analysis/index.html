@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Microsoft Semantic Kernel 源码分析</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f9fc;
+      --paper: #ffffff;
+      --ink: #1f2937;
+      --muted: #607086;
+      --line: #d9e2ef;
+      --accent: #2563eb;
+      --teal: #0f766e;
+      --amber: #b45309;
+      --soft: #eef6ff;
+      --green-soft: #ecfdf5;
+      --amber-soft: #fff7ed;
+      --shadow: 0 12px 30px rgba(31, 41, 55, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+    }
+    header {
+      background: linear-gradient(135deg, #ffffff 0%, #edf5ff 55%, #eefaf6 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .hero { max-width: 1220px; margin: 0 auto; padding: 46px 24px 34px; }
+    h1 { margin: 0 0 14px; font-size: clamp(30px, 5vw, 48px); line-height: 1.12; letter-spacing: 0; }
+    .lead { max-width: 980px; margin: 0; color: var(--muted); font-size: 18px; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 24px; }
+    .meta div { background: rgba(255,255,255,0.82); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+    .meta strong { display: block; font-size: 13px; color: var(--muted); }
+    .layout { max-width: 1220px; margin: 0 auto; padding: 28px 24px 56px; display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
+    nav { position: sticky; top: 16px; align-self: start; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 14px; box-shadow: var(--shadow); }
+    nav a { display: block; color: var(--muted); text-decoration: none; padding: 7px 8px; border-radius: 6px; font-size: 14px; }
+    nav a:hover { background: var(--soft); color: var(--accent); }
+    main { min-width: 0; }
+    section { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
+    h2 { margin: 0 0 14px; font-size: 24px; }
+    h3 { margin: 22px 0 8px; font-size: 18px; }
+    p { margin: 10px 0; }
+    code { background: #eef2f7; padding: 2px 5px; border-radius: 5px; font-family: "Cascadia Code", Consolas, monospace; font-size: 0.92em; }
+    pre { overflow: auto; background: #f8fafc; color: #1f2937; border: 1px solid var(--line); border-radius: 8px; padding: 16px; line-height: 1.55; }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+    th, td { border: 1px solid var(--line); padding: 10px; vertical-align: top; }
+    th { background: #f1f5fb; text-align: left; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .why { border-left: 4px solid var(--teal); background: var(--green-soft); padding: 10px 14px; border-radius: 6px; color: #064e3b; }
+    .warn { border-left: 4px solid var(--amber); background: var(--amber-soft); padding: 10px 14px; border-radius: 6px; color: #7c2d12; }
+    .quote { background: #f8fafc; border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 6px; }
+    .diagram-wrap { overflow-x: auto; overflow-y: visible; border-radius: 8px; }
+    .mermaid {
+      background: #fcfdff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      margin: 16px 0;
+      overflow: visible;
+      min-width: 820px;
+    }
+    .wide .mermaid { min-width: 1320px; padding: 28px; }
+    .wide .mermaid svg { width: 1320px !important; max-width: none !important; height: auto !important; }
+    .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+    .mini { background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+    @media (max-width: 880px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; }
+      .mermaid { min-width: 700px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>Microsoft Semantic Kernel 源码分析</h1>
+      <p class="lead">从源码看 Semantic Kernel：它的核心不是“再封装一次 LLM 调用”，而是把模型服务、业务函数、Prompt、插件、过滤器、Agent、Process 和 RAG 检索统一进一个应用内 AI Kernel。</p>
+      <div class="meta">
+        <div><strong>源码路径</strong><span>sources/semantic-kernel</span></div>
+        <div><strong>源码来源</strong><span>main codeload snapshot，短 SHA 83bffe1</span></div>
+        <div><strong>关系定位</strong><span>README 明确说明 Microsoft Agent Framework 是企业级后继者</span></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <a href="#position">定位</a>
+      <a href="#architecture">总体架构</a>
+      <a href="#layers">源码分层</a>
+      <a href="#kernel">Kernel 主流程</a>
+      <a href="#plugin">Plugin / Function</a>
+      <a href="#choice">工具调用策略</a>
+      <a href="#agent">Agent / GroupChat</a>
+      <a href="#process">Process Framework</a>
+      <a href="#rag">Vector / RAG</a>
+      <a href="#dotnet">.NET 主线</a>
+      <a href="#case">真实例子</a>
+      <a href="#migration">迁移关系</a>
+      <a href="#filters">Filter 链路</a>
+      <a href="#provider-detail">Provider 适配</a>
+      <a href="#process-case">Process 案例</a>
+      <a href="#migration-detail">迁移专题</a>
+      <a href="#compare">对比分析</a>
+      <a href="#ideas">设计思想</a>
+      <a href="#share">分享口径</a>
+    </nav>
+
+    <main>
+      <section id="position">
+        <h2>1. 一句话定位</h2>
+        <p>Semantic Kernel 是一个“应用内 AI Kernel”：它把模型服务、插件函数、Prompt 函数、执行参数、过滤器、自动工具调用、Agent、Process 和向量检索统一收进 <code>Kernel</code> 这个容器里。</p>
+        <p class="why">为什么这么设计：企业应用通常已经有服务、权限、数据库、业务流程和已有代码资产。SK 的思路是把这些资产包装成 <code>KernelFunction</code> / <code>KernelPlugin</code>，让模型通过工具协议调用；而模型 provider、参数、过滤器和执行上下文留在 Kernel 层统一治理。</p>
+        <p class="warn">版本口径：本地源码来自 codeload snapshot，不是 git submodule。GitHub commits 页面看到短 SHA <code>83bffe1</code>，完整 SHA 因 API rate limit 未确认。</p>
+      </section>
+
+      <section id="architecture">
+        <h2>2. 总体架构图</h2>
+        <p>图源：<code>architecture.mmd</code>。这张图建议分享时先讲，因为它能把 Kernel、Plugin、Agent、Process、Vector 和 MAF 迁移关系放在同一张图里。</p>
+        <div class="diagram-wrap wide"><div class="mermaid">
+%%{init: {"flowchart": {"nodeSpacing": 72, "rankSpacing": 90}, "themeVariables": {"fontSize": "17px"}} }%%
+flowchart TB
+    App["业务应用入口<br>Python 服务 / .NET 服务 / Copilot 插件 / 企业助手"] --> Kernel["Kernel<br>AI 应用容器"]
+    Kernel --> Services["AI Services<br>ChatCompletion / Embedding / Text / Audio<br>为什么：把模型供应商接入点集中管理"]
+    Kernel --> Selector["AI Service Selector<br>为什么：同一个 Kernel 可按 settings 选择不同模型服务"]
+    Kernel --> Plugins["KernelPluginCollection<br>插件集合"]
+    Plugins --> Functions["KernelFunction<br>Prompt 函数 / Native 方法 / OpenAPI / MCP / Search"]
+    Kernel --> Filters["Filters<br>Function / Prompt / AutoFunctionInvocation<br>为什么：把审计、鉴权、重试、改写放在横切链路"]
+    Kernel --> Arguments["KernelArguments / ExecutionSettings<br>为什么：单次调用可覆盖模型参数、工具策略和上下文变量"]
+    Functions --> FCB["FunctionChoiceBehavior<br>Auto / Required / None<br>为什么：控制模型是否能自动选择并调用工具"]
+    Kernel --> Agents["Agent 层<br>ChatCompletionAgent / AgentGroupChat"]
+    Agents --> Group["SelectionStrategy + TerminationStrategy<br>为什么：多 Agent 需要选择谁发言、何时停止"]
+    Kernel --> Process["Process Framework<br>ProcessBuilder / Step / Event Edge"]
+    Process --> State["State Metadata / Version Migration<br>为什么：业务流程需要恢复、升级和事件驱动"]
+    Kernel --> Vector["Vector Store / Vector Search<br>Collection / SearchOptions / Search Function"]
+    Vector --> RagTool["检索函数工具化<br>为什么：RAG 最终也要变成模型可调用的 KernelFunction"]
+    SK["Semantic Kernel 现状"] --> MAF["Microsoft Agent Framework<br>README 明确为 enterprise-ready successor"]
+    Kernel -.迁移方向.-> MAF
+        </div></div>
+      </section>
+
+      <section id="layers">
+        <h2>3. 源码分层</h2>
+        <table>
+          <tr><th>层级</th><th>关键文件</th><th>作用</th></tr>
+          <tr><td>项目定位</td><td><code>sources/semantic-kernel/README.md</code></td><td>声明 SK 是 model-agnostic SDK，并说明 MAF 是 enterprise-ready successor</td></tr>
+          <tr><td>Python Kernel</td><td><code>python/semantic_kernel/kernel.py</code></td><td><code>Kernel</code> 主入口，管理 filters、plugins、services、service selector</td></tr>
+          <tr><td>Python Function</td><td><code>functions/kernel_function.py</code></td><td><code>KernelFunction</code> 抽象，统一 prompt function 和 method function</td></tr>
+          <tr><td>Python Tool Choice</td><td><code>connectors/ai/function_choice_behavior.py</code></td><td>控制 Auto / Required / None 工具选择与自动调用次数</td></tr>
+          <tr><td>Python Agent</td><td><code>agents/chat_completion/chat_completion_agent.py</code></td><td>基于 Kernel 和 ChatCompletion 的 Agent</td></tr>
+          <tr><td>Python Process</td><td><code>processes/process_builder.py</code></td><td>事件驱动流程构建、状态元数据和版本迁移</td></tr>
+          <tr><td>Python Vector</td><td><code>data/vector.py</code></td><td>向量集合、检索协议、RAG 搜索函数工具化</td></tr>
+          <tr><td>.NET Kernel</td><td><code>dotnet/src/SemanticKernel.Abstractions/Kernel.cs</code></td><td>.NET 侧 Kernel 容器、PluginCollection、Filters、ServiceSelector</td></tr>
+          <tr><td>.NET Agent</td><td><code>dotnet/src/Agents/Core/ChatCompletionAgent.cs</code></td><td>.NET Agent 调用 ChatCompletionService，并在需要时 clone Kernel</td></tr>
+        </table>
+      </section>
+
+      <section id="kernel">
+        <h2>4. Kernel 主流程</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Start["业务代码调用<br>kernel.invoke / invoke_prompt / invoke_stream"] --> Resolve["解析目标函数<br>KernelFunction 或 prompt function"]
+    Resolve --> Args["合并 KernelArguments<br>输入变量 + execution settings + service id"]
+    Args --> FiltersBefore["FunctionInvocationContext<br>进入 function filters 前置链路"]
+    FiltersBefore --> Render{"是否 Prompt Function?"}
+    Render -->|"是"| Prompt["渲染 prompt<br>进入 prompt render filters"]
+    Render -->|"否"| Native["调用 native method<br>直接执行 Python/.NET 方法封装"]
+    Prompt --> Select["AI Service Selector 选择模型服务"]
+    Select --> Model["ChatCompletion / TextCompletion 服务调用"]
+    Native --> Result["FunctionResult"]
+    Model --> ToolCall{"模型返回 tool call?"}
+    ToolCall -->|"是"| Choice["FunctionChoiceBehavior<br>检查 Auto / Required / None 与 max attempts"]
+    Choice --> InvokeTool["invoke_function_call<br>再次调用 KernelFunction"]
+    InvokeTool --> Model
+    ToolCall -->|"否"| Result
+    Result --> FiltersAfter["filters 后置链路<br>记录、改写、异常处理"]
+    FiltersAfter --> End["返回 FunctionResult / StreamingKernelContent"]
+        </div></div>
+        <ul>
+          <li><code>python/semantic_kernel/kernel.py:62</code> 定义 <code>Kernel</code>，这是 Python 侧主入口。</li>
+          <li><code>kernel.py:104</code>、<code>167</code>、<code>215</code>、<code>257</code> 分别提供 stream invoke、普通 invoke、prompt invoke、prompt stream invoke。</li>
+          <li><code>kernel.py:326</code> 提供 <code>invoke_function_call</code>，说明工具调用最终仍回到 Kernel 统一路由。</li>
+          <li><code>kernel.py:542</code> 的 <code>clone</code> 逻辑说明 Kernel 可以复制 services/plugins/filter 状态，用于隔离一次 Agent 或函数调用。</li>
+          <li>.NET <code>Kernel.cs:124</code> 暴露 <code>Plugins</code>，<code>132/140/148</code> 暴露 function、prompt、auto function invocation filters，<code>191</code> 暴露 <code>ServiceSelector</code>。</li>
+        </ul>
+      </section>
+
+      <section id="plugin">
+        <h2>5. Plugin / KernelFunction / Tool 化</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Source["函数来源"] --> Decorator["Python @kernel_function<br>写入 __kernel_function__ 和参数元数据"]
+    Source --> Attribute[".NET [KernelFunction]<br>反射扫描方法"]
+    Source --> Prompt["Prompt Template<br>CreateFromPrompt / from_prompt"]
+    Source --> External["OpenAPI / MCP / VectorSearch<br>外部能力包装"]
+    Decorator --> MethodFunction["KernelFunctionFromMethod"]
+    Attribute --> MethodFunction
+    Prompt --> PromptFunction["KernelFunctionFromPrompt"]
+    External --> SearchFunction["可搜索/外部工具函数"]
+    MethodFunction --> Plugin["KernelPlugin<br>按 plugin_name 聚合"]
+    PromptFunction --> Plugin
+    SearchFunction --> Plugin
+    Plugin --> Kernel["Kernel.Plugins"]
+    Kernel --> Metadata["Function metadata<br>name / plugin_name / description / parameters / return"]
+    Metadata --> Model["模型侧工具 schema<br>为什么：LLM 不关心实现，只需要可调用协议"]
+    Model --> Call["tool call"]
+    Call --> KernelInvoke["Kernel 按 plugin/function 路由回真实实现"]
+        </div></div>
+        <p>核心设计思想：SK 没有让模型直接知道“Python 函数”或“.NET 方法”。它先统一成 <code>KernelFunction</code>，再放入 <code>KernelPlugin</code>，最后暴露元数据给模型。这是典型的 Adapter + Metadata-driven Tooling 范式。</p>
+        <ul>
+          <li><code>kernel_function.py:78</code> 定义 <code>KernelFunction</code>，字段包含 name、plugin_name、description、parameters、return metadata。</li>
+          <li><code>kernel_function.py:128</code> 和 <code>156</code> 分别从 prompt、method 创建函数。</li>
+          <li><code>kernel_function.py:240</code> 的 <code>invoke</code> 负责创建 invocation context 并进入 filter 调用链。</li>
+          <li><code>kernel_function_decorator.py:13</code> 定义 decorator；<code>61</code>、<code>71</code>、<code>76-79</code> 把函数标记、参数和返回值元数据写入方法属性。</li>
+          <li>.NET <code>KernelPluginFactory.cs:246-250</code> 扫描 <code>[KernelFunction]</code> 方法并转换成 <code>KernelFunction</code>。</li>
+        </ul>
+      </section>
+
+      <section id="choice">
+        <h2>6. FunctionChoiceBehavior：自动工具调用控制层</h2>
+        <p><code>FunctionChoiceBehavior</code> 是 SK 从“函数注册”走向“模型自动调用工具”的关键控制点。它不只是开关，而是把工具选择模式、过滤条件和最大自动调用次数放进同一个策略对象。</p>
+        <div class="two-col">
+          <div class="mini"><strong>Auto</strong><br>模型可以决定是否调用工具，适合大多数助手。</div>
+          <div class="mini"><strong>Required</strong><br>强制模型走工具，适合需要结构化查询或业务校验的任务。</div>
+          <div class="mini"><strong>NoneInvoke</strong><br>禁止工具调用，适合纯问答或安全隔离。</div>
+          <div class="mini"><strong>max attempts</strong><br>默认 5 次，防止模型陷入无限工具循环。</div>
+        </div>
+        <ul>
+          <li><code>function_choice_behavior.py:18</code> 设置默认最大自动调用次数 <code>DEFAULT_MAX_AUTO_INVOKE_ATTEMPTS = 5</code>。</li>
+          <li><code>function_choice_behavior.py:27</code> 定义 <code>FunctionChoiceBehavior</code>。</li>
+          <li><code>function_choice_behavior.py:66-73</code> 通过 <code>maximum_auto_invoke_attempts</code> 推导并设置是否自动调用 kernel functions。</li>
+          <li><code>function_choice_behavior.py:110</code>、<code>134</code>、<code>157</code> 分别提供 <code>Auto</code>、<code>NoneInvoke</code>、<code>Required</code>。</li>
+          <li><code>chat_completion_agent.py:120-122</code> 让 <code>ChatCompletionAgent</code> 默认使用 <code>FunctionChoiceBehavior.Auto()</code>。</li>
+        </ul>
+      </section>
+
+      <section id="agent">
+        <h2>7. Agent / GroupChat</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    User["用户输入 / ChatHistory"] --> Agent["ChatCompletionAgent"]
+    Agent --> Settings["PromptExecutionSettings<br>如果未设置则使用默认 FunctionChoiceBehavior.Auto"]
+    Settings --> Kernel["Kernel + Plugins + Services"]
+    Kernel --> Model["ChatCompletionService"]
+    Model --> ToolOrAnswer{"模型输出"}
+    ToolOrAnswer -->|"tool call"| Tool["KernelFunction 自动调用<br>受 max auto invoke attempts 控制"]
+    Tool --> Model
+    ToolOrAnswer -->|"assistant message"| Thread["ChatHistoryAgentThread<br>写入对话线程"]
+    Thread --> Group["AgentGroupChat"]
+    Group --> Select["SelectionStrategy.next<br>选择下一个 Agent"]
+    Select --> Agent
+    Thread --> Terminate["TerminationStrategy.should_terminate<br>判断是否完成"]
+    Terminate -->|"未完成且未超过 maximum_iterations"| Select
+    Terminate -->|"完成"| Done["返回消息流 / 最终对话"]
+        </div></div>
+        <p class="why">为什么这么设计：多 Agent 协作里“谁发言”和“何时停止”是变化点，SK 把它们抽成 SelectionStrategy / TerminationStrategy，而不是硬编码在 group chat loop 里。</p>
+        <ul>
+          <li><code>chat_completion_agent.py:117</code> 定义 <code>ChatCompletionAgent</code>，<code>328</code> 和 <code>376</code> 提供普通 invoke 与 streaming invoke。</li>
+          <li><code>agent_group_chat.py:37-41</code> 持有 <code>termination_strategy</code> 与 <code>selection_strategy</code>。</li>
+          <li><code>agent_group_chat.py:149-158</code> 在最大迭代次数内选择 Agent、执行 Agent、判断终止。</li>
+          <li><code>agent_group_chat.py:200-210</code> streaming 版也走同样的选择和终止策略。</li>
+        </ul>
+      </section>
+
+      <section id="process">
+        <h2>8. Process Framework</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Builder["ProcessBuilder<br>定义流程名称、版本、步骤"] --> Step["add_step<br>注册 ProcessStepBuilder"]
+    Step --> Event["on_input_event / on_event<br>声明事件入口"]
+    Event --> Edge["link_to<br>把事件连接到目标 step function"]
+    Edge --> Build["build<br>生成 KernelProcess"]
+    Build --> Metadata["State Metadata<br>校验、迁移、按版本恢复状态"]
+    Metadata --> Runtime["Process Runtime<br>事件驱动执行"]
+    Runtime --> StepRun["Step Function 执行<br>可调用 Kernel / Plugin / 外部服务"]
+    StepRun --> Emit["产生事件或函数结果"]
+    Emit --> Route["按 Edge 路由到下一步"]
+    Route --> Runtime
+    Emit --> End["结束事件 / 输出结果"]
+    Note["为什么这么设计：<br>Agent loop 适合模型自主决策；Process 适合业务已知拓扑、需要恢复和版本迁移的流程"] -.说明.-> Builder
+        </div></div>
+        <ul>
+          <li><code>process_builder.py:34</code> 定义 <code>ProcessBuilder</code>。</li>
+          <li><code>process_builder.py:37-40</code> 保存 entry steps、external event map、steps、version。</li>
+          <li><code>process_builder.py:45</code>、<code>119</code>、<code>132</code>、<code>142</code> 分别对应 add step、输入事件、事件入口和链接。</li>
+          <li><code>process_builder.py:164</code> 构建 <code>KernelProcess</code>。</li>
+          <li><code>process_builder.py:182</code> 开始处理 state metadata 校验、迁移与清理；<code>223-237</code> 处理版本匹配和迁移逻辑。</li>
+        </ul>
+      </section>
+
+      <section id="rag">
+        <h2>9. Vector Store / RAG 细节</h2>
+        <p>SK 的向量模块不是一个孤立的 memory 小工具，而是一套数据抽象：字段定义、collection 定义、search options、collection protocol、vector search protocol，并且可以把搜索包装成 <code>KernelFunction</code>。</p>
+        <ul>
+          <li><code>vector.py:278</code> 定义 <code>VectorStoreField</code>，<code>421</code> 定义 <code>VectorStoreCollectionDefinition</code>。</li>
+          <li><code>vector.py:742</code> 定义 <code>VectorSearchOptions</code>，<code>1133</code> 定义 <code>VectorStoreCollection</code>。</li>
+          <li><code>vector.py:1282</code> 提供 public <code>upsert</code>，<code>1866</code> 提供 <code>hybrid_search</code>。</li>
+          <li><code>vector.py:2011</code> 提供 <code>create_search_function</code>。</li>
+          <li><code>vector.py:2093-2131</code> 的 <code>search_wrapper</code> 用 <code>@kernel_function</code> 包装检索逻辑。</li>
+        </ul>
+        <p class="why">关键理解：RAG 在 SK 里最终会回到工具化。检索不是只在回答前手写一段代码，而是可以作为模型可选择的搜索函数，这样 Agent 可以在需要证据时主动调用检索。</p>
+      </section>
+
+      <section id="dotnet">
+        <h2>10. .NET 主线</h2>
+        <p>.NET 侧的架构和 Python 侧保持概念一致，但更贴近 .NET DI、<code>IServiceProvider</code> 和强类型接口。</p>
+        <ul>
+          <li><code>Kernel.cs:57-64</code> 构造 <code>Kernel</code> 时接收 <code>IServiceProvider</code> 和 <code>KernelPluginCollection</code>。</li>
+          <li><code>Kernel.cs:85</code> 提供 <code>Kernel.CreateBuilder()</code>。</li>
+          <li><code>Kernel.cs:156</code> 暴露 <code>Services</code>，<code>191-193</code> 通过 service provider 获取 <code>IAIServiceSelector</code>。</li>
+          <li><code>KernelFunction.cs:30</code> 让 <code>KernelFunction</code> 继承 <code>FullyQualifiedAIFunction</code>。</li>
+          <li><code>KernelFunction.cs:235-306</code> 是普通 <code>InvokeAsync</code>，<code>321-340</code> 是 streaming invoke。</li>
+          <li><code>ChatCompletionAgent.cs:76-84</code> 获取 Kernel，并从 <code>AIContextProviders</code> 获取上下文工具；<code>179-187</code> streaming 也走同样逻辑。</li>
+        </ul>
+      </section>
+
+      <section id="case">
+        <h2>11. 真实例子：企业报销规则助手</h2>
+        <p>员工问：“我这张 780 元的客户餐饮发票能不能报销，需要谁审批？”</p>
+        <ol>
+          <li><code>ExpensePolicyPlugin</code> 暴露 <code>get_policy</code>、<code>check_limit</code>、<code>find_approver</code> 三个 <code>KernelFunction</code>。</li>
+          <li><code>VectorSearch</code> 把公司报销制度、地区规则、历史 FAQ 包装成一个搜索函数。</li>
+          <li><code>ChatCompletionAgent</code> 默认 <code>FunctionChoiceBehavior.Auto()</code>，模型可以先检索制度，再调用限额检查和审批人查询。</li>
+          <li><code>FunctionInvocationFilter</code> 可记录审计日志，或阻止模型调用会产生真实报销单的写操作。</li>
+          <li>如果流程固定，例如“识别发票 -> 查规则 -> 找审批人 -> 生成人工确认单”，可用 Process Framework 建成事件驱动流程。</li>
+        </ol>
+        <pre><code class="language-python">from semantic_kernel.functions import kernel_function
+
+class ExpensePolicyPlugin:
+    @kernel_function(description="查询指定城市和费用类型的报销规则")
+    def get_policy(self, city: str, expense_type: str) -> str:
+        return "客户餐饮单笔 800 元以内可报销，超过需要部门负责人审批"
+
+    @kernel_function(description="检查报销金额是否超过规则上限")
+    def check_limit(self, amount: float, expense_type: str) -> str:
+        return "未超限" if amount <= 800 else "超限，需要额外审批"</code></pre>
+        <p>这段代码对应源码证据 <code>kernel_function_decorator.py:13</code> 和 <code>61-79</code>：普通业务方法通过 decorator 写入函数元数据，然后进入 Kernel 的 plugin/function 体系。</p>
+      </section>
+
+      <section id="migration">
+        <h2>12. 与 Microsoft Agent Framework 的迁移关系</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    SK["Semantic Kernel 存量工程"] --> Keep["保留价值<br>KernelFunction / Plugin / Prompt Template / RAG Search"]
+    SK --> AgentNeed{"是否需要生产级多 Agent / Durable / A2A / MCP 互操作?"}
+    AgentNeed -->|"暂不需要"| Continue["继续使用 SK<br>适合应用内 AI kernel、插件化函数和轻量 Agent"]
+    AgentNeed -->|"需要"| MAF["迁移到 Microsoft Agent Framework"]
+    Keep --> Tools["迁移为 MAF Tools / AIFunctions<br>函数签名和 schema 可复用"]
+    Keep --> Context["迁移 prompt 与上下文策略<br>重新接入 middleware/session"]
+    MAF --> Workflow["复杂编排迁移到 Workflow / Durable Agents"]
+    MAF --> Provider["模型接入迁移到 ChatClient / Provider Adapter"]
+    MAF --> Ops["补齐生产治理<br>checkpoint、observability、evaluation、approval"]
+    Warning["判断口径：README 已明确 MAF 是 SK 的 enterprise-ready successor；不要把两者讲成完全平行的新旧框架"] -.提醒.-> MAF
+        </div></div>
+        <ul>
+          <li><code>README.md:4</code> 明确写到 Semantic Kernel 现在是 Microsoft Agent Framework，MAF 是 enterprise-ready successor。</li>
+          <li><code>README.md:17</code> 仍把 SK 定位为 model-agnostic SDK，用于 build、orchestrate、deploy AI agents and multi-agent systems。</li>
+          <li><code>README.md:31-35</code> 仍列出 Plugin Ecosystem、Vector DB Support、Process Framework 等能力。</li>
+        </ul>
+        <p class="quote">分享口径：SK 更像“把 AI 能力嵌入应用的 Kernel 和插件体系”；MAF 更像“生产级 Agent/Workflow runtime”。存量 SK 的 Plugin / Function / Prompt / RAG 资产不应被丢弃，而是迁移成 MAF 的 tool、context、workflow 节点和 provider client。</p>
+      </section>
+
+      <section id="filters">
+        <h2>13. Filter 链路细拆</h2>
+        <p>Filter 是 SK 的治理扩展点。没有 filter，Plugin/Function 只是“让模型能调工具”；有了 filter，才能把审计、权限、安全、脱敏、审批、观测放进统一链路。</p>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Request["一次 Kernel 调用"] --> FunctionFilter["FunctionInvocationFilter<br>包住 KernelFunction.invoke<br>适合审计、鉴权、参数改写、异常转换"]
+    FunctionFilter --> Kind{"函数类型"}
+    Kind -->|"Prompt Function"| PromptFilter["PromptRenderFilter<br>包住 prompt 渲染<br>适合模板审查、变量脱敏、系统提示增强"]
+    Kind -->|"Native Method"| Method["KernelFunctionFromMethod<br>执行业务方法"]
+    PromptFilter --> Rendered["Rendered Prompt"]
+    Rendered --> Model["AI Service 调用"]
+    Model --> ToolCall{"模型请求工具调用?"}
+    ToolCall -->|"是"| AutoFilter["AutoFunctionInvocationFilter<br>包住自动工具调用<br>适合审批、限流、副作用拦截、Terminate"]
+    AutoFilter --> ToolFunction["再次进入 KernelFunction"]
+    ToolFunction --> FunctionFilter
+    ToolCall -->|"否"| Result["返回结果"]
+    Method --> Result
+    Note["为什么这么设计：<br>三类 filter 对应三个风险点：函数执行、prompt 暴露、模型自动调用工具"] -.说明.-> FunctionFilter
+        </div></div>
+        <table>
+          <tr><th>Filter</th><th>拦截位置</th><th>适合做什么</th><th>不适合做什么</th></tr>
+          <tr><td>FunctionInvocationFilter</td><td>每次 <code>KernelFunction.invoke</code> 外层</td><td>审计、鉴权、参数校验、异常转换、结果脱敏</td><td>只针对 prompt 模板细节</td></tr>
+          <tr><td>PromptRenderFilter</td><td>Prompt function 渲染阶段</td><td>prompt 审查、变量脱敏、模板增强、注入系统约束</td><td>拦截 native method 的真实副作用</td></tr>
+          <tr><td>AutoFunctionInvocationFilter</td><td>模型自动 tool call 前后</td><td>工具审批、限流、阻止危险工具、设置 terminate</td><td>替代工具本身的业务校验</td></tr>
+        </table>
+        <ul>
+          <li><code>filters/kernel_filters_extension.py:30-35</code> 定义三类 filter 列表。</li>
+          <li><code>filters/kernel_filters_extension.py:37-59</code> 的 <code>add_filter</code> 把 filter 插入列表头部，并说明先添加的 filter 会先执行、后置逻辑最后执行。</li>
+          <li><code>filters/kernel_filters_extension.py:102-112</code> 的 <code>construct_call_stack</code> 把 filter 和 inner function 组装成 next 链路。</li>
+          <li><code>kernel_function.py:262</code> 创建 <code>FunctionInvocationContext</code>；<code>kernel_function_from_prompt.py:277</code> 创建 <code>PromptRenderContext</code>；<code>kernel.py:429</code> 创建 <code>AutoFunctionInvocationContext</code>。</li>
+          <li>.NET <code>KernelFunctionInvokingChatClient.cs:41-57</code> 递归执行 <code>IAutoFunctionInvocationFilter</code>，并在 <code>95</code> 附近检查 terminate。</li>
+        </ul>
+      </section>
+
+      <section id="provider-detail">
+        <h2>14. Connector / Provider 适配细节</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Kernel["Kernel.services<br>service_id -> AIServiceClientBase"] --> Add["add_service(service)<br>注册 OpenAI / Azure OpenAI / Gemini 等服务"]
+    Add --> Args["KernelArguments.execution_settings<br>单次调用指定 service_id 和模型参数"]
+    Args --> Selector["AIServiceSelector.select_ai_service<br>先看 arguments，再看 function 默认 settings"]
+    Selector --> Service{"匹配 service_id + 类型?"}
+    Service -->|"ChatCompletion"| Chat["ChatCompletionClientBase / IChatCompletionService"]
+    Service -->|"Text / Image / Audio"| Other["TextCompletion / Image / Audio service"]
+    Chat --> Provider["具体 Provider Connector<br>OpenAI / Azure OpenAI / Google / Bedrock 等"]
+    Provider --> Model["模型 API"]
+    Note["为什么这么设计：<br>Kernel 不直接绑定 provider；业务代码只面向 service_id、settings 和统一服务接口"] -.说明.-> Selector
+        </div></div>
+        <p>SK 的 provider 适配不是把 OpenAI、Azure OpenAI 或 Google connector 散落到业务代码里，而是通过 <code>service_id + PromptExecutionSettings + AIServiceSelector</code> 三件套选择服务。</p>
+        <ul>
+          <li><code>services/kernel_services_extension.py:26-33</code> 定义 <code>services</code> 映射和默认 <code>AIServiceSelector</code>。</li>
+          <li><code>kernel_services_extension.py:55-66</code> 把服务选择委托给 selector。</li>
+          <li><code>kernel_services_extension.py:68-109</code> 按 <code>service_id</code> 和 type 取服务。</li>
+          <li><code>kernel_services_extension.py:119-127</code> 根据 service id 生成对应 <code>PromptExecutionSettings</code>。</li>
+          <li><code>ai_service_selector.py:35-38</code> 说明选择顺序：先看 arguments，再看 function 默认 settings；同一 service id 时 arguments 优先。</li>
+          <li>.NET <code>Kernel.cs:156</code> 暴露 <code>Services</code>，<code>191-193</code> 通过 service provider 获取 <code>IAIServiceSelector</code>。</li>
+        </ul>
+      </section>
+
+      <section id="process-case">
+        <h2>15. Process Framework 真实业务案例</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Start["员工提交报销问题<br>发票 + 金额 + 城市"] --> Intake["Step 1 识别票据与费用类型"]
+    Intake --> Policy["Step 2 检索制度<br>VectorSearch search function"]
+    Policy --> Check["Step 3 调用 ExpensePolicyPlugin.check_limit"]
+    Check --> Decision{"是否超限 / 高风险?"}
+    Decision -->|"否"| Draft["Step 4 生成报销建议"]
+    Decision -->|"是"| Approval["Step 4 触发人工审批事件"]
+    Approval --> Resume["外部审批结果进入 on_input_event"]
+    Resume --> Draft
+    Draft --> Notify["Step 5 通知员工并记录审计"]
+    Note["为什么不用纯 AgentGroupChat：<br>报销审批有固定业务拓扑、人工事件和状态恢复，Process 更适合表达"] -.说明.-> Approval
+        </div></div>
+        <ol>
+          <li><code>IntakeStep</code> 解析发票图片、金额、城市、费用类型。</li>
+          <li><code>PolicySearchStep</code> 调用 Vector Search function 检索公司制度。</li>
+          <li><code>CheckLimitStep</code> 调用 <code>ExpensePolicyPlugin.check_limit</code> 判断是否超限。</li>
+          <li>如果超限，Process 发出外部审批事件；审批系统回调后，通过 <code>on_input_event</code> 回到流程。</li>
+          <li><code>NotifyStep</code> 返回建议，并写审计日志。</li>
+        </ol>
+        <ul>
+          <li><code>process_builder.py:119-126</code> 用 <code>where_input_event_is</code> 建立外部输入事件到目标 step 的映射。</li>
+          <li><code>process_builder.py:142-147</code> 的 <code>link_to</code> 把事件 id 连接到 edge builder，并登记 entry step。</li>
+          <li><code>process_builder.py:182-237</code> 处理 state metadata、版本匹配和迁移。</li>
+        </ul>
+        <p class="why">边界判断：如果任务是“多个专家围绕问题讨论”，用 AgentGroupChat；如果任务是“已知业务步骤 + 外部事件 + 状态恢复 + 审批回调”，用 Process 更自然。</p>
+      </section>
+
+      <section id="migration-detail">
+        <h2>16. SK -> MAF 迁移专题</h2>
+        <table>
+          <tr><th>Semantic Kernel 资产</th><th>迁移到 MAF 的对应物</th><th>迁移建议</th><th>风险点</th></tr>
+          <tr><td><code>KernelPlugin</code></td><td>MAF tools / tool collection</td><td>按业务域拆分工具组，保留函数描述和参数 schema</td><td>插件里如果混有副作用函数，要补 approval / security</td></tr>
+          <tr><td><code>KernelFunctionFromMethod</code></td><td>MAF function tool / AIFunction</td><td>保留函数签名、description、参数注解，重接 middleware</td><td>异步、依赖注入、异常语义可能要适配</td></tr>
+          <tr><td>Prompt function / template</td><td>MAF instructions / prompt assets / context provider</td><td>把模板变量和上下文注入逻辑拆出来</td><td>prompt filter 里的改写逻辑不要丢</td></tr>
+          <tr><td><code>FunctionChoiceBehavior</code></td><td>MAF tool choice / middleware / approval policy</td><td>Auto 迁为默认工具选择，Required 迁为强制工具节点或 policy</td><td>自动调用次数、停止条件需要重新校准</td></tr>
+          <tr><td><code>FunctionInvocationFilter</code></td><td>MAF middleware / tool invocation middleware</td><td>审计、鉴权、脱敏逻辑迁到 middleware</td><td>原 filter 执行顺序要重新验证</td></tr>
+          <tr><td><code>ProcessBuilder</code></td><td>MAF Workflow / Durable Agents</td><td>长任务、审批、恢复、版本迁移优先迁</td><td>状态 schema 和历史 checkpoint 兼容需要专项处理</td></tr>
+          <tr><td><code>VectorSearch.create_search_function</code></td><td>MAF tool 调用 RAG service</td><td>搜索函数可先独立成后端服务，再挂成 tool</td><td>检索结果格式和引用来源要保持稳定</td></tr>
+        </table>
+        <ol>
+          <li>先盘点 SK 资产：plugins、functions、prompt templates、filters、processes、vector search functions。</li>
+          <li>把无副作用查询工具迁到 MAF tools，作为低风险第一批。</li>
+          <li>把有副作用工具迁到 MAF tool middleware / approval 后再开放自动调用。</li>
+          <li>把固定业务流程从 <code>ProcessBuilder</code> 迁到 MAF Workflow / Durable Agents。</li>
+          <li>最后迁移 AgentGroupChat 或多 Agent 场景，因为这里通常涉及选择策略、终止条件和消息历史兼容。</li>
+        </ol>
+        <p class="quote">判断口径：SK 不是“没价值了”，它的存量价值在插件函数和应用内 Kernel 资产；MAF 承担的是后继生产运行时、Durable、A2A/MCP 互操作、观测和评测闭环。</p>
+      </section>
+
+      <section id="compare">
+        <h2>17. 对比分析</h2>
+        <table>
+          <tr><th>框架</th><th>更像什么</th><th>与 SK 的边界</th></tr>
+          <tr><td>Microsoft Agent Framework</td><td>生产级 Agent / Workflow runtime</td><td>README 已把 MAF 定位为 SK 后继者；新生产级多 Agent 项目优先看 MAF</td></tr>
+          <tr><td>LangChain</td><td>组件生态和 Agent/RAG 编排入口</td><td>LangChain 更生态化，SK 更强调 Kernel + Plugin + Function 的应用内容器</td></tr>
+          <tr><td>LangGraph</td><td>状态图和可恢复执行</td><td>LangGraph 更适合显式状态图；SK Process 能表达业务流程，但 SK 核心仍是 Kernel/plugin</td></tr>
+          <tr><td>LlamaIndex</td><td>数据/RAG 框架</td><td>LlamaIndex 更偏 ingestion/index/retriever；SK 向量检索最终会工具化到 KernelFunction</td></tr>
+          <tr><td>Haystack</td><td>Pipeline / Component RAG</td><td>Haystack 的组件图更强；SK 更适合把检索、业务函数、prompt 函数统一给 Agent 使用</td></tr>
+          <tr><td>OpenAI Agents Python</td><td>轻量 Agent SDK</td><td>OpenAI Agents 更贴近 Responses/Tracing/Handoff；SK 更适合 .NET/Python 双栈和存量插件体系</td></tr>
+          <tr><td>PydanticAI</td><td>typed agent + schema</td><td>PydanticAI 类型约束更鲜明；SK 的核心抽象是 KernelFunction metadata 和 plugin 容器</td></tr>
+        </table>
+      </section>
+
+      <section id="ideas">
+        <h2>18. 核心设计思想</h2>
+        <ol>
+          <li><strong>Kernel as Application AI Container：</strong>Kernel 不是简单 client，而是 services、plugins、filters、arguments、selector 的容器。</li>
+          <li><strong>Plugin-first：</strong>业务能力先插件化，再交给模型选择或业务代码显式调用。</li>
+          <li><strong>Function as Protocol：</strong>无论 prompt、native method、OpenAPI、MCP、vector search，最后都尽量变成 <code>KernelFunction</code>。</li>
+          <li><strong>Strategy Pattern：</strong>FunctionChoiceBehavior、SelectionStrategy、TerminationStrategy 把变化点外置。</li>
+          <li><strong>Filter Chain：</strong>函数调用、prompt render、自动工具调用都允许进入过滤器链路，便于治理。</li>
+          <li><strong>Dual-runtime Symmetry：</strong>Python 和 .NET 保持概念对齐，方便微软生态和企业系统接入。</li>
+          <li><strong>Evolutionary Migration：</strong>README 已指向 MAF，说明 SK 的资产价值在插件/函数/prompt/RAG，而生产级 runtime 方向正在向 MAF 演进。</li>
+        </ol>
+      </section>
+
+      <section id="share">
+        <h2>19. 分享口径</h2>
+        <p>开场可以先说：Semantic Kernel 的名字里最重要的词是 Kernel。它想做的不是“再封装一个模型调用”，而是给应用一个 AI 内核，把模型服务、业务函数、Prompt、插件、过滤器、Agent 和检索统一起来。</p>
+        <div class="two-col">
+          <div class="mini"><strong>主线 1：Kernel</strong><br>一次调用如何从 <code>kernel.invoke</code> 进入 KernelFunction、filters、AI service selector，再返回结果。</div>
+          <div class="mini"><strong>主线 2：Tool</strong><br>普通业务方法如何通过 decorator / attribute 变成 KernelFunction，再进入 plugin 和模型工具 schema。</div>
+          <div class="mini"><strong>主线 3：演进</strong><br>SK 仍适合存量插件和应用内 AI 能力，但 README 已明确生产级后继方向是 Microsoft Agent Framework。</div>
+          <div class="mini"><strong>总结句</strong><br>如果说 LangGraph 的核心是状态图，LlamaIndex 的核心是数据索引，那么 Semantic Kernel 的核心就是把业务能力工具化后装进 Kernel。</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: "loose",
+      theme: "base",
+      themeVariables: {
+        fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Microsoft YaHei, sans-serif",
+        primaryColor: "#eef6ff",
+        primaryTextColor: "#1f2937",
+        primaryBorderColor: "#93b8e8",
+        lineColor: "#6b7280",
+        secondaryColor: "#ecfdf5",
+        tertiaryColor: "#fff7ed",
+        clusterBkg: "#ffffff",
+        clusterBorder: "#d9e2ef"
+      }
+    });
+  </script>
+</body>
+</html>

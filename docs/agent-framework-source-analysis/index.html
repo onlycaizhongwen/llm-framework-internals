@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Microsoft Agent Framework 源码分析</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --paper: #ffffff;
+      --ink: #1f2937;
+      --muted: #5f6b7a;
+      --line: #d8e0ec;
+      --accent: #2563eb;
+      --green: #0f766e;
+      --orange: #b45309;
+      --soft: #edf5ff;
+      --shadow: 0 10px 28px rgba(31, 41, 55, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+    }
+    header {
+      background: linear-gradient(135deg, #ffffff 0%, #e9f2ff 58%, #eefaf6 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .hero { max-width: 1200px; margin: 0 auto; padding: 46px 24px 34px; }
+    h1 { margin: 0 0 14px; font-size: clamp(30px, 5vw, 48px); line-height: 1.12; letter-spacing: 0; }
+    .lead { max-width: 980px; margin: 0; color: var(--muted); font-size: 18px; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 24px; }
+    .meta div { background: rgba(255,255,255,0.78); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+    .meta strong { display: block; font-size: 13px; color: var(--muted); }
+    .layout { max-width: 1200px; margin: 0 auto; padding: 28px 24px 56px; display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; }
+    nav { position: sticky; top: 16px; align-self: start; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 14px; box-shadow: var(--shadow); }
+    nav a { display: block; color: var(--muted); text-decoration: none; padding: 7px 8px; border-radius: 6px; font-size: 14px; }
+    nav a:hover { background: var(--soft); color: var(--accent); }
+    main { min-width: 0; }
+    section { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
+    h2 { margin: 0 0 14px; font-size: 24px; }
+    h3 { margin: 22px 0 8px; font-size: 18px; }
+    p { margin: 10px 0; }
+    code { background: #eef2f7; padding: 2px 5px; border-radius: 5px; font-family: "Cascadia Code", Consolas, monospace; font-size: 0.92em; }
+    pre { overflow: auto; background: #172033; color: #eef6ff; border-radius: 8px; padding: 16px; line-height: 1.55; }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+    th, td { border: 1px solid var(--line); padding: 10px; vertical-align: top; }
+    th { background: #f1f5fb; text-align: left; }
+    .why { border-left: 4px solid var(--green); background: #ecfdf5; padding: 10px 14px; border-radius: 6px; color: #064e3b; }
+    .warn { border-left: 4px solid var(--orange); background: #fff7ed; padding: 10px 14px; border-radius: 6px; color: #7c2d12; }
+    .mermaid { background: #fcfdff; border: 1px solid var(--line); border-radius: 8px; padding: 18px; margin: 16px 0; overflow: auto; min-width: 720px; }
+    .architecture-diagram .mermaid { min-width: 1280px; padding: 28px; overflow: visible; }
+    .architecture-diagram .mermaid svg { width: 1280px !important; max-width: none !important; height: auto !important; }
+    .diagram-wrap { overflow-x: auto; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .quote { background: #f8fafc; border-left: 4px solid var(--accent); padding: 12px 14px; border-radius: 6px; }
+    @media (max-width: 880px) { .layout { grid-template-columns: 1fr; } nav { position: static; } .mermaid { min-width: 640px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>Microsoft Agent Framework 源码分析</h1>
+      <p class="lead">从源码看 MAF：它不是单一 Agent SDK，而是一套覆盖 Python、.NET、Provider Adapter、Middleware、Workflow、Durable Agents、Hosting、Observability、Evaluation 的生产级 Agent / Workflow 框架。</p>
+      <div class="meta">
+        <div><strong>源码路径</strong><span>sources/agent-framework</span></div>
+        <div><strong>当前提交</strong><span>23bfa4957521c50326ad68daee93c9f5b251f38c</span></div>
+        <div><strong>版本描述</strong><span>dotnet-1.13.0-47-g23bfa4957</span></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <a href="#position">定位</a>
+      <a href="#architecture">总体架构</a>
+      <a href="#layers">源码分层</a>
+      <a href="#agent">Agent 主流程</a>
+      <a href="#provider">Provider Adapter</a>
+      <a href="#middleware">Middleware</a>
+      <a href="#tools">Tools / 安全</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#orchestration">Orchestration</a>
+      <a href="#dotnet">.NET 主线</a>
+      <a href="#durable">Durable Agents</a>
+      <a href="#case">真实例子</a>
+      <a href="#evidence-snippets">代码证据</a>
+      <a href="#provider-detail">Provider 细节</a>
+      <a href="#durable-practice">Durable 恢复</a>
+      <a href="#migration">迁移关系</a>
+      <a href="#compare">对比分析</a>
+      <a href="#summary">设计思想</a>
+      <a href="#share">分享口径</a>
+    </nav>
+
+    <main>
+      <section id="position">
+        <h2>1. 一句话定位</h2>
+        <p>Microsoft Agent Framework 是一个面向生产环境的多语言 Agent / Workflow 框架。它不是只封装一次 LLM 调用，而是把 Python Agent、.NET <code>AIAgent</code>、ChatClient/provider adapter、middleware、tools、session、streaming、workflow、orchestration、durable agents、hosting、observability、evaluation 和微软生态入口放进同一套工程。</p>
+        <p class="why">为什么这么设计：企业里的 Agent 通常不是“问模型一句话”就结束，而是要接入不同模型供应商、跑多步流程、等待人工审批、记录审计链路、支持流式 UI、支持长任务恢复，还要能在 Python 和 .NET 服务里复用。</p>
+      </section>
+
+      <section id="architecture">
+        <h2>2. 总体架构图</h2>
+        <div class="diagram-wrap architecture-diagram"><div class="mermaid">
+%%{init: {"flowchart": {"nodeSpacing": 72, "rankSpacing": 92}, "themeVariables": {"fontSize": "18px"}} }%%
+flowchart TB
+    App["业务入口<br>Python 应用 / .NET 服务 / Azure Functions / Foundry / DevUI / Copilot 场景"] --> Agent["Agent 抽象<br>Python Agent / RawAgent<br>.NET AIAgent"]
+    Agent --> Client["ChatClient / Provider Adapter<br>为什么：把模型供应商差异隔离到客户端层"]
+    Client --> Providers["模型与托管能力<br>OpenAI / Azure OpenAI / Foundry / Anthropic / Gemini / GitHub Copilot"]
+    Agent --> Middleware["Middleware / Context<br>为什么：把权限、上下文、历史、遥测、安全策略做成可插拔链路"]
+    Agent --> Tools["Tools / Function Invocation<br>函数工具、托管工具、MCP、审批、安全标签"]
+    Agent --> Session["Session / History / Compaction<br>为什么：长期会话不能只靠一次 prompt，需要可恢复上下文"]
+    Agent --> Response["AgentResponse / Updates<br>普通响应、流式增量、长任务 continuation"]
+    App --> Workflow["Workflow Runtime<br>Executor 图、事件、checkpoint、HITL request_info"]
+    Workflow --> Patterns["Orchestration 模板<br>Sequential / Concurrent / Handoff / GroupChat / Magentic"]
+    Workflow --> Durable["Durable Agents<br>Durable Entities / virtual actors / Azure Functions endpoints"]
+    Agent --> Observability["Observability / Evaluation<br>OpenTelemetry、eval dataset、调试与回归"]
+    Workflow --> Observability
+        </div></div>
+      </section>
+
+      <section id="layers">
+        <h2>3. 源码分层</h2>
+        <table>
+          <tr><th>层级</th><th>关键文件</th><th>作用</th></tr>
+          <tr><td>Python Agent API</td><td><code>python/packages/core/agent_framework/_agents.py</code></td><td><code>BaseAgent</code>、<code>RawAgent</code>、<code>Agent</code>、工具合并、session run、Agent as tool。</td></tr>
+          <tr><td>Python ChatClient</td><td><code>_clients.py</code></td><td><code>BaseChatClient</code>、工具/中间件默认选项、provider 能力协议。</td></tr>
+          <tr><td>Python Middleware</td><td><code>_middleware.py</code></td><td><code>AgentContext</code>、<code>ChatContext</code>、<code>FunctionInvocationContext</code>、Agent/Chat middleware layer。</td></tr>
+          <tr><td>Python Workflow</td><td><code>_workflows/*</code></td><td><code>Workflow</code>、<code>WorkflowBuilder</code>、runner、events、checkpoint、context。</td></tr>
+          <tr><td>Python Orchestrations</td><td><code>agent_framework_orchestrations/*</code></td><td>sequential、concurrent、handoff、group chat、magentic 等高级模板。</td></tr>
+          <tr><td>.NET Agent</td><td><code>Microsoft.Agents.AI.Abstractions/*</code></td><td><code>AIAgent</code>、<code>AgentResponse</code>、<code>AgentResponseUpdate</code>、<code>AgentRunOptions</code>。</td></tr>
+          <tr><td>Durable / Hosting</td><td><code>docs/features/durable-agents/README.md</code></td><td>Durable Entity、virtual actor、HTTP endpoint、长任务恢复。</td></tr>
+        </table>
+      </section>
+
+      <section id="agent">
+        <h2>4. Agent 主流程</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Start["用户输入 / 上游系统消息"] --> AgentRun["Agent.run / AIAgent.RunAsync<br>统一进入 Agent 执行"]
+    AgentRun --> Merge["合并 options<br>模型参数、工具、middleware、session、response_format"]
+    Merge --> Context["构建上下文<br>AgentContext / ChatContext / FunctionInvocationContext"]
+    Context --> MW1["Agent middleware 前置<br>为什么：可做鉴权、注入上下文、短路、审计"]
+    MW1 --> Chat["ChatClient get_response / stream_response"]
+    Chat --> Provider["Provider adapter 调模型<br>Foundry / OpenAI / Azure / 其他 provider"]
+    Provider --> Decide{"模型返回什么"}
+    Decide -->|"final answer"| Final["AgentResponse<br>写入 session / 返回业务方"]
+    Decide -->|"tool call"| Tool["FunctionInvocationLayer<br>并发或顺序执行工具"]
+    Tool --> Approval{"需要审批或安全拦截?"}
+    Approval -->|"是"| Pause["function_approval_request<br>暂停等待人或策略响应"]
+    Approval -->|"否"| ToolResult["function result 写回消息"]
+    ToolResult --> Chat
+    Decide -->|"streaming update"| Stream["AgentResponseUpdate<br>边生成边向 UI / API 输出"]
+    Stream --> Final
+        </div></div>
+        <ul>
+          <li><code>_agents.py:214</code> 定义 <code>SupportsAgentRun</code> 协议，让 Agent 能被编排层统一调用。</li>
+          <li><code>_agents.py:353</code>、<code>662</code>、<code>1683</code> 分别定义 <code>BaseAgent</code>、<code>RawAgent</code>、高层 <code>Agent</code>。</li>
+          <li><code>_clients.py:217</code> 定义 <code>BaseChatClient</code>，把消息准备和工具规范化放到 client 抽象。</li>
+          <li><code>AIAgent.cs:38</code> 定义 .NET 抽象，<code>251-502</code> 覆盖普通和流式调用。</li>
+        </ul>
+      </section>
+
+      <section id="provider">
+        <h2>5. Provider Adapter</h2>
+        <p>MAF 更像 provider-leading client：核心层定义 ChatClient / Agent / Tool 的共同语义，具体 provider 包负责把 Foundry、Azure OpenAI、OpenAI、Anthropic、Gemini、GitHub Copilot 等能力转成统一接口。</p>
+        <ul>
+          <li><code>_clients.py:668</code>、<code>698</code>、<code>728</code>、<code>758</code>、<code>789</code>、<code>819</code> 分别定义 code interpreter、web search、image generation、MCP、file search、shell 等能力协议。</li>
+          <li><code>docs/decisions/0021-provider-leading-clients.md</code> 记录 provider-leading clients 决策。</li>
+        </ul>
+        <p class="why">为什么这么设计：供应商在工具格式、结构化输出、托管文件搜索、MCP 和 shell/code interpreter 支持上差异很大。拆到 ChatClient 后，Agent/Workflow 可以保持稳定。</p>
+      </section>
+
+      <section id="middleware">
+        <h2>6. Middleware / Context / Session</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart LR
+    Request["一次 Agent 请求"] --> AgentLayer["AgentMiddlewareLayer<br>围绕整个 Agent run"]
+    AgentLayer --> ContextProvider["ContextProvider / HistoryProvider<br>为什么：把上下文工程和历史装配从业务代码移走"]
+    ContextProvider --> ChatLayer["ChatMiddlewareLayer<br>围绕 ChatClient 调用"]
+    ChatLayer --> ToolLayer["FunctionInvocationLayer<br>围绕每个工具调用"]
+    ToolLayer --> Security["Security / Approval / FIDES<br>提示注入防御、机密性标签、人工审批"]
+    Security --> Telemetry["Telemetry / OTel<br>调用链、工具耗时、异常"]
+    Telemetry --> Response["响应 / 增量 / 中断请求"]
+        </div></div>
+        <ul>
+          <li><code>_middleware.py:72</code> 定义 <code>MiddlewareTermination</code>，允许 middleware 主动终止后续执行。</li>
+          <li><code>_middleware.py:93</code>、<code>204</code>、<code>373</code> 分别定义 <code>AgentContext</code>、<code>FunctionInvocationContext</code>、<code>ChatContext</code>。</li>
+          <li><code>_middleware.py:1104</code>、<code>1254</code> 分别定义 <code>ChatMiddlewareLayer</code> 与 <code>AgentMiddlewareLayer</code>。</li>
+          <li><code>_sessions.py:161</code> 定义 <code>SessionContext</code>，<code>272</code>、<code>289-318</code> 支持 session 级扩展 tools 和 middleware。</li>
+        </ul>
+      </section>
+
+      <section id="tools">
+        <h2>7. Tools / 审批 / 安全</h2>
+        <p>工具层把本地函数或外部工具变成模型可见 schema，执行模型返回的 tool call，并在执行前后接入 middleware、安全标签、approval 和 telemetry。</p>
+        <ul>
+          <li><code>_tools.py:560-581</code> 暴露工具 <code>invoke</code> 协议。</li>
+          <li><code>_tools.py:1738-1761</code> 对并发工具调用做 termination handling。</li>
+          <li><code>security.py:1278-1281</code> 处理 <code>function_approval_request</code>。</li>
+          <li><code>security.py:1661-1678</code> 的 <code>approval_on_violation</code> 支持违规时请求审批而不是直接阻断。</li>
+        </ul>
+        <p class="why">为什么这么设计：工具是 Agent 最容易造成真实副作用的地方。MAF 把 tool call 放进 FunctionInvocationContext、middleware、安全标签和 approval 流程中，便于审计、暂停、人工确认和提示注入防御。</p>
+      </section>
+
+      <section id="workflow">
+        <h2>8. Workflow Runtime</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Input["Workflow.run 输入"] --> Builder["WorkflowBuilder<br>定义 executors、edges、fan-out、fan-in"]
+    Builder --> Validate["Graph validation<br>为什么：提前发现未绑定、不可达、类型不匹配"]
+    Validate --> Runner["WorkflowRunner<br>Pregel-like superstep 执行模型"]
+    Runner --> Queue["消息队列 / edge groups<br>上一轮输出变成下一轮输入"]
+    Queue --> Executor["Executor / AgentExecutor / FunctionExecutor"]
+    Executor --> Events["WorkflowEvent<br>executor_invoked、completed、output、request_info、error"]
+    Events --> Checkpoint["Checkpoint storage<br>为什么：长流程可以恢复、回放、time-travel"]
+    Events --> HITL{"request_info / approval?"}
+    HITL -->|"是"| Wait["外部输入暂停<br>人工审批、补充资料、工具确认"]
+    Wait --> Restore["恢复 checkpoint 并投递响应"]
+    Restore --> Queue
+    HITL -->|"否"| Converge{"还有消息?"}
+    Converge -->|"有"| Queue
+    Converge -->|"无"| Done["WorkflowRunResult"]
+        </div></div>
+        <ul>
+          <li><code>_workflow.py:103</code> 定义 <code>WorkflowRunResult</code>，<code>208</code> 定义 <code>Workflow</code>。</li>
+          <li><code>_workflow_builder.py:53</code> 定义 <code>WorkflowBuilder</code>，<code>91-151</code> 配置 checkpoint、output、max iterations。</li>
+          <li><code>_runner.py:123-179</code> 在消息未收敛时循环，超限抛出 <code>WorkflowConvergenceException</code>。</li>
+          <li><code>WorkflowBuilder.cs:254-369</code> 提供 <code>AddEdge</code>，<code>406-540</code> 提供 FanOut/FanIn。</li>
+        </ul>
+      </section>
+
+      <section id="orchestration">
+        <h2>9. Orchestration 模板</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Patterns["高级 Orchestration 模板<br>基于 WorkflowBuilder 封装常用多 Agent 拓扑"] --> Seq["Sequential<br>共享对话上下文，顺序交给多个 Agent"]
+    Patterns --> Con["Concurrent<br>fan-out 并行处理，再 fan-in 聚合"]
+    Patterns --> Hand["Handoff<br>Agent 通过 handoff tool 自主转交控制权"]
+    Patterns --> Group["GroupChat<br>管理者选择发言者，参与者广播上下文"]
+    Patterns --> Mag["Magentic<br>经理 Agent 规划，多个执行 Agent 协作"]
+    Seq --> Why1["为什么：业务流水线清晰，适合撰写、审核、润色"]
+    Con --> Why2["为什么：互不依赖的校验并行化，适合风控、资料核验"]
+    Hand --> Why3["为什么：客服/工单需要根据问题动态转专业 Agent"]
+    Group --> Why4["为什么：多人讨论式任务需要共享历史和轮次控制"]
+    Mag --> Why5["为什么：复杂开放任务需要 planner-manager-executor 模式"]
+        </div></div>
+        <ul>
+          <li><code>_sequential.py:63</code> 定义 <code>SequentialBuilder</code>，<code>229-264</code> 构造 workflow。</li>
+          <li><code>_concurrent.py:177-181</code> 说明 dispatcher -> fan-out -> participants -> fan-in -> aggregator。</li>
+          <li><code>_handoff.py:566-588</code> 说明 Agent 通过 <code>.add_handoff()</code> 转交控制权。</li>
+          <li><code>_group_chat.py:97-107</code> 描述 group chat orchestrator 的循环。</li>
+        </ul>
+      </section>
+
+      <section id="dotnet">
+        <h2>10. .NET 主线</h2>
+        <p>.NET 不是附属示例，而是 MAF 的并行一等实现。<code>AIAgent</code> 把同步结果、流式结果、session、continuation、function invocation 和 workflow 都放到 C# 生态中，适合 ASP.NET、Worker Service、Azure Functions 和企业 .NET 后端。</p>
+        <ul>
+          <li><code>AIAgent.cs:38</code> 定义抽象基类；<code>251-366</code> 是非流式 <code>RunAsync</code>，<code>382-502</code> 是 <code>RunStreamingAsync</code>。</li>
+          <li><code>AgentResponse.cs:28</code>、<code>AgentResponseUpdate.cs:35</code> 定义最终响应和流式增量。</li>
+          <li><code>AgentRunOptions.cs:48-53</code> 提到 background / continuation token。</li>
+          <li><code>AgentExtensions.cs:38-89</code> 把 <code>AIAgent</code> 转成 <code>AIFunction</code>，体现 Agent-as-tool。</li>
+        </ul>
+      </section>
+
+      <section id="durable">
+        <h2>11. Durable Agents / Hosting</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Caller["外部调用方<br>HTTP / Console / Orchestration"] --> Proxy["DurableAIAgentProxy / DurableAIAgent"]
+    Proxy --> Entity["AgentEntity<br>每个 agent session 映射到一个 Durable Entity"]
+    Entity --> State["DurableAgentState<br>完整 conversation history、pending requests、checkpoint"]
+    Entity --> RealAgent["真实 AIAgent / Python Agent<br>加载注册名对应的 agent"]
+    RealAgent --> Tools["工具 / MCP / 长任务"]
+    Tools --> Pending{"长任务或人工输入?"}
+    Pending -->|"是"| Persist["持久化状态并返回 continuation / request"]
+    Pending -->|"否"| Response["AgentResponse"]
+    Persist --> Resume["后续调用恢复 entity state"]
+    Resume --> RealAgent
+    Response --> Caller
+    Azure["Azure Functions Hosting<br>自动生成 /api/agents/{agentName}/run"] --> Proxy
+        </div></div>
+        <ul>
+          <li><code>docs/features/durable-agents/README.md:21</code> 说明 Durable agents 基于 Durable Entities / virtual actors。</li>
+          <li><code>47-55</code> 列出 .NET 核心类型：<code>DurableAIAgent</code>、<code>DurableAIAgentProxy</code>、<code>AgentEntity</code>、<code>DurableAgentSession</code>。</li>
+          <li><code>60-68</code> 列出 Python 侧 durabletask、worker、client、orchestration context 和 <code>AgentEntity</code>。</li>
+          <li><code>72-77</code> 说明 Azure Functions hosting 会生成 <code>/api/agents/{agentName}/run</code>。</li>
+        </ul>
+      </section>
+
+      <section id="case">
+        <h2>12. 真实例子：企业报销审批 Agent</h2>
+        <ol>
+          <li>入口用 Azure Functions 或自研 API 接收报销单，调用 Durable Agent endpoint。</li>
+          <li>Triage Agent 判断报销类型、金额和风险等级。</li>
+          <li>Sequential orchestration 先做“政策检索 -> 信息抽取 -> 风险摘要”。</li>
+          <li>Concurrent orchestration 并行跑发票校验、预算校验、合规校验。</li>
+          <li>高风险时通过 <code>request_info</code> 或 function approval 暂停，等待财务确认。</li>
+          <li>Durable Agent 保存会话和 checkpoint，即使审批隔天才回来也能继续。</li>
+          <li>middleware 统一记录审计、脱敏、提示注入防御和 OpenTelemetry trace。</li>
+          <li>Evaluation 用固定报销样例评估工具调用是否正确、拒绝理由是否符合公司政策。</li>
+        </ol>
+      </section>
+
+      <section id="evidence-snippets">
+        <h2>13. 代码片段作证：核心抽象不是口号</h2>
+        <p>下面几段代码说明 MAF 的核心设计直接落在类层级、协议层级和运行入口里，不只是概念包装。</p>
+        <h3>Python：RawAgent 与 Agent 分层</h3>
+        <pre><code class="language-python">class RawAgent(BaseAgent, Generic[OptionsCoT]):
+    """A Chat Client Agent without middleware or telemetry layers.
+
+    This is the core chat agent implementation. For most use cases,
+    prefer :class:`Agent` which includes all standard layers.
+    """
+
+class Agent(
+    AgentMiddlewareLayer,
+    AgentTelemetryLayer,
+    RawAgent[OptionsCoT],
+    Generic[OptionsCoT],
+):</code></pre>
+        <p>源码证据：<code>python/packages/core/agent_framework/_agents.py:662-666</code>、<code>1683-1687</code>。</p>
+        <p class="why">为什么这么设计：<code>RawAgent</code> 是最薄执行内核，<code>Agent</code> 再叠 middleware 和 telemetry。高级用户可以低层扩展，普通生产使用默认带治理能力。</p>
+
+        <h3>Python：ChatClient 是 provider adapter 的共同入口</h3>
+        <pre><code class="language-python">class SupportsChatGetResponse(Protocol[OptionsContraT]):
+    """A protocol for a chat client that can generate responses."""
+
+    def get_response(...):
+        ...
+
+def create_agent(
+    ...,
+    tools: ToolTypes | Callable[..., Any] | Sequence[...] | None = None,
+    default_options: OptionsCoT | Mapping[str, Any] | None = None,
+    middleware: Sequence[MiddlewareTypes] | None = None,
+) -&gt; Agent[OptionsCoT]:</code></pre>
+        <p>源码证据：<code>python/packages/core/agent_framework/_clients.py:85-97</code>、<code>578-605</code>、<code>646-651</code>。</p>
+        <p class="why">为什么这么设计：Agent 不直接依赖某个模型 SDK，而是依赖结构化协议；provider 包只要实现响应、工具转换和 options 映射，就能进入统一 Agent/Workflow 流程。</p>
+
+        <h3>.NET：公开 RunAsync 委托给 RunCoreAsync</h3>
+        <pre><code class="language-csharp">public Task&lt;AgentResponse&gt; RunAsync(
+    IEnumerable&lt;ChatMessage&gt; messages,
+    AgentSession? session = null,
+    AgentRunOptions? options = null,
+    CancellationToken cancellationToken = default)
+{
+    CurrentRunContext = new(this, session, messages as IReadOnlyCollection&lt;ChatMessage&gt; ?? messages.ToList(), options);
+    return this.RunCoreAsync(messages, session, options, cancellationToken);
+}
+
+protected abstract Task&lt;AgentResponse&gt; RunCoreAsync(...);</code></pre>
+        <p>源码证据：<code>dotnet/src/Microsoft.Agents.AI.Abstractions/AIAgent.cs:334-366</code>。</p>
+        <p class="why">为什么这么设计：公开 API 保持统一重载和上下文设置，具体 Agent 只实现核心执行逻辑，便于把 session、options、streaming、middleware 包在同一入口周围。</p>
+
+        <h3>Agent-as-tool：Agent 可以降级成函数</h3>
+        <pre><code class="language-csharp">public static AIFunction AsAIFunction(this AIAgent agent, ...)
+{
+    var response = await agent.RunAsync(query, session: session, options: agentRunOptions, cancellationToken: cancellationToken);
+    return response.Text;
+}</code></pre>
+        <p>源码证据：<code>dotnet/src/Microsoft.Agents.AI/AgentExtensions.cs:67-82</code>。</p>
+        <p class="why">为什么这么设计：复杂系统里一个 Agent 经常要被另一个 Agent 调用。转成 <code>AIFunction</code> 后，多 Agent 协作可以收敛到工具调用模型。</p>
+      </section>
+
+      <section id="provider-detail">
+        <h2>14. Provider Adapter 细节：为什么强调 provider-leading</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    Agent["Agent / Workflow<br>只关心 messages、tools、options、response"] --> Core["Core ChatClient Protocol<br>统一 get_response / stream / default_options"]
+    Core --> ProviderPkg["Provider 包<br>OpenAI / Azure / Foundry / Anthropic / Gemini"]
+    ProviderPkg --> Normalize["适配层转换<br>模型名、response_format、tool schema、stream event"]
+    Normalize --> Capability{"能力协议检测<br>为什么：不同供应商能力不完全一致"}
+    Capability --> Native["Native hosted tools<br>web search / code interpreter / file search / MCP / shell"]
+    Capability --> Function["普通函数工具<br>FunctionTool / schema / approval"]
+    Native --> Model["真实模型或托管 Agent"]
+    Function --> Model
+    Model --> Finalize["ChatResponse / AgentResponse<br>把 provider 返回重新收敛成框架对象"]
+        </div></div>
+        <ol>
+          <li><strong>隔离依赖：</strong><code>docs/decisions/0021-provider-leading-clients.md:17</code> 要求 core 只包含抽象、middleware infrastructure 和 telemetry，不放 provider-specific code 或依赖。</li>
+          <li><strong>统一命名与发现：</strong>同 ADR <code>34-41</code> 把 OpenAI / Azure / Foundry 的客户端命名和 <code>model</code> 参数收敛，降低不同后端之间的迁移成本。</li>
+          <li><strong>统一工具边界：</strong><code>_clients.py:668</code>、<code>698</code>、<code>728</code>、<code>758</code>、<code>789</code>、<code>819</code> 分别定义 code interpreter、web search、image generation、MCP、file search、shell 的能力协议。</li>
+          <li><strong>统一输出形态：</strong><code>_clients.py:346-363</code> 用 <code>response_format</code> finalizer 把流式 update 汇总成 <code>ChatResponse</code>，避免上层直接处理 provider-specific event。</li>
+        </ol>
+        <p class="why">可以这样理解：MAF 不是把所有 provider 抹平到最低公分母，而是把共同部分放进 ChatClient，把差异能力用 capability protocol 暴露出来。上层 Agent 写法统一，但仍能按 provider 能力启用 native tool。</p>
+      </section>
+
+      <section id="durable-practice">
+        <h2>15. Durable Agents 实战恢复链路</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+    User["用户或业务系统<br>提交报销审批请求"] --> Http["HTTP endpoint<br>/api/agents/{agentName}/run"]
+    Http --> Proxy["DurableAIAgentProxy<br>外部调用代理"]
+    Proxy --> Entity["AgentEntity<br>按 AgentSessionId 找到 Durable Entity"]
+    Entity --> Load["加载 DurableAgentState<br>历史消息、pending request、checkpoint"]
+    Load --> RealAgent["调用真实 AIAgent / Python Agent"]
+    RealAgent --> Risk{"需要人工审批或长工具?"}
+    Risk -->|"是"| Pending["写入 pending request<br>返回 202 / continuation / thread id"]
+    Pending --> Human["财务或系统回调审批结果"]
+    Human --> Resume["再次调用同一 session<br>为什么：不依赖原进程继续存活"]
+    Resume --> Entity
+    Risk -->|"否"| Persist["追加请求和响应<br>持久化新状态"]
+    Persist --> Done["返回 AgentResponse"]
+        </div></div>
+        <ol>
+          <li>用户提交报销单，请求打到 <code>/api/agents/{agentName}/run</code>。</li>
+          <li><code>DurableAIAgentProxy</code> 把请求发给对应 <code>AgentEntity</code>，而不是依赖当前 HTTP 进程跑完整 Agent。</li>
+          <li><code>AgentEntity</code> 根据 <code>AgentSessionId</code> 加载 <code>DurableAgentState</code>，包括历史消息、已完成步骤和待处理请求。</li>
+          <li>真实 Agent 做政策判断、预算校验、发票识别；高风险时由工具审批或 <code>request_info</code> 生成 pending request。</li>
+          <li>HTTP 可返回 202、continuation 或 thread id，原进程可以结束，系统不需要一直占用计算资源。</li>
+          <li>财务隔天审批后，用同一个 session/thread id 回调；entity 重新加载状态，继续后续写回 ERP。</li>
+          <li>最终 response 和新历史被追加到持久化状态，后续任何 worker 都可以恢复同一会话。</li>
+        </ol>
+        <p>源码证据：<code>docs/features/durable-agents/README.md:5-14</code>、<code>21-28</code>、<code>52-55</code>、<code>74-80</code>、<code>127-140</code>。</p>
+        <p class="why">为什么这么设计：长任务 Agent 最大的问题不是能不能调用模型，而是人不回复、进程重启、worker 扩缩容、工具耗时很长时状态还在不在。Durable Entity 把一次会话变成可持久化 actor，解决生产运行稳定性。</p>
+      </section>
+
+      <section id="migration">
+        <h2>16. Semantic Kernel / AutoGen 迁移关系</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart LR
+    SK["Semantic Kernel 存量<br>plugins / functions / planner"] --> KeepSK["保留可复用插件<br>函数能力继续作为 tools"]
+    KeepSK --> MAF["Microsoft Agent Framework<br>AgentResponse / middleware / workflow / durable"]
+    AutoGen["AutoGen 存量<br>多 Agent 对话 / group chat / research experiments"] --> KeepAuto["保留探索式协作模式<br>沉淀稳定流程和角色边界"]
+    KeepAuto --> MAF
+    MAF --> NewBuild["新项目建议<br>用 MAF 承接生产 runtime、托管、审计、恢复"]
+    MAF --> Compose["组合而非一刀切替代<br>SK 插件生态 / AutoGen 实验能力可按场景保留"]
+        </div></div>
+        <table>
+          <tr><th>来源</th><th>存量资产</th><th>迁移到 MAF 时怎么处理</th><th>不建议迁移的情况</th></tr>
+          <tr><td>Semantic Kernel</td><td>plugins、functions、planner、企业 .NET 集成</td><td>把稳定函数能力包装为 tools，把新 Agent 入口迁到 <code>AIAgent</code> / middleware / workflow / durable。</td><td>只是已有 SK 插件调用，没有长任务、托管、审计、workflow 诉求。</td></tr>
+          <tr><td>AutoGen</td><td>多 Agent 对话、GroupChat、研究型实验、角色协作 prompt</td><td>把稳定角色边界沉淀成 MAF Agent，把固定协作拓扑放到 orchestration/workflow。</td><td>仍在快速探索多 Agent 协作策略，需要高自由度对话实验。</td></tr>
+          <tr><td>新项目</td><td>没有历史包袱</td><td>优先用 MAF 建 Agent runtime，再按 provider 和 hosting 选择实现。</td><td>只做一次性脚本或单 provider 轻量 demo。</td></tr>
+        </table>
+        <p class="why">分享口径：SK 更像应用内 AI kernel 与插件生态，AutoGen 更像多 Agent 协作实验场，MAF 更像微软把 AgentResponse、middleware、workflow、durable hosting、observability/eval 收拢后的生产 runtime。迁移策略是稳定能力迁到 MAF，实验性协作按场景保留。</p>
+      </section>
+
+      <section id="compare">
+        <h2>17. 对比分析</h2>
+        <div class="diagram-wrap"><div class="mermaid">
+flowchart LR
+    MAF["Microsoft Agent Framework<br>Python + .NET 生产级 Agent / Workflow"] --> LG["LangGraph<br>更专注 checkpoint-first 状态图"]
+    MAF --> OAI["OpenAI Agents Python<br>更轻量，OpenAI 原生能力更直接"]
+    MAF --> ADK["Google ADK<br>Google Cloud / Gemini 生态更强"]
+    MAF --> SK["Semantic Kernel<br>微软早期插件/Planner 生态，MAF 更像新 Agent runtime 承接"]
+    MAF --> AutoGen["AutoGen<br>多 Agent 对话研究味更强，MAF 更偏生产托管与治理"]
+    MAF --> Spring["Spring AI Alibaba<br>Java/Spring 企业落地，MAF 覆盖 .NET + Python + Azure"]
+        </div></div>
+        <table>
+          <tr><th>对比对象</th><th>MAF 的优势</th><th>MAF 的边界</th></tr>
+          <tr><td>LangGraph</td><td>Python + .NET 双语，provider/hosting/durable/eval/OTel 更平台化。</td><td>状态图纯度、生态成熟度和 LangChain 组合上，LangGraph 更专注。</td></tr>
+          <tr><td>OpenAI Agents Python</td><td>生产治理、workflow、durable、.NET/Azure 入口更完整。</td><td>只用 OpenAI 原生 Responses / Realtime / sandbox 时，OpenAI Agents 更轻。</td></tr>
+          <tr><td>Google ADK</td><td>微软生态、.NET、Azure Functions、Foundry/Copilot 入口更自然。</td><td>Google Cloud / Vertex / Gemini 原生体验 ADK 更顺。</td></tr>
+          <tr><td>AutoGen</td><td>更偏生产运行时、hosting、durable、workflow 模板。</td><td>开放式多 Agent 研究、对话实验 AutoGen 更灵活。</td></tr>
+        </table>
+      </section>
+
+      <section id="summary">
+        <h2>18. 核心设计思想</h2>
+        <ul>
+          <li><strong>多语言一致抽象：</strong>Python <code>Agent</code> 和 .NET <code>AIAgent</code> 都围绕 run、stream、session、tools、response 建模。</li>
+          <li><strong>Provider-leading adapter：</strong>供应商差异放进 ChatClient / provider 包，Agent 和 Workflow 不直接绑定模型 SDK。</li>
+          <li><strong>Middleware-first 治理：</strong>鉴权、上下文、历史、工具审批、安全、遥测通过 middleware 插入。</li>
+          <li><strong>Workflow 与 Agent 分层：</strong>Agent 处理智能决策，Workflow 处理确定拓扑、并发、checkpoint 和 HITL。</li>
+          <li><strong>Durable-first 生产路径：</strong>长任务通过 Durable Entity / checkpoint / continuation 恢复。</li>
+          <li><strong>事件化与可观测：</strong>响应、流式增量、workflow event、trace、eval 让 Agent 不再是黑盒。</li>
+        </ul>
+      </section>
+
+      <section id="share">
+        <h2>19. 分享口径</h2>
+        <p class="quote">Microsoft Agent Framework 解决的不是“怎么快速调一个模型”，而是“一个企业 Agent 怎么从本地开发走到生产运行”。它把 Agent、工具、模型适配、middleware、workflow、durable hosting 和评测治理都放在同一套框架里，而且 Python 和 .NET 都是一等实现。</p>
+        <h3>三条主线</h3>
+        <ol>
+          <li><strong>Agent 主线：</strong>用户输入进入 Agent，Agent 通过 ChatClient 调模型，模型可能返回答案、工具调用或流式更新；middleware 和 session 贯穿全程。</li>
+          <li><strong>Workflow 主线：</strong>复杂业务不是无限循环，而是 executor 图、事件流、checkpoint、HITL 和 orchestration 模板。</li>
+          <li><strong>生产治理主线：</strong>工具审批、安全标签、提示注入防御、OpenTelemetry、Evaluation、Durable Agents 和 Azure Functions 才是它区别于轻量 SDK 的关键。</li>
+        </ol>
+        <p>总结一句：MAF 最适合讲成“微软生态下的生产级 Agent runtime”，它比轻量 SDK 更重，比纯状态图框架更平台化，适合 Python/.NET 团队把 Agent 做成长期可运行、可恢复、可审计的服务。</p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "default",
+      securityLevel: "loose",
+      flowchart: { htmlLabels: true, curve: "basis" }
+    });
+  </script>
+</body>
+</html>

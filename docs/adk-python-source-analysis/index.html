@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Google ADK Python 源码分析</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f9fc;
+      --paper: #ffffff;
+      --ink: #1f2937;
+      --muted: #5f6b7a;
+      --line: #d9e1ec;
+      --accent: #2563eb;
+      --green: #0f766e;
+      --orange: #b45309;
+      --soft: #eef5ff;
+      --shadow: 0 10px 28px rgba(31, 41, 55, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+    }
+    header {
+      background: linear-gradient(135deg, #ffffff 0%, #eaf2ff 64%, #f0fbf7 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .hero { max-width: 1180px; margin: 0 auto; padding: 46px 24px 34px; }
+    h1 { margin: 0 0 14px; font-size: clamp(30px, 5vw, 48px); line-height: 1.12; letter-spacing: 0; }
+    .lead { max-width: 940px; margin: 0; color: var(--muted); font-size: 18px; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 24px; }
+    .meta div { background: rgba(255,255,255,0.78); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+    .meta strong { display: block; font-size: 13px; color: var(--muted); }
+    .layout { max-width: 1180px; margin: 0 auto; padding: 28px 24px 56px; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; }
+    nav { position: sticky; top: 16px; align-self: start; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 14px; box-shadow: var(--shadow); }
+    nav a { display: block; color: var(--muted); text-decoration: none; padding: 7px 8px; border-radius: 6px; font-size: 14px; }
+    nav a:hover { background: var(--soft); color: var(--accent); }
+    main { min-width: 0; }
+    section { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: var(--shadow); }
+    h2 { margin: 0 0 14px; font-size: 24px; }
+    h3 { margin: 24px 0 8px; font-size: 18px; }
+    p { margin: 10px 0; }
+    code { background: #eef2f7; padding: 2px 5px; border-radius: 5px; font-family: "Cascadia Code", Consolas, monospace; font-size: 0.92em; }
+    pre { overflow: auto; background: #172033; color: #eef6ff; border-radius: 8px; padding: 16px; line-height: 1.55; }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+    th, td { border: 1px solid var(--line); padding: 10px; vertical-align: top; }
+    th { background: #f1f5fb; text-align: left; }
+    .why { border-left: 4px solid var(--green); background: #ecfdf5; padding: 10px 14px; border-radius: 6px; color: #064e3b; }
+    .warn { border-left: 4px solid var(--orange); background: #fff7ed; padding: 10px 14px; border-radius: 6px; color: #7c2d12; }
+    .mermaid { background: #fcfdff; border: 1px solid var(--line); border-radius: 8px; padding: 18px; margin: 16px 0; overflow: auto; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 6px 0; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } nav { position: static; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>Google ADK Python 源码分析</h1>
+      <p class="lead">从源码看 ADK 2.0：它把 Agent、Workflow、Runner、Event、Session、Tool、Task API、Evaluation、ADK Web/API Server/Deploy 组合成一套 Google 生态下的 Agent 应用开发框架。</p>
+      <div class="meta">
+        <div><strong>源码路径</strong><span>sources/adk-python</span></div>
+        <div><strong>当前提交</strong><span>2de8a53525261a0dcf53588fbbb5ebd7d4c3a9c2</span></div>
+        <div><strong>版本</strong><span>v1.32.0-631-g2de8a535 / google-adk</span></div>
+      </div>
+    </div>
+  </header>
+  <div class="layout">
+    <nav>
+      <a href="#position">定位</a>
+      <a href="#architecture">架构</a>
+      <a href="#layers">源码分层</a>
+      <a href="#runner">主流程</a>
+      <a href="#agent">Agent 设计</a>
+      <a href="#flow">LLM Flow</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#hitl">HITL / Resume</a>
+      <a href="#task">Task API</a>
+      <a href="#tools">工具 / 模型</a>
+      <a href="#provider">模型适配</a>
+      <a href="#services">服务层</a>
+      <a href="#eval">Evaluation</a>
+      <a href="#server">CLI / Server</a>
+      <a href="#webflow">Web 链路</a>
+      <a href="#case">真实示例</a>
+      <a href="#compare">对比</a>
+      <a href="#summary">设计思想</a>
+    </nav>
+    <main>
+      <section id="position">
+        <h2>1. 一句话定位</h2>
+        <p>Google ADK Python 是一个代码优先的 Agent 应用开发框架。ADK 2.0 的特点不是只封装一个 LLM Agent，而是把 <code>Agent</code>、<code>Workflow</code>、<code>Runner</code>、<code>Event</code>、<code>Session</code>、<code>Tool</code>、<code>Task API</code>、<code>Evaluation</code>、<code>ADK Web/API Server/Deploy</code> 放进同一套开发体验里。</p>
+        <p class="why">为什么这么设计：简单任务用 LlmAgent，复杂确定性流程用 Workflow，需要子 Agent 委派时用 Task API，最后统一落到 Event / Session / Evaluation / API Server。这样既能写代码，又能用 ADK Web 调试和用 eval 做质量回归。</p>
+      </section>
+
+      <section id="architecture">
+        <h2>2. 总体架构图</h2>
+        <div class="mermaid">
+flowchart TB
+    App["业务应用 / ADK Web / API Server<br>客服、企业流程、研发助手、多 Agent 应用"] --> Runner["Runner<br>统一运行入口：session、artifact、memory、credential、plugin、resumability"]
+    Runner --> Root["App.root_agent / root_node<br>为什么：Agent 和 Workflow 共用运行入口"]
+    Root --> Agent["LlmAgent / BaseAgent<br>声明模型、指令、工具、子 Agent、callback、mode"]
+    Root --> Workflow["Workflow<br>图式运行时：edges、Graph、NodeRunner、resume、并发"]
+    Agent --> Flow["LLM Flow<br>request processors、tool listing、model call、function response"]
+    Agent --> Tools["Tools / Toolsets<br>FunctionTool、AgentTool、MCP、Google API、RAG、环境工具"]
+    Agent --> Task["Task API<br>single_turn / task 子 Agent 被包装成工具"]
+    Workflow --> Nodes["BaseNode / FunctionNode / ToolNode / JoinNode / ParallelWorker"]
+    Workflow --> Event["Event<br>output、route、state_delta、node_info、long_running_tool_ids"]
+    Flow --> Models["Models<br>Gemini、LiteLLM、Anthropic、Gemma、自定义 BaseLlm"]
+    Runner --> Services["服务层<br>SessionService、ArtifactService、MemoryService、CredentialService"]
+    Runner --> Eval["Evaluation<br>EvalCase、AgentEvaluator、metrics、LLM-as-judge"]
+    Runner --> Deploy["CLI / FastAPI / Deploy<br>adk run、adk web、api_server、Cloud Run、Agent Engine"]
+        </div>
+      </section>
+
+      <section id="layers">
+        <h2>3. 源码分层</h2>
+        <table>
+          <tr><th>层级</th><th>关键文件</th><th>作用</th></tr>
+          <tr><td>App / Runner</td><td><code>apps/app.py</code>、<code>runners.py</code></td><td>App 持有 root_agent/root_node；Runner 管 session、plugins、memory、credential、resumability。</td></tr>
+          <tr><td>Agent 定义</td><td><code>agents/base_agent.py</code>、<code>agents/llm_agent.py</code></td><td>Agent 树、子 Agent、callback、LLM 配置、工具、运行模式。</td></tr>
+          <tr><td>LLM Flow</td><td><code>flows/llm_flows/*</code></td><td>构建 LlmRequest、处理 instructions/tools、调用模型、执行 function calls。</td></tr>
+          <tr><td>Workflow Runtime</td><td><code>workflow/_workflow.py</code>、<code>_base_node.py</code>、<code>_node_runner.py</code></td><td>图编排、节点执行、并发、输出/路由/中断归一化、resume rehydration。</td></tr>
+          <tr><td>Event / Context</td><td><code>events/event.py</code>、<code>agents/context.py</code></td><td>事件、状态增量、分支、隔离作用域、用户输入恢复。</td></tr>
+          <tr><td>Tools / Task</td><td><code>tools/*</code>、<code>tools/agent_tool.py</code></td><td>FunctionTool、AgentTool、MCP、Google API、RAG、环境工具、子 Agent 委派。</td></tr>
+          <tr><td>Evaluation</td><td><code>evaluation/*</code></td><td>EvalCase、EvalSet、metrics、AgentEvaluator、LocalEvalService、LLM-as-judge。</td></tr>
+          <tr><td>CLI / Server</td><td><code>cli/*</code></td><td>adk run、adk web、FastAPI server、SSE、WebSocket live、部署命令。</td></tr>
+        </table>
+      </section>
+
+      <section id="runner">
+        <h2>4. 主流程：Runner 如何驱动 Agent / Workflow</h2>
+        <div class="mermaid">
+flowchart TB
+    Start["Runner.run_async<br>传入 user_id、session_id、new_message、invocation_id"] --> Session["获取或创建 Session<br>为什么：所有 Event 和状态都落到会话历史"]
+    Session --> RootType{"root 是 LlmAgent 还是 Workflow/BaseNode"}
+    RootType -->|"LlmAgent chat"| AgentPath["选择当前 Agent<br>恢复场景会找未结束的子 Agent"]
+    RootType -->|"Workflow / BaseNode"| NodePath["进入 _run_node_async<br>统一 node runtime"]
+    AgentPath --> Ctx["构建 InvocationContext<br>session、branch、run_config、services、plugins"]
+    NodePath --> Ctx
+    Ctx --> Exec["执行 ctx.agent.run_async 或 node.run<br>事件流不断产生"]
+    Exec --> Plugin["plugin 包裹运行<br>before/after/error callback 与 telemetry"]
+    Plugin --> Persist["append_event 写回 session<br>state_delta、agent_state、tool response、node output"]
+    Persist --> Compact["可选事件压缩<br>长会话滑动窗口压缩"]
+    Compact --> Done["返回 Event 流给 CLI/Web/API 客户端"]
+        </div>
+        <ul>
+          <li><code>src/google/adk/runners.py:137-173</code> 定义 Runner，管理 app、root agent/node、artifact、session、memory、credential、resumability。</li>
+          <li><code>runners.py:943-979</code> 是 <code>run_async</code> 主入口，支持 <code>invocation_id</code> 恢复中断调用。</li>
+          <li><code>runners.py:1081-1109</code> 根据 resumability 决定创建新 invocation context，还是从历史恢复。</li>
+          <li><code>runners.py:1117-1150</code> 执行 <code>ctx.agent.run_async(ctx)</code> 并在结束后运行事件压缩。</li>
+        </ul>
+      </section>
+
+      <section id="agent">
+        <h2>5. Agent 设计：声明式配置 + 可作为 Workflow Node</h2>
+        <p><code>BaseAgent</code> 继承 Workflow 的 <code>BaseNode</code>。这意味着 Agent 不只是聊天对象，也可以作为 Workflow 图里的节点执行。</p>
+        <ul>
+          <li><code>agents/base_agent.py:93-147</code> 定义 <code>BaseAgent(BaseNode)</code>，包含 name、description、parent_agent、sub_agents。</li>
+          <li><code>base_agent.py:283-313</code> 的 <code>run_async</code> 负责 before callback、核心实现、after callback。</li>
+          <li><code>llm_agent.py:223-244</code> 定义默认模型、live 模型和模型继承规则。</li>
+          <li><code>llm_agent.py:529-570</code> 运行 LLM flow，并在可恢复模式下写 agent end state。</li>
+          <li><code>llm_agent.py:587-607</code> 把 LlmAgent 包装成 Workflow graph node 执行。</li>
+        </ul>
+        <p class="why">为什么这么设计：ADK 不把“Agent”和“Workflow Node”分成两套世界。简单时独立 chat，复杂时放入流程图，演进成本低。</p>
+      </section>
+
+      <section id="flow">
+        <h2>6. LLM Flow：一次模型调用如何推进</h2>
+        <p>ADK 的 LLM Flow 是“预处理 -> 模型调用 -> 后处理 -> 工具执行 -> 再循环”。</p>
+        <ul>
+          <li><code>flows/llm_flows/base_llm_flow.py:916-929</code> 循环执行 one step，直到 final response。</li>
+          <li><code>base_llm_flow.py:947-972</code> 在可恢复场景检查 long-running tool call 是否未解决，未解决则暂停。</li>
+          <li><code>base_llm_flow.py:974-988</code> 恢复后如果最后事件是 function call，则直接处理工具，不重新调模型。</li>
+          <li><code>base_llm_flow.py:990-1016</code> 调模型并把 LlmResponse 转成 Event。</li>
+          <li><code>flows/llm_flows/functions.py:546-664</code> 执行单个 function call，包含 callbacks、telemetry、FunctionResponse event。</li>
+        </ul>
+      </section>
+
+      <section id="workflow">
+        <h2>7. Workflow Runtime：ADK 2.0 的图式编排</h2>
+        <div class="mermaid">
+flowchart TB
+    W["Workflow(edges)<br>把业务流程声明成图"] --> Graph["Graph.from_edge_items + validate_graph<br>为什么：启动前发现非法图和循环风险"]
+    Graph --> Seed["seed START triggers<br>把用户输入投递给起始节点"]
+    Seed --> Schedule["schedule_ready_nodes<br>按触发顺序调度，可受 max_concurrency 限制"]
+    Schedule --> Runner["NodeRunner.run<br>创建 child Context，执行 BaseNode.run"]
+    Runner --> Normalize["BaseNode.run 归一化输出<br>Event 原样、RequestInput 转中断、普通值转 Event(output)"]
+    Normalize --> Result{"节点结果"}
+    Result -->|"output"| Downstream["触发下游节点<br>可 fan-out / fan-in"]
+    Result -->|"route"| Route["按 Event.actions.route 走条件边"]
+    Result -->|"interrupt"| Wait["NodeStatus.WAITING<br>保留 interrupt_ids 等用户输入"]
+    Result -->|"error"| Fail["FAILED / retry / error shutdown"]
+    Downstream --> Schedule
+    Route --> Schedule
+    Wait --> Resume["下次 run 带 invocation_id / FunctionResponse 恢复"]
+    Resume --> Rehydrate["ReplayManager 扫 session events<br>重建已完成节点和未决中断"]
+    Rehydrate --> Schedule
+        </div>
+        <ul>
+          <li><code>workflow/_workflow.py:138-160</code> 定义 <code>Workflow(BaseNode)</code>，支持 edges、graph、max_concurrency。</li>
+          <li><code>_workflow.py:239-294</code> 是 orchestration loop：SETUP、resume scan、seed triggers、run loop、finalize。</li>
+          <li><code>_workflow.py:298-388</code> 调度 ready nodes、等待 pending tasks，并用 recovered sequence 保持恢复顺序。</li>
+          <li><code>workflow/_base_node.py:197-230</code> 把 Event、RequestInput、普通值统一归一化成 Event。</li>
+          <li><code>workflow/_node_runner.py:287-305</code> 从 Event 中提取 output、interrupt、route、transfer_to_agent。</li>
+        </ul>
+      </section>
+
+      <section id="hitl">
+        <h2>8. HITL / Resume：RequestInput 与事件重放</h2>
+        <div class="mermaid">
+flowchart TB
+    Node["FunctionNode / Workflow Node"] --> NeedUser["需要用户输入或凭证"]
+    NeedUser --> Request["yield RequestInput<br>包含 interrupt_id、message、payload、response_schema"]
+    Request --> Event["create_request_input_event<br>转成 adk_request_input function_call"]
+    Event --> Long["Event.long_running_tool_ids<br>为什么：客户端知道 run 已暂停且等待哪个 id"]
+    Long --> UI["ADK Web / CLI / API 客户端展示给用户"]
+    UI --> Response["用户返回 FunctionResponse<br>id 匹配 interrupt_id"]
+    Response --> Runner["Runner.run_async(invocation_id=...)"]
+    Runner --> Rehydrate["rehydration 扫描 session events<br>找 interrupt_owner、resolved_responses、schema"]
+    Rehydrate --> NodeAgain{"rerun_on_resume?"}
+    NodeAgain -->|"True"| Rerun["节点重跑<br>ctx.resume_inputs 提供用户输入"]
+    NodeAgain -->|"False"| Complete["用用户输入作为节点输出<br>避免重复执行副作用"]
+    Rerun --> Continue["Workflow 继续调度下游节点"]
+    Complete --> Continue
+        </div>
+        <ul>
+          <li><code>events/request_input.py:28-64</code> 定义 RequestInput，包含 interrupt_id、payload、message、response_schema。</li>
+          <li><code>workflow/utils/_workflow_hitl_utils.py:47-69</code> 把 RequestInput 转成 <code>adk_request_input</code> function call，并设置 long_running_tool_ids。</li>
+          <li><code>events/event.py:121-125</code> 的 long_running_tool_ids 告诉客户端哪些 function call 是 long running。</li>
+          <li><code>workflow/utils/_rehydration_utils.py:231-357</code> 扫描 session events，重建节点状态、interrupt owner、resolved responses 和 schema。</li>
+        </ul>
+        <p class="why">为什么这么设计：ADK 的恢复核心不是外部 checkpoint 文件，而是让 Event 历史成为可重放事实。UI、CLI、API、Eval 都能基于同一种事件格式观察、暂停、恢复和复盘。</p>
+      </section>
+
+      <section id="task">
+        <h2>9. Task API / AgentTool：子 Agent 如何委派</h2>
+        <div class="mermaid">
+flowchart TB
+    Parent["Chat LlmAgent<br>协调者"] --> SubAgents["sub_agents<br>single_turn 或 task mode"]
+    SubAgents --> Build["LlmAgent 初始化时包装子 Agent"]
+    Build --> Single["_SingleTurnAgentTool<br>适合无状态一次性子任务"]
+    Build --> Task["_TaskAgentTool<br>多轮任务委派，占用独立 isolation_scope"]
+    Parent --> Model["模型选择调用哪个工具"]
+    Model --> Call["function_call 带 task brief"]
+    Call --> ToolCtx["ToolContext.run_node<br>按 function_call_id 构造 branch/run_id"]
+    ToolCtx --> Child["子 Agent 作为 node 运行<br>可产生自己的 Event、工具调用、HITL"]
+    Child --> Result["结果回到父 Agent<br>single_turn 直接结果，task 可延迟完成"]
+    Result --> Parent
+        </div>
+        <ul>
+          <li><code>llm_agent.py:1110-1133</code> task mode 自动加入 FinishTaskTool，并把子 Agent 包装成 single_turn 或 task 工具。</li>
+          <li><code>tools/agent_tool.py:108-122</code> 定义 AgentTool，把 Agent 当成可调用工具。</li>
+          <li><code>agent_tool.py:343-380</code> SingleTurnAgentTool 使用 <code>tool_context.run_node</code> 执行子 Agent。</li>
+          <li><code>agent_tool.py:389-449</code> TaskAgentTool 是任务委派标记，响应延迟由框架处理。</li>
+          <li><code>events/event.py:135-147</code> 的 isolation_scope 隔离委派 Agent 的上下文。</li>
+        </ul>
+      </section>
+
+      <section id="tools">
+        <h2>10. Tool / Model / Google 生态适配</h2>
+        <p>ADK 工具层覆盖 FunctionTool、AgentTool、MCP、Google API、Vertex AI Search / RAG、LlamaIndex retrieval、OpenAPI、Spanner、BigQuery、GCS、Pub/Sub、环境工具、Bash、Computer Use 等。模型层通过 <code>BaseLlm</code> 和 <code>LLMRegistry</code> 接入 Gemini、LiteLLM、Anthropic、Gemma 等。</p>
+        <ul>
+          <li><code>tools/base_tool.py:51</code> 定义 BaseTool；<code>tools/function_tool.py:42</code> 定义 FunctionTool；<code>tools/base_toolset.py:63</code> 定义 BaseToolset。</li>
+          <li><code>tools/mcp_tool/mcp_toolset.py:66</code> 定义 McpToolset。</li>
+          <li><code>tools/retrieval/vertex_ai_rag_retrieval.py:39</code> 和 <code>tools/retrieval/llama_index_retrieval.py:31</code> 提供 RAG 工具。</li>
+          <li><code>models/base_llm.py:32</code> 定义 BaseLlm；<code>models/google_llm.py:88</code> 定义 Gemini；<code>models/lite_llm.py:2586</code> 定义 LiteLlm。</li>
+        </ul>
+      </section>
+
+      <section id="provider">
+        <h2>10.1 Provider / Model 适配细节</h2>
+        <div class="mermaid">
+flowchart TB
+    Agent["LlmAgent(model=...)"] --> Canonical["canonical_model<br>把字符串或 BaseLlm 统一成模型对象"]
+    Canonical --> Registry["LLMRegistry.new_llm(model)<br>为什么：业务代码只写模型名，不直接绑定具体 SDK"]
+    Registry --> Resolve["resolve(model)<br>按前缀或正则选择 BaseLlm 子类"]
+    Resolve --> Gemini["Gemini<br>Google GenAI / Vertex / Gemini 原生能力"]
+    Resolve --> LiteLLM["LiteLlm<br>provider/model 格式，桥接 OpenAI、Azure、Anthropic 等"]
+    Resolve --> Custom["自定义 BaseLlm<br>扩展 supported_models 和 generate_content_async"]
+    Gemini --> Request["LlmRequest / GenerateContentConfig<br>工具、schema、system instruction、contents"]
+    LiteLLM --> Translate["消息、工具、reasoning、file_uri 转换<br>为什么：不同 provider 协议并不一致"]
+    Translate --> Response["LlmResponse<br>统一回到 Event / FunctionCall / Final response"]
+    Request --> Response
+        </div>
+        <p>这一层的关键设计是“上层 Agent 不关心 provider SDK”。<code>LlmAgent</code> 只声明模型名，底层由 <code>LLMRegistry</code> 解析到 Gemini、LiteLLM 或自定义 <code>BaseLlm</code>。</p>
+        <ul>
+          <li><code>models/base_llm.py:32-47</code> 定义 <code>BaseLlm</code> 和 <code>supported_models()</code>。</li>
+          <li><code>models/registry.py:40-56</code> 的 <code>new_llm(model)</code> 解析模型名前缀并实例化对应模型。</li>
+          <li><code>registry.py:119-173</code> 支持 <code>[model_class]:model_name</code>，并对 provider/model 形态提示 LiteLLM。</li>
+          <li><code>models/__init__.py:51-76</code> 注册 Gemini、Gemma、LiteLLM 等模型匹配规则。</li>
+          <li><code>models/google_llm.py:88</code> 定义 Gemini；<code>google_llm.py:165-167</code> 给出支持模型规则。</li>
+          <li><code>models/lite_llm.py:307-323</code> 提取 provider；<code>lite_llm.py:2586</code> 定义 <code>LiteLlm(BaseLlm)</code>；<code>lite_llm.py:2933</code> 提供支持模型规则。</li>
+          <li><code>lite_llm.py:2325-2327</code> 在调用前识别 provider，再构造消息、工具和请求参数。</li>
+        </ul>
+        <p class="why">为什么这么设计：ADK 用 BaseLlm + LLMRegistry + LlmRequest/LlmResponse 把模型 SDK 和 Agent 运行时隔开。上层继续使用 Event、Tool、FunctionCall、Evaluation；下层各 provider 负责翻译协议。</p>
+      </section>
+
+      <section id="services">
+        <h2>10.2 Runner 周边服务层</h2>
+        <div class="mermaid">
+flowchart TB
+    Runner["Runner / InvocationContext<br>把一次运行需要的服务注入上下文"] --> Session["SessionService<br>保存 session、events、state_delta、agent_state"]
+    Runner --> Artifact["ArtifactService<br>保存文件、图片、音频、代码执行产物"]
+    Runner --> Memory["MemoryService<br>把会话或事件沉淀为可搜索长期记忆"]
+    Runner --> Credential["CredentialService<br>保存和加载工具认证凭据"]
+    Context["Context / ToolContext"] --> Session
+    Context --> Artifact
+    Context --> Memory
+    Context --> Credential
+    Session --> Resume["Resume / Rehydration<br>为什么：恢复依赖事件历史"]
+    Artifact --> Tools["工具和代码执行<br>产物可跨步骤引用"]
+    Memory --> Agent["Agent 个性化和长期上下文"]
+    Credential --> Auth["Google API / OpenAPI / MCP 工具授权"]
+        </div>
+        <p>Runner 周边的服务层解释了 ADK 为什么比普通 SDK 的“调用器”更重：它要同时支撑本地调试、Web UI、API Server、恢复、评测和部署。</p>
+        <ul>
+          <li><code>agents/invocation_context.py:150-153</code> 集中持有 artifact、session、memory、credential service。</li>
+          <li><code>sessions/base_session_service.py:54-61</code> 定义 SessionService；<code>base_session_service.py:154-156</code> 的 <code>append_event</code> 写入事件。</li>
+          <li><code>artifacts/base_artifact_service.py:87-128</code> 定义 <code>save_artifact</code> / <code>load_artifact</code>。</li>
+          <li><code>memory/base_memory_service.py:44</code> 定义 MemoryService；<code>base_memory_service.py:124-126</code> 定义 <code>search_memory</code>。</li>
+          <li><code>auth/credential_service/base_credential_service.py:28-58</code> 定义凭据加载与保存。</li>
+          <li><code>agents/context.py:684-798</code> 将 artifact 和 credential 操作转发给 invocation context。</li>
+          <li><code>agents/context.py:899-978</code> 提供 add session/events/memory/search memory。</li>
+          <li><code>cli/utils/service_factory.py:170-340</code> 根据 CLI/Web 选项创建 session、memory、artifact service，支持 URI、local storage 和 in-memory fallback。</li>
+        </ul>
+        <p class="why">为什么这么设计：状态、文件、记忆、凭据不藏在 Agent 对象里，而是通过服务层注入。这样同一个 Agent 可以在 CLI、ADK Web、API Server、部署环境中切换后端，运行模型保持一致。</p>
+      </section>
+
+      <section id="eval">
+        <h2>11. Evaluation：把 Agent 质量变成可回归指标</h2>
+        <div class="mermaid">
+flowchart TB
+    Cases["EvalCase / EvalSet<br>用户输入、参考输出、期望工具轨迹"] --> Generate["AgentEvaluator 运行 Agent<br>生成 actual invocations"]
+    Generate --> Service["LocalEvalService / Vertex facade<br>对每个 inference result 评估"]
+    Service --> Metrics["EvalMetric<br>tool_trajectory、response_match、final_response_v2、safety、hallucination、rubric"]
+    Metrics --> Evaluators["Evaluator 实现<br>规则匹配、ROUGE、LLM-as-judge、Rubric"]
+    Evaluators --> Result["EvalCaseResult<br>分数、失败原因、每轮结果"]
+    Result --> CI["CLI / pytest / ADK Web<br>为什么：把 Agent 质量从主观体验变成可回归指标"]
+        </div>
+        <ul>
+          <li><code>evaluation/agent_evaluator.py:97</code> 定义 AgentEvaluator，<code>agent_evaluator.py:196</code> 提供 evaluate 入口。</li>
+          <li><code>evaluation/eval_case.py:135</code> 定义 EvalCase。</li>
+          <li><code>evaluation/eval_metrics.py:44-52</code> 定义 tool_trajectory、response_match、final_response_v2 等指标。</li>
+          <li><code>evaluation/local_eval_service.py:194-217</code> 并发评估 inference results。</li>
+        </ul>
+      </section>
+
+      <section id="server">
+        <h2>12. CLI / Web / API Server / Deploy</h2>
+        <p>ADK 提供 <code>adk run</code>、<code>adk web</code>、<code>adk api_server</code>、SSE、WebSocket live mode，以及 Cloud Run / GKE / Vertex Agent Engine 部署路径。</p>
+        <ul>
+          <li><code>cli/api_server.py:947</code> 定义 get_fast_api_app。</li>
+          <li><code>api_server.py:1132</code> 注册 <code>/list-apps</code>。</li>
+          <li><code>api_server.py:1600</code> 注册 <code>/run_sse</code>。</li>
+          <li><code>api_server.py:1696</code> 注册 <code>/run_live</code> WebSocket。</li>
+          <li><code>cli/fast_api.py:403</code> 提供外部使用的 get_fast_api_app helper。</li>
+        </ul>
+      </section>
+
+      <section id="webflow">
+        <h2>12.1 ADK Web / API Server 运行链路</h2>
+        <div class="mermaid">
+flowchart TB
+    Browser["ADK Web / 外部客户端"] --> Apps["/list-apps / session / artifact APIs<br>先发现 app、创建 session、读写 artifacts"]
+    Browser --> RunSSE["POST /run_sse<br>普通文本或 SSE streaming"]
+    RunSSE --> RunnerMap["ApiServer.get_runner_async(app_name)<br>缓存或加载 App，并创建 Runner"]
+    RunnerMap --> Runner["Runner.run_async<br>注入 services、run_config、new_message"]
+    Runner --> Events["Event async stream<br>模型输出、工具调用、state_delta、RequestInput"]
+    Events --> Serialize["SSE event 序列化<br>为什么：前端可以边生成边渲染，也能看到暂停/工具事件"]
+    Serialize --> Browser
+    Browser --> Live["WebSocket /run_live<br>音频、视频、实时交互"]
+    Live --> LiveRunner["Runner.run_live<br>双向队列转发 live requests/responses"]
+    LiveRunner --> Browser
+        </div>
+        <p>ADK Web 不是独立的调试玩具，而是直接吃 <code>ApiServer + Runner + Event</code>。页面发起 <code>/run_sse</code> 后，服务端找到 Runner，Runner 产出的 Event 一边写入 session，一边被转换成 SSE 推回前端。</p>
+        <ul>
+          <li><code>cli/api_server.py:650-656</code> 说明 ApiServer 提供 FastAPI app，并暴露 agent runners。</li>
+          <li><code>api_server.py:714</code> 维护 <code>runner_dict</code>，避免每次请求重复创建 Runner。</li>
+          <li><code>api_server.py:721-832</code> 从 app 加载和服务层创建 Runner，并注入 artifact/session/memory/credential service。</li>
+          <li><code>api_server.py:947</code> 定义 <code>get_fast_api_app</code>。</li>
+          <li><code>api_server.py:1600-1690</code> 的 <code>/run_sse</code> 调用 <code>runner.run_async</code> 并返回 SSE streaming response。</li>
+          <li><code>api_server.py:1696-1801</code> 的 <code>/run_live</code> 建立 WebSocket，并调用 <code>runner.run_live</code> 做双向流。</li>
+          <li><code>cli/fast_api.py:403</code> 暴露外部可嵌入的 <code>get_fast_api_app</code> helper。</li>
+          <li><code>cli/cli_tools_click.py:1838-1966</code> 说明 <code>adk web</code> 和 <code>adk api_server</code> 都走同一个 FastAPI app 入口。</li>
+        </ul>
+        <p class="why">为什么这么设计：本地 Web 调试和生产 API Server 尽量共用运行链路。浏览器、CLI、评测里看到的事件本质上都来自 Runner，减少“调试正常、服务化后不一致”的风险。</p>
+      </section>
+
+      <section id="case">
+        <h2>13. 真实示例：电商售后工单</h2>
+        <pre><code class="language-python">from google.adk import Agent, Workflow
+from google.adk.events.request_input import RequestInput
+from google.adk.workflow import node
+
+@node(rerun_on_resume=True)
+async def approve_refund(ctx, order_id: str):
+    if "refund_approved" not in ctx.state:
+        yield RequestInput(
+            interrupt_id=f"refund:{order_id}",
+            message=f"订单 {order_id} 申请退款，需要主管确认。",
+            response_schema=dict,
+        )
+        return
+    return {"approved": ctx.state["refund_approved"]}
+
+triage_agent = Agent(
+    name="triage_agent",
+    model="gemini-2.5-flash",
+    instruction="判断用户问题类型，订单退款交给流程节点处理。",
+)
+
+root_agent = Workflow(
+    name="ecommerce_after_sales",
+    edges=[("START", triage_agent, approve_refund)],
+)</code></pre>
+        <p>这个例子对应四条源码主线：Workflow 编译成 Graph；LlmAgent 作为 Workflow Node 执行；RequestInput 转成 adk_request_input function call；恢复时 rehydration 从 session events 中找到已完成节点和未决 interrupt。</p>
+      </section>
+
+      <section id="compare">
+        <h2>14. 和其他框架对比</h2>
+        <div class="mermaid">
+flowchart TB
+    Need["选型问题"] --> ADK["Google ADK Python<br>Agent + Workflow + Task API + Google 生态部署"]
+    Need --> LangGraph["LangGraph<br>checkpoint-first 状态图运行时"]
+    Need --> OpenAI["OpenAI Agents Python<br>OpenAI 原生轻量 Agent loop"]
+    Need --> Agno["Agno<br>Agent platform SDK / AgentOS"]
+    Need --> Dify["Dify<br>低代码 LLM 应用平台"]
+    ADK --> A1["适合：Gemini/Vertex/Google Cloud 生态、多 Agent + workflow、ADK Web 调试、评测和部署一体"]
+    LangGraph --> L1["适合：更纯粹的代码级状态图、checkpoint、复杂中断恢复"]
+    OpenAI --> O1["适合：OpenAI Responses、handoff、guardrail、realtime、sandbox"]
+    Agno --> G1["适合：AgentOS、API 化、平台治理、Teams"]
+    Dify --> D1["适合：产品经理配置、知识库、发布、运营界面"]
+    ADK --> Combo["组合边界<br>ADK 做 Google 生态 Agent 应用内核；LangGraph 做跨系统强 checkpoint；Dify/n8n 做产品入口或自动化入口"]
+        </div>
+        <table>
+          <tr><th>对比对象</th><th>ADK 更强的地方</th><th>对方更强的地方</th></tr>
+          <tr><td>LangGraph</td><td>Agent、Workflow、Task API、ADK Web、Eval、Google Cloud 部署一体化。</td><td>checkpoint-first 状态图更纯粹，生态更聚焦复杂状态恢复。</td></tr>
+          <tr><td>OpenAI Agents Python</td><td>Google/Gemini/Vertex 生态、内置 Workflow Runtime、Eval、API Server。</td><td>OpenAI Responses、handoff、guardrail、Realtime/Sandbox 更原生。</td></tr>
+          <tr><td>Agno</td><td>Google 生态和 ADK Web / Eval 更强，Workflow Runtime 更像框架内核。</td><td>AgentOS、服务化平台治理、Team/Workflow 产品形态更突出。</td></tr>
+          <tr><td>Dify</td><td>代码控制、Workflow 运行时、评测和 Google Cloud 部署更适合工程团队。</td><td>低代码应用配置、知识库运营、权限和发布界面更完整。</td></tr>
+        </table>
+      </section>
+
+      <section id="summary">
+        <h2>15. 设计思想总结</h2>
+        <ol>
+          <li>Agent 和 Workflow 统一到 Node：BaseAgent(BaseNode) 让 Agent 能独立运行，也能成为流程节点。</li>
+          <li>Event 是系统事实：对话、工具、状态、路由、节点输出、中断都落成 Event。</li>
+          <li>恢复依赖事件重放：Workflow 通过 rehydration 扫 session events 重建节点状态。</li>
+          <li>子 Agent 工具化：single_turn / task 子 Agent 通过 AgentTool 接入模型 function call。</li>
+          <li>Google 生态优先：Gemini、Vertex AI、Google API、Agent Engine、Cloud Run、GKE、ADK Web/API Server 是天然主场。</li>
+          <li>质量工程内置：Evaluation 和 AgentEvaluator、EvalCase、metrics、pytest/CLI/Web 打通。</li>
+          <li>服务后端可替换：Session、Artifact、Memory、Credential 都通过服务层注入，便于从本地调试切到生产部署。</li>
+          <li>模型适配解耦：BaseLlm 和 LLMRegistry 让 Agent 运行时不直接绑定某个 provider SDK。</li>
+        </ol>
+        <p class="warn">分享口径：ADK 不是“Gemini Agent 的简单封装”，而是 Google 生态下 Agent + Workflow + Web 调试 + Eval + 部署的一体化开发框架。</p>
+      </section>
+    </main>
+  </div>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "default",
+      flowchart: { htmlLabels: true, curve: "basis", nodeSpacing: 36, rankSpacing: 48 }
+    });
+  </script>
+</body>
+</html>

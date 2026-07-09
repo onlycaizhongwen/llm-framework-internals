@@ -1,0 +1,8 @@
+flowchart LR
+    Request["一次 Agent 请求"] --> AgentLayer["AgentMiddlewareLayer<br>围绕整个 Agent run"]
+    AgentLayer --> ContextProvider["ContextProvider / HistoryProvider<br>为什么：把上下文工程和历史装配从业务代码移走"]
+    ContextProvider --> ChatLayer["ChatMiddlewareLayer<br>围绕 ChatClient 调用"]
+    ChatLayer --> ToolLayer["FunctionInvocationLayer<br>围绕每个工具调用"]
+    ToolLayer --> Security["Security / Approval / FIDES<br>提示注入防御、机密性标签、人工审批"]
+    Security --> Telemetry["Telemetry / OTel<br>调用链、工具耗时、异常"]
+    Telemetry --> Response["响应 / 增量 / 中断请求"]

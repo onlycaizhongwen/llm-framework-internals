@@ -1,0 +1,15 @@
+flowchart TB
+    Input["Workflow.run 输入"] --> Builder["WorkflowBuilder<br>定义 executors、edges、fan-out、fan-in"]
+    Builder --> Validate["Graph validation<br>为什么：提前发现未绑定、不可达、类型不匹配"]
+    Validate --> Runner["WorkflowRunner<br>Pregel-like superstep 执行模型"]
+    Runner --> Queue["消息队列 / edge groups<br>上一轮输出变成下一轮输入"]
+    Queue --> Executor["Executor / AgentExecutor / FunctionExecutor"]
+    Executor --> Events["WorkflowEvent<br>executor_invoked、completed、output、request_info、error"]
+    Events --> Checkpoint["Checkpoint storage<br>为什么：长流程可以恢复、回放、time-travel"]
+    Events --> HITL{"request_info / approval?"}
+    HITL -->|"是"| Wait["外部输入暂停<br>人工审批、补充资料、工具确认"]
+    Wait --> Restore["恢复 checkpoint 并投递响应"]
+    Restore --> Queue
+    HITL -->|"否"| Converge{"还有消息?"}
+    Converge -->|"有"| Queue
+    Converge -->|"无"| Done["WorkflowRunResult"]

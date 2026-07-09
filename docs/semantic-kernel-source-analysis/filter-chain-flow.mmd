@@ -1,0 +1,14 @@
+flowchart TB
+    Request["一次 Kernel 调用"] --> FunctionFilter["FunctionInvocationFilter<br>包住 KernelFunction.invoke<br>适合审计、鉴权、参数改写、异常转换"]
+    FunctionFilter --> Kind{"函数类型"}
+    Kind -->|"Prompt Function"| PromptFilter["PromptRenderFilter<br>包住 prompt 渲染<br>适合模板审查、变量脱敏、系统提示增强"]
+    Kind -->|"Native Method"| Method["KernelFunctionFromMethod<br>执行业务方法"]
+    PromptFilter --> Rendered["Rendered Prompt"]
+    Rendered --> Model["AI Service 调用"]
+    Model --> ToolCall{"模型请求工具调用?"}
+    ToolCall -->|"是"| AutoFilter["AutoFunctionInvocationFilter<br>包住自动工具调用<br>适合审批、限流、副作用拦截、Terminate"]
+    AutoFilter --> ToolFunction["再次进入 KernelFunction"]
+    ToolFunction --> FunctionFilter
+    ToolCall -->|"否"| Result["返回结果"]
+    Method --> Result
+    Note["为什么这么设计：<br>三类 filter 对应三个风险点：函数执行、prompt 暴露、模型自动调用工具"] -.说明.-> FunctionFilter

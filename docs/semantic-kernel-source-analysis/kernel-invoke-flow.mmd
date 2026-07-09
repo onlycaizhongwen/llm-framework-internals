@@ -1,0 +1,17 @@
+flowchart TB
+    Start["业务代码调用<br>kernel.invoke / invoke_prompt / invoke_stream"] --> Resolve["解析目标函数<br>KernelFunction 或 prompt function"]
+    Resolve --> Args["合并 KernelArguments<br>输入变量 + execution settings + service id"]
+    Args --> FiltersBefore["FunctionInvocationContext<br>进入 function filters 前置链路"]
+    FiltersBefore --> Render{"是否 Prompt Function?"}
+    Render -->|"是"| Prompt["渲染 prompt<br>进入 prompt render filters"]
+    Render -->|"否"| Native["调用 native method<br>直接执行 Python/.NET 方法封装"]
+    Prompt --> Select["AI Service Selector 选择模型服务"]
+    Select --> Model["ChatCompletion / TextCompletion 服务调用"]
+    Native --> Result["FunctionResult"]
+    Model --> ToolCall{"模型返回 tool call?"}
+    ToolCall -->|"是"| Choice["FunctionChoiceBehavior<br>检查 Auto / Required / None 与 max attempts"]
+    Choice --> InvokeTool["invoke_function_call<br>再次调用 KernelFunction"]
+    InvokeTool --> Model
+    ToolCall -->|"否"| Result
+    Result --> FiltersAfter["filters 后置链路<br>记录、改写、异常处理"]
+    FiltersAfter --> End["返回 FunctionResult / StreamingKernelContent"]

@@ -1,0 +1,11 @@
+flowchart TB
+    App["业务代码调用 Runner.run_streamed<br>为什么：前端和服务端要边生成边响应"] --> Result["RunResultStreaming<br>保存 current_agent、final_output、interruptions、队列"]
+    Result --> Queue["asyncio event_queue<br>为什么：run loop 后台推进，消费端异步读取"]
+    Model["模型 stream_response"] --> Raw["RawResponsesStreamEvent<br>原始 Responses 流事件，适合 token/UI 打字机"]
+    Raw --> Queue
+    Step["run loop 解析模型输出"] --> Items["RunItemStreamEvent<br>message、tool_called、tool_output、handoff、MCP approval"]
+    Items --> Queue
+    Handoff["发生 handoff"] --> AgentUpdate["AgentUpdatedStreamEvent<br>告诉消费端当前 Agent 已切换"]
+    AgentUpdate --> Queue
+    Queue --> Consumer["stream_events 消费端<br>CLI、FastAPI NDJSON、Web UI"]
+    Consumer --> UI["展示策略<br>raw 负责即时文本，RunItem 负责可解释步骤，AgentUpdated 负责状态栏"]

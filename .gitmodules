@@ -31,3 +31,12 @@
 [submodule "sources/agno"]
 	path = sources/agno
 	url = https://github.com/agno-agi/agno.git
+[submodule "sources/openai-agents-python"]
+	path = sources/openai-agents-python
+	url = https://github.com/openai/openai-agents-python.git
+[submodule "sources/adk-python"]
+	path = sources/adk-python
+	url = https://github.com/google/adk-python.git
+[submodule "sources/agent-framework"]
+	path = sources/agent-framework
+	url = https://github.com/microsoft/agent-framework.git

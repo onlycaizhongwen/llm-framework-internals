@@ -1,0 +1,16 @@
+flowchart TB
+    Start["client.run(agent, messages)"] --> Copy["复制 messages 和 context_variables<br>避免直接改调用方对象"]
+    Copy --> Completion["get_chat_completion<br>当前 Agent instructions + history + tools"]
+    Completion --> Append["assistant message 写入 history<br>附加 sender=active_agent.name"]
+    Append --> HasTool{"有 tool_calls 且 execute_tools=True?"}
+    HasTool -->|"否"| Return["返回 Response<br>新增 messages + 当前 agent + context_variables"]
+    HasTool -->|"是"| ToolExec["handle_tool_calls<br>按函数名查找并执行"]
+    ToolExec --> ToolMessage["tool result message 写入 history"]
+    ToolExec --> Context["合并 Result.context_variables"]
+    ToolExec --> Switch{"Result.agent 不为空?"}
+    Switch -->|"是"| NewAgent["active_agent = result.agent"]
+    Switch -->|"否"| SameAgent["保持当前 Agent"]
+    NewAgent --> Limit{"未超过 max_turns?"}
+    SameAgent --> Limit
+    Limit -->|"继续"| Completion
+    Limit -->|"结束"| Return

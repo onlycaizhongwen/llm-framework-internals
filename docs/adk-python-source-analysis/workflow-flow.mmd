@@ -1,0 +1,16 @@
+flowchart TB
+    W["Workflow(edges)<br>把业务流程声明成图"] --> Graph["Graph.from_edge_items + validate_graph<br>为什么：启动前发现非法图和循环风险"]
+    Graph --> Seed["seed START triggers<br>把用户输入投递给起始节点"]
+    Seed --> Schedule["schedule_ready_nodes<br>按触发顺序调度，可受 max_concurrency 限制"]
+    Schedule --> Runner["NodeRunner.run<br>创建 child Context，执行 BaseNode.run"]
+    Runner --> Normalize["BaseNode.run 归一化输出<br>Event 原样、RequestInput 转中断、普通值转 Event(output)"]
+    Normalize --> Result{"节点结果"}
+    Result -->|"output"| Downstream["触发下游节点<br>可 fan-out / fan-in"]
+    Result -->|"route"| Route["按 Event.actions.route 走条件边"]
+    Result -->|"interrupt"| Wait["NodeStatus.WAITING<br>保留 interrupt_ids 等用户输入"]
+    Result -->|"error"| Fail["FAILED / retry / error shutdown"]
+    Downstream --> Schedule
+    Route --> Schedule
+    Wait --> Resume["下次 run 带 invocation_id / FunctionResponse 恢复"]
+    Resume --> Rehydrate["ReplayManager 扫 session events<br>重建已完成节点和未决中断"]
+    Rehydrate --> Schedule

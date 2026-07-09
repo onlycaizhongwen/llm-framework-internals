@@ -1,0 +1,13 @@
+flowchart TB
+    App["业务入口<br>Python 应用 / .NET 服务 / Azure Functions / Foundry / DevUI / Copilot 场景"] --> Agent["Agent 抽象<br>Python Agent / RawAgent<br>.NET AIAgent"]
+    Agent --> Client["ChatClient / Provider Adapter<br>为什么：把模型供应商差异隔离到客户端层"]
+    Client --> Providers["模型与托管能力<br>OpenAI / Azure OpenAI / Foundry / Anthropic / Gemini / GitHub Copilot"]
+    Agent --> Middleware["Middleware / Context<br>为什么：把权限、上下文、历史、遥测、安全策略做成可插拔链路"]
+    Agent --> Tools["Tools / Function Invocation<br>函数工具、托管工具、MCP、审批、安全标签"]
+    Agent --> Session["Session / History / Compaction<br>为什么：长期会话不能只靠一次 prompt，需要可恢复上下文"]
+    Agent --> Response["AgentResponse / Updates<br>普通响应、流式增量、长任务 continuation"]
+    App --> Workflow["Workflow Runtime<br>Executor 图、事件、checkpoint、HITL request_info"]
+    Workflow --> Patterns["Orchestration 模板<br>Sequential / Concurrent / Handoff / GroupChat / Magentic"]
+    Workflow --> Durable["Durable Agents<br>Durable Entities / virtual actors / Azure Functions endpoints"]
+    Agent --> Observability["Observability / Evaluation<br>OpenTelemetry、eval dataset、调试与回归"]
+    Workflow --> Observability
