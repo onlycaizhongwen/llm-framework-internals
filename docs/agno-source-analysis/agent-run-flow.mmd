@@ -1,0 +1,16 @@
+flowchart TB
+    Start["agent.run / arun / stream"] --> Session["1 读取或创建 session<br/>合并 session_state 与 metadata"]
+    Session --> Deps["2 解析 dependencies<br/>把运行依赖传给 prompt 和工具"]
+    Deps --> PreHook["3 执行 pre_hooks<br/>可做 guardrail、eval、输入改写"]
+    PreHook --> Tools["4 确定模型可见工具<br/>默认工具、自定义工具、知识工具、MCP"]
+    Tools --> Messages["5 构造 run messages<br/>system、history、memory、knowledge、user input"]
+    Messages --> Background["6 并行启动 memory / learning / culture 抽取<br/>不阻塞主模型推理"]
+    Background --> Reason["7 可选 reasoning<br/>用 reasoning model 或 reasoning agent"]
+    Reason --> Model["8 调用 Model<br/>处理流式事件、工具调用、结构化输出"]
+    Model --> ToolCall{"模型要求工具调用？"}
+    ToolCall -->|"是"| Execute["执行工具<br/>tool_hooks、审批、暂停、结果写回消息"]
+    Execute --> Model
+    ToolCall -->|"否"| Parse["9 parser_model / output_model / output_schema<br/>结构化和二次解析"]
+    Parse --> Summary["10 等待后台记忆任务<br/>可生成 session summary"]
+    Summary --> Store["11 cleanup_and_store<br/>保存 run、session、metrics、events"]
+    Store --> End["返回 RunOutput 或流式事件"]

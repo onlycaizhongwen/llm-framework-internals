@@ -1,0 +1,18 @@
+flowchart TB
+    AgentOS["AgentOS.get_app"] --> CoreRouters["核心 routers"]
+    CoreRouters --> AgentRouter["get_agent_router<br/>列出 Agent、运行 Agent、继续/取消 run、读取 session"]
+    CoreRouters --> TeamRouter["get_team_router<br/>运行 Team、继续 Team run、读取 Team session"]
+    CoreRouters --> WorkflowRouter["get_workflow_router<br/>运行 Workflow、stream、background、continue"]
+    CoreRouters --> SessionRouter["get_session_router<br/>跨 agent/team/workflow 查询 sessions、runs、messages"]
+    CoreRouters --> MemoryRouter["get_memory_router<br/>读取和管理用户记忆"]
+    CoreRouters --> KnowledgeRouter["get_knowledge_router<br/>搜索知识库、管理 knowledge instances"]
+    CoreRouters --> ApprovalRouter["get_approval_router<br/>审批列表、审批处理、审批状态"]
+    AgentRouter --> RunLayer["组件执行层<br/>本地对象、Remote、Factory、Registry"]
+    TeamRouter --> RunLayer
+    WorkflowRouter --> RunLayer
+    RunLayer --> DB["DB / session / run 持久化"]
+    SessionRouter --> DB
+    MemoryRouter --> DB
+    KnowledgeRouter --> Knowledge["Knowledge instances"]
+    ApprovalRouter --> DB
+    DB --> Client["Studio / Client / 外部系统"]

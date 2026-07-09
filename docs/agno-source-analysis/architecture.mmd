@@ -1,0 +1,22 @@
+flowchart TB
+    Dev["开发者<br/>用 Python 定义 Agent Team Workflow"] --> Core["Agno SDK<br/>Agent platform SDK"]
+    Core --> Agent["Agent<br/>模型、工具、知识、记忆、Hook、结构化输出"]
+    Core --> Team["Team<br/>多 Agent 成员、leader 调度、四种协作模式"]
+    Core --> Workflow["Workflow<br/>Step、Parallel、Loop、Condition、Router"]
+    Core --> AgentOS["AgentOS<br/>把组件服务化为 FastAPI、WebSocket、MCP、接口"]
+    Agent --> Data["DB / Session<br/>run、message、session_state、metrics、checkpoint"]
+    Agent --> Memory["Memory / Learning / Culture<br/>用户记忆、学习抽取、团队文化知识"]
+    Agent --> Knowledge["Knowledge<br/>RAG 检索、知识过滤、上下文注入"]
+    Agent --> Tools["Tools / Toolkits / MCP<br/>函数工具、集成工具、模型原生工具"]
+    Team --> Tools
+    Team --> Data
+    Workflow --> Agent
+    Workflow --> Team
+    Workflow --> Data
+    Workflow --> HITL["HITL<br/>确认、用户输入、输出审核、错误暂停"]
+    Tools --> Approval["Approval<br/>required 阻塞审批、audit 审计记录"]
+    AgentOS --> API["REST / WS / OpenAPI<br/>agents teams workflows sessions runs"]
+    AgentOS --> Interfaces["Interfaces<br/>AG-UI、Slack、A2A、WhatsApp"]
+    AgentOS --> Security["Auth / RBAC<br/>JWT、service account、scope、user isolation"]
+    AgentOS --> Ops["Tracing / Scheduler / Telemetry<br/>生产运行治理"]
+    API --> Client["Client / Studio / 外部系统"]

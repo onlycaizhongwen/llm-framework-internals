@@ -27,6 +27,7 @@
 | LlamaIndex | `sources/llama_index` | `7fd33e00a8947183327e75aef14687c499d5c150` | `docs/llama-index-source-analysis/index.html` | `docs/llama-index-source-analysis/index.md` | RAG 数据框架、IngestionPipeline、VectorStoreIndex、RetrieverQueryEngine、StorageContext、AgentWorkflow |
 | Haystack | `sources/haystack` | `08e8885794687bd60ea5a59a672a428e7528b48a` | `docs/haystack-source-analysis/index.html` | `docs/haystack-source-analysis/index.md` | Component、Pipeline、AsyncPipeline、DocumentStore、Hybrid RAG、Agent、ToolInvoker、Serialization、Breakpoint、Tracing |
 | PydanticAI | `sources/pydantic-ai` | `6a6d83d95d9c1fc37fcd808b3633241d7d2656ce` | `docs/pydantic-ai-source-analysis/index.html` | `docs/pydantic-ai-source-analysis/index.md` | typed Agent、Pydantic schema、tool/function schema、provider adapter、pydantic_graph、pydantic_evals、MCP、Logfire/OTel |
+| Agno | `sources/agno` | `02f13bb182fe2afdf8a6ceea80b36b14d14b5f38` | `docs/agno-source-analysis/index.html` | `docs/agno-source-analysis/index.md` | Agent platform SDK、Agent / Team / Workflow / AgentOS、生产 API、MCP、审批、记忆、知识、调度、与 LangGraph / CrewAI / PydanticAI / Dify 对比 |
 | n8n | `sources/n8n` | `b000bbd2773d402ce879434b42a5b9fb8f7f106a` | `docs/n8n-source-analysis/index.html` | `docs/n8n-source-analysis/index.md` | 可视化工作流平台、WorkflowExecute、ActiveWorkflowManager、WebhookService、Queue/Worker、节点和凭证生态 |
 | Dify | `sources/dify` | `main codeload snapshot, version 1.15.0, commit SHA unavailable` | `docs/dify-source-analysis/index.html` | `docs/dify-source-analysis/index.md` | LLM 应用开发平台、AI Workflow、RAG Pipeline、Agent v2、Model Provider、Plugin、dify-agent、graphon runtime |
 | Hermes Agent | `sources/hermes-agent` | `f64e4f4f5768c18a53f44890747653bafcab2796` | `docs/hermes-agent-source-analysis/index.html` | `docs/hermes-agent-source-analysis/index.md` | 项目工程专题，不纳入横向总览；长期个人 Agent 产品、多入口复用、工具安全、SessionDB、Gateway 恢复、Plugin / Skill / MCP 边界、分享稿 |
@@ -91,6 +92,7 @@ git submodule update --init --recursive
 - 新增 n8n 源码分析：可视化 workflow graph、节点契约、执行引擎、webhook 激活、queue/worker 扩展、与 LangGraph 组合边界。
 - 新增 Dify 源码分析：LLM 应用平台架构、Workflow App 主流程、graphon 节点运行时、RAG Pipeline、Agent v2 / dify-agent、Plugin / Model Provider 治理、真实客服场景和与 LangGraph / n8n 对比。
 - 新增 Hermes Agent 项目工程专题：长期个人 Agent 产品、多入口复用、Provider Adapter、工具执行安全边界、SessionDB 检索、Gateway 长任务恢复、Plugin / Skill / MCP 边界，并补充分享总览图、阅读 checklist 和演讲稿。
+- 新增 Agno 源码分析：Agent platform SDK、Agent / Team / Workflow / AgentOS 四层架构、Agent 主运行链路、Team 协作模式、Workflow HITL、AgentOS 服务化、审批/记忆/知识、真实应用场景，以及与 LangGraph / CrewAI / PydanticAI / Dify 的对比。
 - 新增横向总览材料：总览对比矩阵、框架选型指南、组合架构专题、源码设计范式、真实案例合集。
 - README 更新为总导航页，方便直接从 GitHub 进入 HTML / Markdown / 源码目录。
 

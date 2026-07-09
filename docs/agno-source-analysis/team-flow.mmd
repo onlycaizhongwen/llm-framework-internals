@@ -1,0 +1,18 @@
+flowchart TB
+    Start["team.run"] --> Mode["读取 TeamMode<br/>coordinate / route / broadcast / tasks"]
+    Mode --> Leader["Leader model<br/>读取成员说明、团队历史、任务上下文"]
+    Leader --> Decide{"协作模式"}
+    Decide -->|"coordinate"| Coord["主管模式<br/>选择成员、改写子任务、汇总答案"]
+    Decide -->|"route"| Route["路由模式<br/>选择一个专家并直接返回专家结果"]
+    Decide -->|"broadcast"| Broadcast["广播模式<br/>同一任务发给所有成员并聚合"]
+    Decide -->|"tasks"| Tasks["任务列表模式<br/>拆任务、分派、循环直到完成"]
+    Coord --> Members["Agent / nested Team 成员"]
+    Route --> Members
+    Broadcast --> Members
+    Tasks --> Members
+    Members --> Results["成员结果、工具事件、暂停状态"]
+    Results --> HITL{"是否有 HITL 或审批暂停？"}
+    HITL -->|"是"| Pause["保存 run 状态<br/>等待 continue_run"]
+    HITL -->|"否"| Synthesize["leader 汇总或透传"]
+    Pause --> Synthesize
+    Synthesize --> Store["保存 TeamSession、metrics、summary"]

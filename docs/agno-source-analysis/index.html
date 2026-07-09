@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agno 源码架构精读</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true, curve: "basis" } });
+  </script>
+  <style>
+    :root { color-scheme: light; --bg:#f7f8fb; --panel:#fff; --ink:#1f2937; --muted:#607086; --line:#d8e1ee; --brand:#2563eb; --brand2:#0f766e; --soft:#edf4ff; --soft2:#ecfdf5; --warm:#fff7ed; --code:#172033; --codeink:#eef5ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); line-height:1.72; }
+    header { background:linear-gradient(180deg,#fff 0%,#edf4ff 100%); border-bottom:1px solid var(--line); padding:42px 24px 30px; }
+    .hero, main { max-width:1180px; margin:0 auto; }
+    main { padding:28px 20px 64px; }
+    h1 { margin:0 0 12px; font-size:clamp(32px,5vw,54px); line-height:1.12; letter-spacing:0; }
+    h2 { margin:38px 0 14px; font-size:27px; border-left:5px solid var(--brand); padding-left:12px; }
+    h3 { margin:24px 0 10px; font-size:20px; }
+    p { margin:10px 0; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:24px; margin:18px 0; }
+    .lead { max-width:980px; color:var(--muted); font-size:18px; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:22px; }
+    .metric { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px; min-height:112px; }
+    .metric strong { display:block; color:var(--muted); font-size:14px; }
+    .metric span { display:block; margin-top:8px; font-weight:800; font-size:17px; }
+    .toc { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:14px; }
+    .toc a { display:block; background:#f8fafc; border:1px solid var(--line); border-radius:6px; padding:8px 10px; text-decoration:none; color:var(--ink); }
+    .note { background:var(--soft); border-left:5px solid var(--brand); border-radius:6px; padding:14px 16px; margin:16px 0; }
+    .green { background:var(--soft2); border-left:5px solid var(--brand2); border-radius:6px; padding:14px 16px; margin:16px 0; }
+    .case { background:var(--warm); border-left:5px solid #f59e0b; border-radius:6px; padding:14px 16px; margin:16px 0; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; font-size:14px; }
+    th,td { border:1px solid var(--line); padding:10px 12px; vertical-align:top; text-align:left; }
+    th { background:#edf4ff; color:#1d4ed8; }
+    code { background:#f3f6fb; border:1px solid #e3e9f3; border-radius:5px; padding:1px 5px; font-family:Consolas,"SFMono-Regular",monospace; font-size:.92em; }
+    pre { background:var(--code); color:var(--codeink); border-radius:8px; padding:14px; overflow-x:auto; line-height:1.55; font-size:13px; }
+    pre code { background:transparent; border:0; color:inherit; padding:0; }
+    pre.mermaid { background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:16px; margin:16px 0; overflow-x:auto; min-height:280px; }
+    #architecture pre.mermaid { min-height:520px; }
+    .grid2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .card { border:1px solid var(--line); border-radius:8px; padding:14px; background:#fbfdff; }
+    .card h3 { margin-top:0; }
+    ul,ol { padding-left:22px; }
+    li { margin:6px 0; }
+    @media (max-width:900px) { .summary,.toc,.grid2 { grid-template-columns:1fr; } section { padding:18px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>Agno 源码架构精读</h1>
+      <p class="lead">Agno 的定位不是“再封装一个 agent.run()”，而是一个 Agent platform SDK：用代码定义 Agent、Team、Workflow，再通过 AgentOS 把这些组件暴露为 REST、WebSocket、MCP、界面接口、调度、权限和可观测能力。</p>
+      <div class="summary">
+        <div class="metric"><strong>源码版本</strong><span>02f13bb / Agno 2.7.1</span></div>
+        <div class="metric"><strong>核心定位</strong><span>Agent platform SDK</span></div>
+        <div class="metric"><strong>核心抽象</strong><span>Agent / Team / Workflow / AgentOS</span></div>
+        <div class="metric"><strong>横向位置</strong><span>代码优先的平台化 Agent 框架</span></div>
+      </div>
+      <div class="toc">
+        <a href="#summary">总体结论</a>
+        <a href="#architecture">架构图</a>
+        <a href="#evidence">源码证据</a>
+        <a href="#agent">Agent 主流程</a>
+        <a href="#team">Team 协作</a>
+        <a href="#workflow">Workflow</a>
+        <a href="#agentos">AgentOS</a>
+        <a href="#examples">真实示例</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="summary">
+      <h2>1. 总体结论</h2>
+      <p>Agno 最值得讲的主线是：把 Agent 从“本地脚本对象”提升成“可运行、可管理、可继续、可审批、可对外提供 API 的平台组件”。</p>
+      <div class="note">一句话分享：Agno 是代码优先的 Agent 平台 SDK。它既有单 Agent loop，也有多 Agent Team、确定性 Workflow，并用 AgentOS 把这些能力服务化。</div>
+      <table>
+        <tr><th>层次</th><th>核心对象</th><th>解决的问题</th></tr>
+        <tr><td>单 Agent 能力层</td><td><code>Agent</code></td><td>模型调用、工具、知识、记忆、Hook、结构化输出、session。</td></tr>
+        <tr><td>多 Agent 协作层</td><td><code>Team</code></td><td>leader 调度多个 Agent 或嵌套 Team，支持 coordinate、route、broadcast、tasks。</td></tr>
+        <tr><td>确定性流程层</td><td><code>Workflow / Step</code></td><td>用步骤、条件、循环、并行、路由组织长流程，并支持 HITL 暂停恢复。</td></tr>
+        <tr><td>平台服务层</td><td><code>AgentOS</code></td><td>FastAPI、WebSocket、MCP、接口、权限、调度、数据库生命周期。</td></tr>
+      </table>
+    </section>
+
+    <section id="architecture">
+      <h2>2. 架构图</h2>
+      <pre class="mermaid">
+flowchart TB
+    Dev["开发者&lt;br/&gt;用 Python 定义 Agent Team Workflow"] --> Core["Agno SDK&lt;br/&gt;Agent platform SDK"]
+    Core --> Agent["Agent&lt;br/&gt;模型、工具、知识、记忆、Hook、结构化输出"]
+    Core --> Team["Team&lt;br/&gt;多 Agent 成员、leader 调度、四种协作模式"]
+    Core --> Workflow["Workflow&lt;br/&gt;Step、Parallel、Loop、Condition、Router"]
+    Core --> AgentOS["AgentOS&lt;br/&gt;把组件服务化为 FastAPI、WebSocket、MCP、接口"]
+    Agent --> Data["DB / Session&lt;br/&gt;run、message、session_state、metrics、checkpoint"]
+    Agent --> Memory["Memory / Learning / Culture&lt;br/&gt;用户记忆、学习抽取、团队文化知识"]
+    Agent --> Knowledge["Knowledge&lt;br/&gt;RAG 检索、知识过滤、上下文注入"]
+    Agent --> Tools["Tools / Toolkits / MCP&lt;br/&gt;函数工具、集成工具、模型原生工具"]
+    Team --> Tools
+    Team --> Data
+    Workflow --> Agent
+    Workflow --> Team
+    Workflow --> Data
+    Workflow --> HITL["HITL&lt;br/&gt;确认、用户输入、输出审核、错误暂停"]
+    Tools --> Approval["Approval&lt;br/&gt;required 阻塞审批、audit 审计记录"]
+    AgentOS --> API["REST / WS / OpenAPI&lt;br/&gt;agents teams workflows sessions runs"]
+    AgentOS --> Interfaces["Interfaces&lt;br/&gt;AG-UI、Slack、A2A、WhatsApp"]
+    AgentOS --> Security["Auth / RBAC&lt;br/&gt;JWT、service account、scope、user isolation"]
+    AgentOS --> Ops["Tracing / Scheduler / Telemetry&lt;br/&gt;生产运行治理"]
+    API --> Client["Client / Studio / 外部系统"]
+      </pre>
+      <p>为什么这么设计：Agno 把“推理执行”和“平台运行”分成两层。<code>Agent/Team/Workflow</code> 保持 Python 代码可组合，<code>AgentOS</code> 统一处理外部访问、认证授权、数据库生命周期、MCP、接口和调度。</p>
+    </section>
+
+    <section id="evidence">
+      <h2>3. 源码证据</h2>
+      <table>
+        <tr><th>结论</th><th>证据</th></tr>
+        <tr><td><code>Agent</code> 是厚配置对象，不只是模型 wrapper</td><td><code>sources/agno/libs/agno/agno/agent/agent.py:69</code> 定义 <code>Agent</code>；<code>session_state</code> 在 <code>:90</code>，<code>memory_manager</code> 在 <code>:118</code>，<code>knowledge</code> 在 <code>:151</code>，<code>tools</code> 在 <code>:174</code>，<code>pre_hooks</code> 在 <code>:191</code>，<code>output_schema</code> 在 <code>:299</code>。</td></tr>
+        <tr><td>Agent 主链路是显式分阶段执行</td><td><code>sources/agno/libs/agno/agno/agent/_run.py:771</code> 的 docstring 写出 13 步；关键实现点在 <code>:819</code>、<code>:848</code>、<code>:869</code>、<code>:885</code>、<code>:906</code>、<code>:953</code>、<code>:1146</code>。</td></tr>
+        <tr><td>Team 明确支持四种协作模式</td><td><code>sources/agno/libs/agno/agno/team/mode.py:6</code> 定义 <code>TeamMode</code>；<code>coordinate</code>、<code>route</code>、<code>broadcast</code>、<code>tasks</code> 分别在 <code>:12</code>、<code>:15</code>、<code>:18</code>、<code>:21</code>。</td></tr>
+        <tr><td>Workflow 的 Step 可承载 Agent、Team、函数或嵌套 Workflow</td><td><code>sources/agno/libs/agno/agno/workflow/step.py:66</code> 定义 <code>Step</code>；四类 executor 在 <code>:71</code> 到 <code>:74</code>；HITL 配置在 <code>:90</code> 到 <code>:118</code>。</td></tr>
+        <tr><td>AgentOS 是平台服务化入口</td><td><code>sources/agno/libs/agno/agno/os/app.py:223</code> 定义 <code>AgentOS</code>；<code>agents/teams/workflows</code> 参数在 <code>:232</code> 到 <code>:234</code>；routers 挂载在 <code>:557</code> 到 <code>:559</code>。</td></tr>
+        <tr><td>审批是工具执行安全边界</td><td><code>sources/agno/libs/agno/agno/approval/decorator.py:21</code> 定义 <code>approval</code>；<code>required</code> 与 <code>audit</code> 的关键逻辑在 <code>:45</code> 到 <code>:61</code>。</td></tr>
+      </table>
+    </section>
+
+    <section id="agent">
+      <h2>4. Agent 主流程</h2>
+      <pre class="mermaid">
+flowchart TB
+    Start["agent.run / arun / stream"] --> Session["1 读取或创建 session&lt;br/&gt;合并 session_state 与 metadata"]
+    Session --> Deps["2 解析 dependencies&lt;br/&gt;把运行依赖传给 prompt 和工具"]
+    Deps --> PreHook["3 执行 pre_hooks&lt;br/&gt;可做 guardrail、eval、输入改写"]
+    PreHook --> Tools["4 确定模型可见工具&lt;br/&gt;默认工具、自定义工具、知识工具、MCP"]
+    Tools --> Messages["5 构造 run messages&lt;br/&gt;system、history、memory、knowledge、user input"]
+    Messages --> Background["6 并行启动 memory / learning / culture 抽取&lt;br/&gt;不阻塞主模型推理"]
+    Background --> Reason["7 可选 reasoning&lt;br/&gt;用 reasoning model 或 reasoning agent"]
+    Reason --> Model["8 调用 Model&lt;br/&gt;处理流式事件、工具调用、结构化输出"]
+    Model --> ToolCall{"模型要求工具调用？"}
+    ToolCall -->|"是"| Execute["执行工具&lt;br/&gt;tool_hooks、审批、暂停、结果写回消息"]
+    Execute --> Model
+    ToolCall -->|"否"| Parse["9 parser_model / output_model / output_schema&lt;br/&gt;结构化和二次解析"]
+    Parse --> Summary["10 等待后台记忆任务&lt;br/&gt;可生成 session summary"]
+    Summary --> Store["11 cleanup_and_store&lt;br/&gt;保存 run、session、metrics、events"]
+    Store --> End["返回 RunOutput 或流式事件"]
+      </pre>
+      <div class="green">分享重点：Agno 的 Agent loop 不只是“模型 -> 工具 -> 模型”。它先做 session 和上下文装配，再做 hook 与工具选择，中间并行做记忆/学习抽取，最后把 run 和 session 持久化。</div>
+      <pre><code class="language-python">@dataclass(init=False)
+class Agent:
+    model: Optional[Model] = None
+    session_state: Optional[Dict[str, Any]] = None
+    memory_manager: Optional[MemoryManager] = None
+    knowledge: Optional[Union[KnowledgeProtocol, Callable[..., KnowledgeProtocol]]] = None
+    tools: Optional[Union[List[Union[Toolkit, Callable, Function, Dict]], Callable[..., List]]] = None
+    pre_hooks: Optional[List[Union[Callable[..., Any], BaseGuardrail, BaseEval]]] = None
+    output_schema: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None</code></pre>
+    </section>
+
+    <section id="team">
+      <h2>5. Team 协作流程</h2>
+      <pre class="mermaid">
+flowchart TB
+    Start["team.run"] --> Mode["读取 TeamMode&lt;br/&gt;coordinate / route / broadcast / tasks"]
+    Mode --> Leader["Leader model&lt;br/&gt;读取成员说明、团队历史、任务上下文"]
+    Leader --> Decide{"协作模式"}
+    Decide -->|"coordinate"| Coord["主管模式&lt;br/&gt;选择成员、改写子任务、汇总答案"]
+    Decide -->|"route"| Route["路由模式&lt;br/&gt;选择一个专家并直接返回专家结果"]
+    Decide -->|"broadcast"| Broadcast["广播模式&lt;br/&gt;同一任务发给所有成员并聚合"]
+    Decide -->|"tasks"| Tasks["任务列表模式&lt;br/&gt;拆任务、分派、循环直到完成"]
+    Coord --> Members["Agent / nested Team 成员"]
+    Route --> Members
+    Broadcast --> Members
+    Tasks --> Members
+    Members --> Results["成员结果、工具事件、暂停状态"]
+    Results --> HITL{"是否有 HITL 或审批暂停？"}
+    HITL -->|"是"| Pause["保存 run 状态&lt;br/&gt;等待 continue_run"]
+    HITL -->|"否"| Synthesize["leader 汇总或透传"]
+    Pause --> Synthesize
+    Synthesize --> Store["保存 TeamSession、metrics、summary"]
+      </pre>
+      <p>为什么这么设计：多 Agent 协作有不同复杂度。<code>route</code> 适合专家路由，<code>broadcast</code> 适合多视角并行，<code>coordinate</code> 适合主管汇总，<code>tasks</code> 适合目标拆解和循环推进。</p>
+    </section>
+
+    <section id="workflow">
+      <h2>6. Workflow 流程</h2>
+      <pre class="mermaid">
+flowchart TB
+    Start["workflow.run / arun"] --> Init["初始化 workflow&lt;br/&gt;session、state、metadata、run_context"]
+    Init --> Prepare["准备 steps&lt;br/&gt;函数、Agent、Team、嵌套 Workflow 都包装成 Step"]
+    Prepare --> StepKinds["Step 类型&lt;br/&gt;Step / Steps / Parallel / Loop / Condition / Router"]
+    StepKinds --> Execute["按流程执行&lt;br/&gt;传递 StepInput、StepOutput、媒体和 state"]
+    Execute --> HITL{"步骤是否需要人工介入？"}
+    HITL -->|"确认或输入"| Pause["生成 StepRequirement&lt;br/&gt;暂停并保存运行状态"]
+    Pause --> Continue["continue_run&lt;br/&gt;带用户输入、审批或重路由选择恢复"]
+    Continue --> Execute
+    HITL -->|"无需暂停"| Review{"需要输出审核或错误处理？"}
+    Review -->|"需要"| Pause
+    Review -->|"通过"| Next["进入下一个步骤"]
+    Next --> Done{"步骤完成？"}
+    Done -->|"否"| Execute
+    Done -->|"是"| Store["保存 WorkflowSession、metrics、run output"]
+    Store --> End["返回 WorkflowRunOutput 或事件流"]
+      </pre>
+      <p>Agno 的 Workflow 更像“业务流程编排器”，不是 LangGraph 那种以 checkpoint-first 状态图为核心的通用图运行时。它的强项是把函数、Agent、Team 和嵌套 Workflow 放进同一套 Step 体系。</p>
+    </section>
+
+    <section id="agentos">
+      <h2>7. AgentOS 服务化流程</h2>
+      <pre class="mermaid">
+flowchart TB
+    Config["AgentOS 配置&lt;br/&gt;agents teams workflows knowledge db interfaces"] --> App["get_app 创建或复用 FastAPI"]
+    App --> Routers["挂载 routers&lt;br/&gt;agents、teams、workflows、sessions、runs、memory、knowledge、approvals"]
+    App --> MCP["可选 MCP server&lt;br/&gt;把 REST 能力映射成 MCP tools"]
+    App --> Interfaces["可选接口&lt;br/&gt;AG-UI、Slack、A2A、WhatsApp"]
+    App --> Auth["认证授权&lt;br/&gt;JWT、OS security key、service account、scope"]
+    App --> Lifespan["lifespan&lt;br/&gt;数据库初始化、HTTP client、scheduler"]
+    Routers --> Resolve["解析组件&lt;br/&gt;本地对象、Remote、Factory、Registry"]
+    Resolve --> Run["执行 Agent / Team / Workflow&lt;br/&gt;支持 stream、background、continue"]
+    Run --> Persist["DB 持久化&lt;br/&gt;session、run、events、approvals、schedules"]
+    Persist --> Client["Client / Studio / 外部系统读取状态"]
+      </pre>
+      <p>为什么这么设计：如果只提供 <code>agent.run()</code>，团队还要自己补 API、鉴权、会话、暂停恢复、审批、调度和前端对接。AgentOS 把这些平台共性收进框架，让 Agent/Team/Workflow 可以直接成为服务端资源。</p>
+      <h3>7.1 AgentOS router 细节</h3>
+      <pre class="mermaid">
+flowchart TB
+    AgentOS["AgentOS.get_app"] --> CoreRouters["核心 routers"]
+    CoreRouters --> AgentRouter["get_agent_router&lt;br/&gt;列出 Agent、运行 Agent、继续/取消 run、读取 session"]
+    CoreRouters --> TeamRouter["get_team_router&lt;br/&gt;运行 Team、继续 Team run、读取 Team session"]
+    CoreRouters --> WorkflowRouter["get_workflow_router&lt;br/&gt;运行 Workflow、stream、background、continue"]
+    CoreRouters --> SessionRouter["get_session_router&lt;br/&gt;跨 agent/team/workflow 查询 sessions、runs、messages"]
+    CoreRouters --> MemoryRouter["get_memory_router&lt;br/&gt;读取和管理用户记忆"]
+    CoreRouters --> KnowledgeRouter["get_knowledge_router&lt;br/&gt;搜索知识库、管理 knowledge instances"]
+    CoreRouters --> ApprovalRouter["get_approval_router&lt;br/&gt;审批列表、审批处理、审批状态"]
+    AgentRouter --> RunLayer["组件执行层&lt;br/&gt;本地对象、Remote、Factory、Registry"]
+    TeamRouter --> RunLayer
+    WorkflowRouter --> RunLayer
+    RunLayer --> DB["DB / session / run 持久化"]
+    SessionRouter --> DB
+    MemoryRouter --> DB
+    KnowledgeRouter --> Knowledge["Knowledge instances"]
+    ApprovalRouter --> DB
+    DB --> Client["Studio / Client / 外部系统"]
+      </pre>
+      <p>源码证据：<code>os/app.py:46</code> 到 <code>:63</code> 引入 agents、teams、workflows、session、memory、knowledge、approvals 等 router；<code>os/app.py:557</code> 到 <code>:559</code> 挂载 Agent / Team / Workflow 的运行入口；<code>os/app.py:1026</code>、<code>:1035</code>、<code>:1046</code> 说明 session、memory、knowledge、approval 这些治理入口也由 AgentOS 统一挂载。</p>
+      <p>为什么这么设计：Agno 把 <code>Agent</code>、<code>Team</code>、<code>Workflow</code> 都当成“服务端资源”。业务系统不需要知道 Python 对象怎么创建，只要通过 router 找到组件、提交 run、继续暂停任务、查询 session/run、处理 approval 即可。</p>
+      <h3>7.2 MCP 细节</h3>
+      <pre class="mermaid">
+flowchart TB
+    Enable["AgentOS(enable_mcp_server=True)"] --> Build["build_mcp_server&lt;br/&gt;创建 FastMCP 实例"]
+    Build --> Config["MCPServerConfig&lt;br/&gt;enable_builtin_tools、include_tags、exclude_tags、custom tools"]
+    Config --> Builtins["内置 MCP tools"]
+    Builtins --> RunAgent["run_agent&lt;br/&gt;运行指定 agent_id"]
+    Builtins --> RunTeam["run_team&lt;br/&gt;运行指定 team_id"]
+    Builtins --> RunWorkflow["run_workflow&lt;br/&gt;运行指定 workflow_id"]
+    Builtins --> Continue["continue_run&lt;br/&gt;恢复暂停的 run"]
+    Builtins --> Sessions["get_sessions / get_session_runs&lt;br/&gt;读取会话和运行历史"]
+    Build --> Custom["custom tools&lt;br/&gt;可注入 authenticated user_id"]
+    RunAgent --> Shared["共享 REST 语义&lt;br/&gt;组件解析、鉴权、user scope、approval gate"]
+    RunTeam --> Shared
+    RunWorkflow --> Shared
+    Continue --> Shared
+    Sessions --> Shared
+    Shared --> Result["ToolResult&lt;br/&gt;返回内容、事件摘要、session/run 信息"]
+    Result --> MCPClient["MCP client / IDE / 外部 Agent"]
+      </pre>
+      <p>源码证据：<code>os/mcp.py:648</code> 构建 FastMCP server；<code>:749</code>、<code>:777</code>、<code>:803</code>、<code>:846</code>、<code>:921</code>、<code>:980</code> 分别注册 <code>run_agent</code>、<code>run_team</code>、<code>run_workflow</code>、<code>continue_run</code>、<code>get_sessions</code>、<code>get_session_runs</code>。</p>
+      <p>为什么这么设计：MCP 在 Agno 里不是另一套运行时，而是 AgentOS REST 能力的另一个传输面。它复用组件解析、鉴权、user scope、approval gate 和 session 服务，所以 IDE、外部 Agent、MCP client 可以像调用工具一样运行 Agno 平台里的 Agent/Team/Workflow。</p>
+    </section>
+
+    <section id="memory">
+      <h2>8. 记忆、知识、审批</h2>
+      <div class="grid2">
+        <div>
+          <pre class="mermaid">
+flowchart TB
+    Input["一次用户请求"] --> Session["Session&lt;br/&gt;session_id、user_id、runs、session_data"]
+    Session --> State["session_state&lt;br/&gt;可注入上下文，也可被工具更新"]
+    Session --> History["history / summary&lt;br/&gt;历史消息和会话摘要"]
+    Input --> Memory["MemoryManager&lt;br/&gt;读取用户记忆并注入 system prompt"]
+    Input --> Knowledge["Knowledge&lt;br/&gt;build_context 或 search_knowledge 工具"]
+    Knowledge --> RAG["检索结果&lt;br/&gt;references、filters、agentic filters"]
+    Input --> Learning["Learning / Culture&lt;br/&gt;后台抽取可复用经验和团队知识"]
+    State --> Prompt["构造模型上下文"]
+    History --> Prompt
+    Memory --> Prompt
+    RAG --> Prompt
+    Learning --> Prompt
+    Prompt --> Model["模型生成回复或工具调用"]
+    Model --> Store["保存 run 与 session metrics"]
+          </pre>
+        </div>
+        <div>
+          <pre class="mermaid">
+flowchart TB
+    Tool["Python tool / Toolkit / Function"] --> Decorator["@approval 或 @tool HITL flags"]
+    Decorator --> Type{"approval type"}
+    Type -->|"required"| Blocking["阻塞审批&lt;br/&gt;默认打开 requires_confirmation"]
+    Type -->|"audit"| Audit["非阻塞审计&lt;br/&gt;要求已有 HITL 标记"]
+    Blocking --> Run["执行时遇到工具"]
+    Audit --> Run
+    Run --> Pause{"是否需要暂停？"}
+    Pause -->|"是"| Persist["创建 approval / requirement&lt;br/&gt;保存 run 状态"]
+    Persist --> Admin["管理员或用户处理"]
+    Admin --> Continue["continue_run 恢复执行"]
+    Pause -->|"否"| Execute["直接执行工具"]
+    Continue --> Execute
+    Execute --> Result["Tool result 写回消息或审计记录"]
+          </pre>
+        </div>
+      </div>
+      <p>这块体现了 Agno 的生产取向：用户记忆、知识检索、运行状态、审批记录和后续恢复，都被纳入同一个运行体系。</p>
+    </section>
+
+    <section id="examples">
+      <h2>9. 真实示例</h2>
+      <div class="case"><strong>企业财务审批 Agent 平台：</strong>员工提交付款审核，Agent 查合同、发票、付款历史和风险规则；高风险付款工具用 <code>@approval(type="required")</code> 阻塞审批；AgentOS 暴露 API 与审批入口。</div>
+      <h3>9.1 最小代码示例：Agent + tool + approval + AgentOS</h3>
+      <p>下面这段不是为了展示完整业务代码，而是说明 Agno 的核心组合方式：先用代码定义 Agent 和工具，再用 <code>@approval</code> 给高风险工具加审批边界，最后用 AgentOS 把它服务化。</p>
+      <pre><code class="language-python">from agno.agent import Agent
+from agno.approval import approval
+from agno.models.openai import OpenAIChat
+from agno.os import AgentOS
+from agno.tools import tool
+
+
+def lookup_invoice(invoice_id: str) -> str:
+    return f"invoice={invoice_id}, amount=128000, vendor=ACME"
+
+
+@approval(type="required")
+@tool()
+def release_payment(invoice_id: str) -> str:
+    return f"payment released for {invoice_id}"
+
+
+finance_agent = Agent(
+    id="finance-approval",
+    name="财务付款审批 Agent",
+    model=OpenAIChat(id="gpt-4.1"),
+    tools=[lookup_invoice, release_payment],
+    instructions=[
+        "先核对发票、供应商和金额风险。",
+        "只有确认符合规则时才调用 release_payment。",
+    ],
+    markdown=True,
+)
+
+agent_os = AgentOS(
+    id="finance-agent-os",
+    agents=[finance_agent],
+    enable_mcp_server=True,
+    authorization=True,
+)
+
+app = agent_os.get_app()</code></pre>
+      <div class="green">分享时可以强调：这段代码背后不是简单函数调用。<code>release_payment</code> 会被标记成需要审批的工具；AgentOS 会把 Agent 暴露成服务端资源；如果 run 因审批暂停，外部系统可以通过 REST / UI / MCP 处理后再 <code>continue_run</code>。</div>
+      <div class="case"><strong>知识库问答 + 后台学习：</strong>售后工程师询问设备故障，Agent 通过 <code>knowledge</code> 检索手册和维修记录，同时后台 learning / culture 抽取可复用经验。</div>
+      <div class="case"><strong>多角色研究团队：</strong>市场研究员、技术分析员、财务分析员分别处理，<code>Team(mode=coordinate)</code> 由 leader 汇总；如果只选一个专家用 <code>route</code>，多视角并行用 <code>broadcast</code>。</div>
+      <div class="case"><strong>订单处理 Workflow：</strong>识别诉求、查订单、判断退款规则、人工确认、写回工单。普通步骤用函数，推理步骤用 Agent，复杂分支用 Router 或 Condition。</div>
+    </section>
+
+    <section id="comparison">
+      <h2>10. 横向对比</h2>
+      <pre class="mermaid">
+flowchart TB
+    Need["项目诉求"] --> Platform{"要不要生产 API、UI 接口、权限、调度？"}
+    Platform -->|"要"| Agno["Agno&lt;br/&gt;Agent platform SDK&lt;br/&gt;代码定义组件，AgentOS 服务化"]
+    Platform -->|"低代码产品入口"| Dify["Dify&lt;br/&gt;可视化应用、Dataset、Workflow、运营界面"]
+    Need --> State{"核心难点是长流程状态机和 checkpoint？"}
+    State -->|"是"| LangGraph["LangGraph&lt;br/&gt;代码级状态图、interrupt、checkpoint"]
+    State -->|"只是单 Agent typed 输出"| PydanticAI["PydanticAI&lt;br/&gt;typed deps、tool schema、结构化输出、evals"]
+    Need --> Multi{"核心是角色协作？"}
+    Multi -->|"角色任务很清晰"| CrewAI["CrewAI&lt;br/&gt;Agent / Task / Crew / Flow"]
+    Multi -->|"消息式多 Agent 实验"| AutoGen["AutoGen&lt;br/&gt;消息运行时、GroupChat"]
+    Agno --> Combo["组合建议&lt;br/&gt;Agno 做平台外壳，LangGraph 做复杂状态内核，Haystack/LlamaIndex 做重 RAG"]
+      </pre>
+      <table>
+        <tr><th>框架</th><th>和 Agno 的区别</th><th>组合建议</th></tr>
+        <tr><td>LangGraph</td><td>更像 checkpoint-first 状态图运行时；Agno 更像 Agent/Team/Workflow 平台 SDK。</td><td>复杂状态内核用 LangGraph，外层 API、审批、界面、MCP 可参考 Agno。</td></tr>
+        <tr><td>CrewAI</td><td>更强调角色、任务、Crew 编排；Agno 还强调 AgentOS 和生产运行。</td><td>角色任务型分享讲 CrewAI；平台化运行讲 Agno。</td></tr>
+        <tr><td>PydanticAI</td><td>更强调 typed deps、tool schema、结构化输出和 evals；Agno 更强调运行平台和状态治理。</td><td>PydanticAI 做 typed inner agent，Agno 或 LangGraph 做外层服务/流程。</td></tr>
+        <tr><td>Dify</td><td>Dify 是低代码产品平台；Agno 是代码优先 SDK + 服务化入口。</td><td>业务团队配置入口用 Dify；工程团队代码定义 Agent 平台可看 Agno。</td></tr>
+      </table>
+      <h3>10.1 Agno + LangGraph + RAG 组合边界</h3>
+      <pre class="mermaid">
+flowchart LR
+    Entry["产品或系统入口&lt;br/&gt;Web / Slack / AG-UI / MCP / REST"] --> AgnoOS["Agno AgentOS&lt;br/&gt;API、鉴权、session/run、审批、调度、接口"]
+    AgnoOS --> AgnoAgent["Agno Agent / Team&lt;br/&gt;用户上下文、工具、记忆、知识、HITL"]
+    AgnoAgent --> NeedState{"是否进入复杂长流程状态机？"}
+    NeedState -->|"是"| LangGraph["LangGraph 服务&lt;br/&gt;StateGraph、checkpoint、interrupt、复杂分支"]
+    NeedState -->|"否"| Direct["Agno 本地工具或 Workflow&lt;br/&gt;轻量步骤、审批、写回系统"]
+    LangGraph --> TypedResult["结构化结果&lt;br/&gt;下一步动作、风险、人工节点、证据"]
+    Direct --> TypedResult
+    AgnoAgent --> RAG{"是否需要重 RAG 管线？"}
+    RAG -->|"是"| RagCore["Haystack / LlamaIndex&lt;br/&gt;ingestion、retriever、rerank、citation"]
+    RAG -->|"否"| AgnoKnowledge["Agno Knowledge&lt;br/&gt;轻量检索和上下文注入"]
+    RagCore --> TypedResult
+    AgnoKnowledge --> TypedResult
+    TypedResult --> AgnoOS
+    AgnoOS --> Persist["持久化 run/session/approval/events&lt;br/&gt;对外提供继续、回放、审计"]
+      </pre>
+      <p>边界建议：Agno 做“平台外壳和运行治理”，LangGraph 做“复杂状态内核”，Haystack/LlamaIndex 做“重 RAG 数据管线”。这样三者不是替代关系，而是分层协作关系。</p>
+    </section>
+
+    <section id="design">
+      <h2>11. 核心设计思想</h2>
+      <ol>
+        <li><strong>平台化优先：</strong><code>AgentOS</code> 把 Agent 作为可被 API、UI、MCP 和调度系统管理的资源。</li>
+        <li><strong>分层抽象：</strong><code>Agent</code> 处理单体推理，<code>Team</code> 处理多 Agent 协作，<code>Workflow</code> 处理确定性步骤，<code>AgentOS</code> 处理服务化和治理。</li>
+        <li><strong>状态一等公民：</strong>session、run、session_state、metrics、checkpoint、continue_run 贯穿 Agent、Team、Workflow。</li>
+        <li><strong>HITL 内建：</strong>审批、确认、用户输入、输出审核是 tool 和 step 的执行语义。</li>
+        <li><strong>生产治理内建：</strong>auth、RBAC、tracing、scheduler、interfaces、MCP 都进入 AgentOS。</li>
+      </ol>
+      <div class="note">局限性：如果只想要最精细 checkpoint 状态图，LangGraph 更专注；只想要 typed business agent，PydanticAI 更轻；重 RAG ingestion 和检索工程，Haystack / LlamaIndex 更专业；低代码产品化入口，Dify 更合适。</div>
+    </section>
+
+    <section id="share">
+      <h2>12. 分享口径</h2>
+      <p>开场可以这样讲：Agno 这类框架的价值，不在于它能不能调用一个模型，而在于它把 Agent 运行时升级成平台组件。它有单 Agent loop，有多 Agent Team，有确定性 Workflow，还有 AgentOS 把这些组件变成 API、WebSocket、MCP、审批、调度和权限体系。</p>
+      <ol>
+        <li><strong>Agent 主线：</strong>模型、工具、记忆、知识、hook 和结构化输出如何组成一次 run。</li>
+        <li><strong>Team / Workflow 主线：</strong>多 Agent 协作和确定性业务流程如何复用 session、HITL、持久化能力。</li>
+        <li><strong>AgentOS 主线：</strong>为什么生产环境需要 API、权限、调度、MCP、接口和数据库生命周期，而不只是 <code>agent.run()</code>。</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

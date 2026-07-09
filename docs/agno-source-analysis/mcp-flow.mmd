@@ -1,0 +1,17 @@
+flowchart TB
+    Enable["AgentOS(enable_mcp_server=True)"] --> Build["build_mcp_server<br/>创建 FastMCP 实例"]
+    Build --> Config["MCPServerConfig<br/>enable_builtin_tools、include_tags、exclude_tags、custom tools"]
+    Config --> Builtins["内置 MCP tools"]
+    Builtins --> RunAgent["run_agent<br/>运行指定 agent_id"]
+    Builtins --> RunTeam["run_team<br/>运行指定 team_id"]
+    Builtins --> RunWorkflow["run_workflow<br/>运行指定 workflow_id"]
+    Builtins --> Continue["continue_run<br/>恢复暂停的 run"]
+    Builtins --> Sessions["get_sessions / get_session_runs<br/>读取会话和运行历史"]
+    Build --> Custom["custom tools<br/>可注入 authenticated user_id"]
+    RunAgent --> Shared["共享 REST 语义<br/>组件解析、鉴权、user scope、approval gate"]
+    RunTeam --> Shared
+    RunWorkflow --> Shared
+    Continue --> Shared
+    Sessions --> Shared
+    Shared --> Result["ToolResult<br/>返回内容、事件摘要、session/run 信息"]
+    Result --> MCPClient["MCP client / IDE / 外部 Agent"]

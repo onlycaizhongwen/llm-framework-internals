@@ -1,0 +1,11 @@
+flowchart TB
+    Need["项目诉求"] --> Platform{"要不要生产 API、UI 接口、权限、调度？"}
+    Platform -->|"要"| Agno["Agno<br/>Agent platform SDK<br/>代码定义组件，AgentOS 服务化"]
+    Platform -->|"低代码产品入口"| Dify["Dify<br/>可视化应用、Dataset、Workflow、运营界面"]
+    Need --> State{"核心难点是长流程状态机和 checkpoint？"}
+    State -->|"是"| LangGraph["LangGraph<br/>代码级状态图、interrupt、checkpoint"]
+    State -->|"只是单 Agent typed 输出"| PydanticAI["PydanticAI<br/>typed deps、tool schema、结构化输出、evals"]
+    Need --> Multi{"核心是角色协作？"}
+    Multi -->|"角色任务很清晰"| CrewAI["CrewAI<br/>Agent / Task / Crew / Flow"]
+    Multi -->|"消息式多 Agent 实验"| AutoGen["AutoGen<br/>消息运行时、GroupChat"]
+    Agno --> Combo["组合建议<br/>Agno 做平台外壳，LangGraph 做复杂状态内核，Haystack/LlamaIndex 做重 RAG"]

@@ -1,0 +1,16 @@
+flowchart TB
+    Start["workflow.run / arun"] --> Init["初始化 workflow<br/>session、state、metadata、run_context"]
+    Init --> Prepare["准备 steps<br/>函数、Agent、Team、嵌套 Workflow 都包装成 Step"]
+    Prepare --> StepKinds["Step 类型<br/>Step / Steps / Parallel / Loop / Condition / Router"]
+    StepKinds --> Execute["按流程执行<br/>传递 StepInput、StepOutput、媒体和 state"]
+    Execute --> HITL{"步骤是否需要人工介入？"}
+    HITL -->|"确认或输入"| Pause["生成 StepRequirement<br/>暂停并保存运行状态"]
+    Pause --> Continue["continue_run<br/>带用户输入、审批或重路由选择恢复"]
+    Continue --> Execute
+    HITL -->|"无需暂停"| Review{"需要输出审核或错误处理？"}
+    Review -->|"需要"| Pause
+    Review -->|"通过"| Next["进入下一个步骤"]
+    Next --> Done{"步骤完成？"}
+    Done -->|"否"| Execute
+    Done -->|"是"| Store["保存 WorkflowSession、metrics、run output"]
+    Store --> End["返回 WorkflowRunOutput 或事件流"]

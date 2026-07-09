@@ -1,0 +1,11 @@
+flowchart TB
+    Config["AgentOS 配置<br/>agents teams workflows knowledge db interfaces"] --> App["get_app 创建或复用 FastAPI"]
+    App --> Routers["挂载 routers<br/>agents、teams、workflows、sessions、runs、memory、knowledge、approvals"]
+    App --> MCP["可选 MCP server<br/>把 REST 能力映射成 MCP tools"]
+    App --> Interfaces["可选接口<br/>AG-UI、Slack、A2A、WhatsApp"]
+    App --> Auth["认证授权<br/>JWT、OS security key、service account、scope"]
+    App --> Lifespan["lifespan<br/>数据库初始化、HTTP client、scheduler"]
+    Routers --> Resolve["解析组件<br/>本地对象、Remote、Factory、Registry"]
+    Resolve --> Run["执行 Agent / Team / Workflow<br/>支持 stream、background、continue"]
+    Run --> Persist["DB 持久化<br/>session、run、events、approvals、schedules"]
+    Persist --> Client["Client / Studio / 外部系统读取状态"]

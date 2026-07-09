@@ -1,0 +1,14 @@
+flowchart TB
+    Tool["Python tool / Toolkit / Function"] --> Decorator["@approval 或 @tool HITL flags"]
+    Decorator --> Type{"approval type"}
+    Type -->|"required"| Blocking["阻塞审批<br/>默认打开 requires_confirmation"]
+    Type -->|"audit"| Audit["非阻塞审计<br/>要求已有确认、用户输入或外部执行标记"]
+    Blocking --> Run["Agent / Team / Workflow 执行时遇到工具"]
+    Audit --> Run
+    Run --> Pause{"是否需要暂停？"}
+    Pause -->|"是"| Persist["创建 approval / requirement<br/>保存 run 状态"]
+    Persist --> Admin["管理员或用户通过 REST / UI / MCP 处理"]
+    Admin --> Continue["continue_run 恢复执行"]
+    Pause -->|"否"| Execute["直接执行工具"]
+    Continue --> Execute
+    Execute --> Result["Tool result 写回消息或审计记录"]

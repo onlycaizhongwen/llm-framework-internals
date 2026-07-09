@@ -28,3 +28,6 @@
 [submodule "sources/pydantic-ai"]
 	path = sources/pydantic-ai
 	url = https://github.com/pydantic/pydantic-ai.git
+[submodule "sources/agno"]
+	path = sources/agno
+	url = https://github.com/agno-agi/agno.git

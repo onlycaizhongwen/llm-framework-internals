@@ -1,0 +1,15 @@
+flowchart TB
+    Input["一次用户请求"] --> Session["Session<br/>session_id、user_id、runs、session_data"]
+    Session --> State["session_state<br/>可注入上下文，也可被工具更新"]
+    Session --> History["history / summary<br/>历史消息和会话摘要"]
+    Input --> Memory["MemoryManager<br/>读取用户记忆并注入 system prompt"]
+    Input --> Knowledge["Knowledge<br/>build_context 或 search_knowledge 工具"]
+    Knowledge --> RAG["检索结果<br/>references、filters、agentic filters"]
+    Input --> Learning["Learning / Culture<br/>后台抽取可复用经验和团队知识"]
+    State --> Prompt["构造模型上下文"]
+    History --> Prompt
+    Memory --> Prompt
+    RAG --> Prompt
+    Learning --> Prompt
+    Prompt --> Model["模型生成回复或工具调用"]
+    Model --> Store["保存 run 与 session metrics<br/>为后续恢复、搜索、审计服务"]

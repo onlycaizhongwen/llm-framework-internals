@@ -20,6 +20,7 @@ flowchart TB
     Goal --> App["应用平台层<br/>把 AI 能力产品化、可配置、可运营"]
     App --> Dify["Dify<br/>LLM 应用平台：Workflow、RAG、Agent、Plugin、模型、观测"]
     App --> N8N["n8n<br/>通用自动化平台：触发器、节点、凭证、队列、可视化流程"]
+    App --> Agno["Agno<br/>代码优先 Agent platform SDK：AgentOS、API、MCP、审批、调度、接口"]
     Goal --> Runtime["Agent / Workflow 运行时层<br/>解决复杂任务如何可靠推进"]
     Runtime --> LangGraph["LangGraph<br/>代码级状态图、checkpoint、中断恢复、Pregel 模型"]
     Runtime --> SpringAIAlibaba["Spring AI Alibaba<br/>Java / Spring Boot Agentic AI：Graph Core、ReactAgent、FlowAgent、Nacos/A2A/MCP"]
@@ -43,6 +44,7 @@ flowchart TB
 | --- | --- | --- | --- | --- | --- |
 | LangChain | LLM 应用组件和集成生态 | Runnable、Tool、Agent middleware、Provider adapter | 模型/工具生态、组合式调用、迁移兼容 | 不是完整产品平台，复杂状态恢复要靠 LangGraph | provider adapter、middleware、classic 迁移 |
 | PydanticAI | Pydantic 风格 typed Agent framework | Agent、RunContext、Tool、OutputSchema、Model、Provider | typed deps、Pydantic 结构化输出、tool schema、evals、Logfire/OTel | 不是低代码平台，也不是完整 RAG 数据管线或 checkpoint-first runtime | Agent graph、tool/function schema、structured output、provider adapter、pydantic_evals |
+| Agno | 代码优先 Agent platform SDK | Agent、Team、Workflow、AgentOS、Approval、Memory、Knowledge | 生产 API、WebSocket、MCP、HITL 审批、调度、接口、session/run 治理 | 不是低代码运营平台，复杂 checkpoint-first 状态图不如 LangGraph 专注，重 RAG ingestion 需组合 Haystack/LlamaIndex | Agent run、TeamMode、Workflow Step、AgentOS routers、approval decorator |
 | LangGraph | 代码级 Agent 状态图运行时 | StateGraph、Pregel、checkpoint、interrupt | 复杂状态机、可恢复、人类中断、可测试 | 需要自己做 UI、权限、运营平台 | Pregel 执行、checkpoint、中断恢复 |
 | Spring AI Alibaba | Java / Spring Boot 生态 Agentic AI 框架 | StateGraph、CompiledGraph、ReactAgent、FlowAgent、Hook、ToolCallback | 企业 Java 服务落地、Nacos/A2A/MCP、checkpoint、Observation、多 Agent flow | Java/Spring 学习和部署门槛较高，低代码平台能力需 Admin/Studio 配合 | Graph Core、ReactAgent、AgentToolNode、FlowAgent、Nacos/A2A starters |
 | Dify | LLM 应用开发与运营平台 | App、Workflow、Dataset、Plugin、dify-agent | 可视化配置、RAG、Agent、发布、观测、权限 | 超复杂代码状态机不适合全塞画布 | WorkflowAppGenerator、DifyNodeFactory、RAG、Agent v2 |
@@ -74,6 +76,7 @@ flowchart TB
     Code -->|"RAG 数据接入 / 索引工程"| Llama["优先 LlamaIndex<br/>ingestion、index、retriever、query engine"]
     Code -->|"生产级可调试 RAG Pipeline"| Haystack["优先 Haystack<br/>Component Pipeline、typed sockets、Hybrid RAG、snapshot/tracing"]
     Code -->|"Python typed 业务 Agent / 结构化输出"| PydanticAI["优先 PydanticAI<br/>deps_type、RunContext、Pydantic output、tool schema、evals"]
+    Code -->|"代码优先 Agent 平台 / API / MCP / 审批 / 调度"| Agno["优先 Agno<br/>Agent、Team、Workflow、AgentOS、approval、memory、knowledge"]
     Code -->|"模型/工具生态适配"| LangChain["优先 LangChain<br/>provider adapter、tool、middleware、Runnable"]
     Code -->|"长期记忆 / 用户画像"| Memory["mem0 / Zep / Graphiti / Letta<br/>按记忆形态选择"]
     Code -->|"上下文成本与代理网关"| Headroom["Headroom<br/>压缩上下文、代理网关、MCP/CCR 适配"]
@@ -122,12 +125,12 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    UI["产品入口<br/>Dify / n8n / Spring Boot / 自研 Web"] --> Orchestrator["编排核心<br/>LangGraph / Spring AI Alibaba Graph / Dify Workflow / n8n WorkflowExecute"]
+    UI["产品入口<br/>Dify / n8n / Agno AgentOS / Spring Boot / 自研 Web"] --> Orchestrator["编排核心<br/>LangGraph / Agno Workflow / Spring AI Alibaba Graph / Dify Workflow / n8n WorkflowExecute"]
     Orchestrator --> RAG["RAG 数据层<br/>Haystack Pipeline / LlamaIndex / Dify Dataset / LangChain retriever"]
     Orchestrator --> Memory["记忆层<br/>mem0 / Zep / Graphiti / Letta memory"]
-    Orchestrator --> Tools["工具与系统集成<br/>PydanticAI Tools / Spring AI ToolCallback / LangChain Tools / n8n Nodes / Dify Plugin / 自研 API"]
-    Orchestrator --> Agent["多 Agent 协作<br/>AutoGen / CrewAI / Letta / LangGraph subgraph"]
-    RAG --> LLM["模型适配层<br/>Haystack Generator / LangChain provider adapter / Dify model provider / 直接 SDK"]
+    Orchestrator --> Tools["工具与系统集成<br/>Agno Tools / PydanticAI Tools / Spring AI ToolCallback / LangChain Tools / n8n Nodes / Dify Plugin / 自研 API"]
+    Orchestrator --> Agent["多 Agent 协作<br/>Agno Team / AutoGen / CrewAI / Letta / LangGraph subgraph"]
+    RAG --> LLM["模型适配层<br/>Agno Model / Haystack Generator / LangChain provider adapter / Dify model provider / 直接 SDK"]
     Memory --> LLM
     Tools --> Audit["生产治理<br/>权限、凭证、日志、观测、回放、人工审批"]
     Agent --> Audit
@@ -194,6 +197,7 @@ flowchart TB
     Graph --> N8NG["n8n：Workflow JSON + WorkflowExecute + runData"]
     Pattern --> AgentLoop["Agent Loop 范式<br/>模型输出动作，工具执行，状态回写"]
     AgentLoop --> PAI["PydanticAI：typed deps + tool schema + structured output"]
+    AgentLoop --> AgnoA["Agno：Agent + Team + Workflow + AgentOS 平台化运行"]
     AgentLoop --> Auto["AutoGen：消息驱动、多 Agent runtime"]
     AgentLoop --> Crew["CrewAI：角色、任务、流程、工具"]
     AgentLoop --> LettaP["Letta：AgentState、Memory、tool-first loop"]
@@ -268,6 +272,7 @@ flowchart TB
     Cases["真实案例选择框架组合"]
     Cases --> CS["企业客服助手<br/>Dify + Haystack/LlamaIndex/Dify Dataset + LangGraph 可选"]
     Cases --> KBRAG["企业知识库 RAG 内核<br/>Haystack Pipeline + DocumentStore + rerank/tracing"]
+    Cases --> AgnoCase["代码优先 Agent 平台<br/>Agno AgentOS + Agent/Team/Workflow + 审批/MCP"]
     Cases --> Sales["销售助理 / CRM 自动化<br/>n8n + LangGraph + LangChain Tools"]
     Cases --> Ticket["工单自动化<br/>n8n 触发器 + Dify 人审 + LangGraph 决策"]
     Cases --> Code["代码分析 Agent<br/>LangGraph + LangChain Tools + Headroom"]
@@ -299,6 +304,18 @@ flowchart TB
 - `Breakpoint / PipelineSnapshot / Tracer` 让生产问题可以定位到“召回少了、融合错了、重排错了、prompt 太长了、生成偏了”中的哪一步。
 
 分享叙述：企业先把政策文档、产品手册、工单 FAQ 写入 Haystack indexing pipeline；用户提问时 query pipeline 同时走 BM25 和 embedding retriever，再用 joiner/ranker 合并排序，最后 prompt builder 注入上下文给 generator。外层可以是 Dify 页面、n8n 自动化触发器或自研 Web。
+
+### 5.1.2 代码优先 Agent 平台
+
+推荐组合：Agno AgentOS + Agent / Team / Workflow + 审批 / MCP。
+
+为什么：
+
+- Agno 适合工程团队用代码定义 Agent、Team、Workflow，同时直接暴露 REST、WebSocket、MCP 和接口入口。
+- AgentOS 把 session/run、审批、调度、权限和数据库生命周期放进平台层，减少每个项目重复补服务化外壳。
+- 如果内部状态机特别复杂，可以把 LangGraph 作为核心决策服务；如果 RAG 很重，可以让 Agno Agent 调用 Haystack 或 LlamaIndex 后端。
+
+分享叙述：财务审批 Agent 用 Agno 定义工具、知识库和审批动作，AgentOS 对外提供 API 和 MCP；当付款工具触发 `@approval(type="required")` 时运行暂停，审批人处理后再 continue_run，最终把 run、session、approval 记录持久化。
 
 ### 5.2 销售助理 / CRM 自动化
 

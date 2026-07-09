@@ -1,0 +1,15 @@
+flowchart LR
+    Entry["产品或系统入口<br/>Web / Slack / AG-UI / MCP / REST"] --> AgnoOS["Agno AgentOS<br/>API、鉴权、session/run、审批、调度、接口"]
+    AgnoOS --> AgnoAgent["Agno Agent / Team<br/>用户上下文、工具、记忆、知识、HITL"]
+    AgnoAgent --> NeedState{"是否进入复杂长流程状态机？"}
+    NeedState -->|"是"| LangGraph["LangGraph 服务<br/>StateGraph、checkpoint、interrupt、复杂分支"]
+    NeedState -->|"否"| Direct["Agno 本地工具或 Workflow<br/>轻量步骤、审批、写回系统"]
+    LangGraph --> TypedResult["结构化结果<br/>下一步动作、风险、人工节点、证据"]
+    Direct --> TypedResult
+    AgnoAgent --> RAG{"是否需要重 RAG 管线？"}
+    RAG -->|"是"| RagCore["Haystack / LlamaIndex<br/>ingestion、retriever、rerank、citation"]
+    RAG -->|"否"| AgnoKnowledge["Agno Knowledge<br/>轻量检索和上下文注入"]
+    RagCore --> TypedResult
+    AgnoKnowledge --> TypedResult
+    TypedResult --> AgnoOS
+    AgnoOS --> Persist["持久化 run/session/approval/events<br/>对外提供继续、回放、审计"]
