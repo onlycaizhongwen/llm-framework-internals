@@ -1,0 +1,18 @@
+flowchart TB
+    User["用户 / Web UI / CLI"] --> App["TaskWeaverApp<br>装配配置、SessionManager、Plugin、Role、ExecutionService"]
+    App --> Session["Session<br>round、memory、workspace、event emitter"]
+    Session --> Planner["Planner 角色<br>拆任务、维护 plan、路由给 worker"]
+    Planner --> CodeInterpreter["CodeInterpreter 角色<br>生成代码、验证代码、执行代码、反馈结果"]
+    CodeInterpreter --> CodeGenerator["CodeGenerator<br>把计划、历史、插件说明拼成 prompt"]
+    CodeInterpreter --> Verifier["Code Verification<br>AST 检查 import、危险函数、magic command"]
+    CodeInterpreter --> Executor["CodeExecutor<br>加载插件、调用执行服务"]
+    Executor --> CES["Code Execution Service<br>Jupyter kernel / Docker container"]
+    CES --> Artifacts["stdout、变量、图表、文件 artifact"]
+    App --> PluginRegistry["PluginRegistry<br>读取 project/plugins/*.yaml"]
+    PluginRegistry --> CodeGenerator
+    PluginRegistry --> Executor
+    Session --> Event["SessionEventEmitter<br>round/post/status/message/attachment 事件"]
+    Session --> Memory["Memory<br>Round、Post、Attachment、SharedMemoryEntry"]
+    Planner --> Memory
+    CodeInterpreter --> Memory
+    Artifacts --> Memory

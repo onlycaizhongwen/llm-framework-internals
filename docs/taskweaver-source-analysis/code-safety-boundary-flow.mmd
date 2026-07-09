@@ -1,0 +1,18 @@
+flowchart TB
+    Code["生成的 Python 代码"] --> Mode{"kernel mode"}
+    Mode -->|"local"| ForceVerify["本地模式自动开启 verification<br>同机执行风险更高"]
+    Mode -->|"container"| Container["Docker container<br>默认隔离执行环境"]
+    ForceVerify --> Split["separate_magics_and_code<br>拆出 magic、shell、pip/conda install"]
+    Container --> Split
+    Split --> Magic{"是否有非安装 magic / shell"}
+    Magic -->|"有"| RejectMagic["拒绝<br>magic command 不允许"]
+    Magic -->|"无"| AST["ast.parse + FunctionCallValidator"]
+    AST --> Imports["Import allowlist / blocklist<br>例如只允许 pandas、numpy、sklearn"]
+    AST --> Calls["函数 allowlist / blocklist<br>eval、exec、open、input 等可禁"]
+    AST --> Dunder["危险动态访问<br>getattr、__class__、__subclasses__、__dict__"]
+    Imports --> Verdict{"是否有错误"}
+    Calls --> Verdict
+    Dunder --> Verdict
+    Verdict -->|"有"| Revise["verification INCORRECT<br>带 code_error 和 revise_message 重写"]
+    Verdict -->|"无"| Execute["执行代码<br>进入 Jupyter kernel / container"]
+    Execute --> Why["为什么这么设计<br>安全边界是验证 + 容器隔离<br>不是完整权限/人审系统"]

@@ -1,0 +1,15 @@
+flowchart TB
+    User["用户消息 / 恢复事件<br>UserMsg、UserConfirmResult、ExternalExecutionResult"] --> Reply["Agent._reply<br>reply middleware 洋葱链"]
+    Reply --> Start["ReplyStartEvent<br>建立 reply_id、cur_iter=0"]
+    Start --> Loop{"ReAct 循环是否继续"}
+    Loop -->|"需要推理"| Compress["compress_context<br>必要时压缩上下文"]
+    Compress --> Reason["Agent._reasoning<br>reasoning middleware"]
+    Reason --> Prepare["prepare_model_input<br>system prompt + summary + context + tool schemas"]
+    Prepare --> Model["call_model<br>model_call middleware + retry + fallback"]
+    Model --> Events["模型响应转事件<br>文本、thinking、data、tool_call"]
+    Events --> Context["写回 Msg / AgentState.context"]
+    Context --> Loop
+    Loop -->|"存在可执行工具"| Batch["batch_tool_calls<br>按并发安全和工具状态分批"]
+    Batch --> Execute["execute_tool_call<br>校验输入、权限、人审、外部执行、工具结果事件"]
+    Execute --> Context
+    Loop -->|"无更多动作"| End["ReplyEndEvent / AssistantMsg<br>结束本轮回复"]

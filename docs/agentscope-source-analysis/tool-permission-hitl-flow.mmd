@@ -1,0 +1,15 @@
+flowchart TB
+    ToolCall["模型产生 ToolCallBlock<br>name + JSON input"] --> Available["Toolkit.check_tool_available<br>检查工具存在和分组激活"]
+    Available --> Parse["JSON repair + jsonschema validate<br>把模型文本约束成工具输入"]
+    Parse --> Engine["PermissionEngine.check_permission<br>按模式和规则判定"]
+    Engine --> Decision{"权限决策"}
+    Decision -->|"ALLOW"| Start["ToolResultStartEvent<br>标记 ToolCallState.ALLOWED"]
+    Start --> External{"是否外部工具"}
+    External -->|"是"| RequireExternal["RequireExternalExecutionEvent<br>交给外部执行器，等待结果恢复"]
+    External -->|"否"| Acting["Agent._acting<br>acting middleware 包裹 toolkit.call_tool"]
+    Acting --> Chunk["ToolChunk / ToolResponse<br>流式工具结果"]
+    Chunk --> Result["ToolResultDelta / ToolResultEnd<br>写入 ToolResultBlock"]
+    Decision -->|"ASK / PASSTHROUGH"| Ask["RequireUserConfirmEvent<br>暂停并等待用户确认"]
+    Ask --> Resume["UserConfirmResultEvent<br>恢复同一个工具调用"]
+    Resume --> Start
+    Decision -->|"DENY"| Deny["ToolResultEnd DENIED<br>把拒绝原因回写上下文"]

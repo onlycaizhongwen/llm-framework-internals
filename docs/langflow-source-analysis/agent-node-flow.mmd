@@ -1,0 +1,11 @@
+flowchart TB
+    Input["Agent 节点输入<br>用户消息、chat_history、system_prompt"] --> Model["模型实例<br>LLM / ChatModel"]
+    Input --> ToolInput["tools 输入<br>来自 tool_mode 组件或手工工具"]
+    ToolInput --> Toolkit["ComponentToolkit<br>把组件输出包装成 LangChain Tool"]
+    Toolkit --> ToolList["Tool 列表<br>name、description、args_schema、callbacks"]
+    Model --> Runnable["create_agent_runnable<br>构造 Agent Runnable"]
+    ToolList --> Executor["AgentExecutor.from_agent_and_tools<br>统一执行 Agent 与工具"]
+    Runnable --> Executor
+    Executor --> Callback["event_manager / callbacks<br>token、tool、trace 事件统一挂载"]
+    Callback --> Response["message_response<br>返回 Message"]
+    Response --> Why["为什么这样设计<br>画布组件、Agent 工具和运行事件共用一套链路<br>组件既能独立运行，也能被 Agent 调用"]

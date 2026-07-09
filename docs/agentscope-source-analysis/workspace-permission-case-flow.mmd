@@ -1,0 +1,19 @@
+flowchart TB
+    Ask["用户：检查仓库并给补丁建议"] --> ToolPlan["模型生成工具调用<br>Read、Grep、Bash、Edit"]
+    ToolPlan --> Validate["Tool input validation<br>先校验参数结构"]
+    Validate --> Policy["PermissionEngine<br>按 DEFAULT / EXPLORE / ACCEPT_EDITS 判定"]
+    Policy --> ReadOK["Read / Grep<br>读操作通常允许"]
+    Policy --> TestMaybe["Bash pytest<br>需要判定是否安全只读"]
+    Policy --> EditAsk["Edit / Write<br>DEFAULT 触发 ASK 人审"]
+    Policy --> ExploreDeny["EXPLORE 模式<br>写入和危险操作直接拒绝"]
+    EditAsk --> Confirm["RequireUserConfirmEvent<br>前端展示风险和参数"]
+    Confirm --> Allow["用户允许<br>ToolCallStart 进入执行"]
+    Confirm --> Deny["用户拒绝<br>返回拒绝结果并写回上下文"]
+    Allow --> Workspace["Workspace / Sandbox<br>隔离文件、命令、MCP、外部执行"]
+    Workspace --> External["RequireExternalExecutionEvent<br>部署、审批系统等外部动作挂起"]
+    External --> Return["ExternalExecutionResultEvent<br>外部结果回来后恢复推理"]
+    ReadOK --> Result["ToolResultBlock<br>所有结果进入上下文"]
+    TestMaybe --> Result
+    Deny --> Result
+    Return --> Result
+    Result --> Why["为什么这么设计<br>把副作用关进工作区<br>把风险交给策略和人审<br>把每一步留下事件证据"]

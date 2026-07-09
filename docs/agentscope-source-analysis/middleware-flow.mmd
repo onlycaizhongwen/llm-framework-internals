@@ -1,0 +1,13 @@
+flowchart TB
+    Agent["Agent 生命周期"] --> Reply["on_reply<br>包裹整次回复"]
+    Agent --> Reasoning["on_reasoning<br>包裹模型推理阶段"]
+    Agent --> Acting["on_acting<br>只包裹已校验、已许可的工具 I/O"]
+    Agent --> ModelCall["on_model_call<br>包裹原始模型 API 调用"]
+    Agent --> SystemPrompt["on_system_prompt<br>顺序转换系统提示词"]
+    Agent --> Compress["on_compress_context<br>包裹上下文压缩"]
+    Reply --> RAG["RAG / Memory / Tracing / Budget<br>可在不改 Agent 主体的情况下扩展行为"]
+    Reasoning --> RAG
+    Acting --> ToolOffload["ToolOffload / Audit<br>工具执行可观察、可卸载"]
+    ModelCall --> Trace["Tracing / Retry / Provider 观测"]
+    SystemPrompt --> Dynamic["动态注入租户、知识、策略、记忆"]
+    Compress --> Summary["压缩摘要与长上下文治理"]

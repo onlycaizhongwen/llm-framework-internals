@@ -1,0 +1,13 @@
+flowchart TB
+    User["用户：从数据库拉时序数据并检测异常"] --> Plan["Planner 计划<br>先拉数据，再检测异常，再画图解释"]
+    Plan --> PluginYaml["sql_pull_data.yaml / anomaly_detection.yaml<br>声明参数、返回值、示例和配置"]
+    PluginYaml --> PromptSig["format_prompt<br>变成 Python 函数签名给 CodeGenerator"]
+    PromptSig --> Code["生成代码<br>df, desc = sql_pull_data(...); result_df, desc2 = anomaly_detection(...)"]
+    PluginYaml --> Load["CodeExecutor.load_plugin<br>加载 sql_pull_data.py / anomaly_detection.py"]
+    Load --> Kernel["执行环境注册插件函数"]
+    Code --> Kernel
+    Kernel --> SQL["sql_pull_data<br>根据自然语言生成 SQL 并返回 DataFrame"]
+    SQL --> AD["anomaly_detection<br>IQR 检测异常并新增 Is_Anomaly 列"]
+    AD --> Artifact["ctx.add_artifact<br>保存 anomaly_detection_results.csv"]
+    Artifact --> Result["execution_result + artifact_paths<br>回到 Planner 汇总"]
+    Result --> Why["为什么这么设计<br>插件封装专业能力<br>LLM 负责编排代码和解释结果"]

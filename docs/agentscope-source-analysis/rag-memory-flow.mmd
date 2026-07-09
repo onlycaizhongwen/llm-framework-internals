@@ -1,0 +1,16 @@
+flowchart TB
+    Upload["文档上传 / 本地构建"] --> Parser["Parser<br>TextParser 等解析原始文件"]
+    Parser --> Chunker["Chunker<br>ApproxTokenChunker 切块"]
+    Chunker --> Embed["EmbeddingModel<br>把 query/chunk 转向量"]
+    Embed --> VDB["VectorStore<br>Qdrant / Milvus Lite / MongoDB"]
+    VDB --> KB["KnowledgeBase<br>embedding + vector store + collection + metadata_filter"]
+    KB --> Static{"RAG 模式"}
+    Static -->|"static"| AutoSearch["首轮 reasoning 前自动检索<br>把结果作为 HintBlock 注入上下文"]
+    Static -->|"agentic"| SearchTool["暴露 search_knowledge 工具<br>由模型决定何时查、查哪个知识库"]
+    AutoSearch --> Agent["Agent 推理"]
+    SearchTool --> Agent
+    Agent --> Memory["Memory middleware<br>Mem0 / ReMe / Agentic Memory"]
+    Memory -->|"static_control"| MemoryHint["自动搜索并注入记忆<br>回复后写入新记忆"]
+    Memory -->|"agent_control"| MemoryTools["search_memory / add_memory 工具<br>由模型主动管理记忆"]
+    MemoryHint --> Agent
+    MemoryTools --> Agent

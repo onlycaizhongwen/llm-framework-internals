@@ -1,0 +1,11 @@
+flowchart TB
+    Request["外部请求<br>API、Public Flow、MCP、Playground"] --> Auth["认证与用户上下文<br>user、project、superuser"]
+    Auth --> FlowGuard["Flow validation<br>阻止未知或过期 custom component"]
+    FlowGuard --> Public["Public Flow sanitize<br>服务端可信代码替换、阻止未认证代码执行"]
+    Public --> Tweaks["apply_tweaks 防护<br>拒绝覆盖 code / sandbox 等敏感字段"]
+    Tweaks --> Secrets["Global variables / secrets<br>运行时注入而不是写死到 flow"]
+    Secrets --> RuntimeGuard["运行时安全<br>Python REPL、Mustache、SSRF URL 校验"]
+    RuntimeGuard --> McpLock["MCP server lock<br>非 superuser 禁止管理外部 MCP server"]
+    McpLock --> Trace["Tracing redaction<br>敏感字段脱敏后写 trace"]
+    Trace --> Checklist["生产治理清单<br>版本、审批、灰度、回滚、审计、依赖治理"]
+    Checklist --> Why["为什么这样设计<br>可视化平台降低搭建门槛<br>也必须把代码执行、外部连接和公开访问收紧"]

@@ -1,0 +1,13 @@
+flowchart TB
+    MCPClient["Claude / Cursor / Windsurf / 其他 MCP Client"] --> Server["Langflow Project MCP Server<br>list_tools / call_tool"]
+    Server --> List["handle_list_tools<br>按项目列出 mcp_enabled flow"]
+    List --> ToolSchema["把 flow name/action_name<br>清洗成 MCP tool 名称和描述"]
+    MCPClient --> Call["call_tool(name, arguments)"]
+    Call --> Auth["用户 / 项目访问校验<br>API key / OAuth / project scope"]
+    Auth --> FlowRun["handle_call_tool<br>组装 SimplifiedAPIRequest"]
+    FlowRun --> SimpleRun["simple_run_flow<br>复用普通 API 运行链路"]
+    SimpleRun --> Graph["Graph.arun<br>执行 flow"]
+    Graph --> MCPResult["types.TextContent<br>返回 MCP tool 结果"]
+    MCPClient --> External["外部 MCP servers 配置<br>/api/v2/mcp 管理 stdio/http server"]
+    External --> Components["组件可消费外部 MCP 工具"]
+    MCPResult --> Why["为什么这么设计<br>flow 既是可视化工作流，也是可被其他 Agent 调用的工具"]

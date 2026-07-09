@@ -40,3 +40,6 @@
 [submodule "sources/agent-framework"]
 	path = sources/agent-framework
 	url = https://github.com/microsoft/agent-framework.git
+[submodule "sources/agentscope"]
+	path = sources/agentscope
+	url = https://github.com/agentscope-ai/agentscope.git

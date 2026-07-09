@@ -1,0 +1,14 @@
+flowchart TB
+    UserPost["User -> Planner<br>用户请求进入 Planner"] --> Prompt["compose_prompt<br>系统指令、worker 介绍、历史 round、经验"]
+    Prompt --> Schema["response_json_schema<br>约束 init_plan、plan、current_plan_step、send_to、message"]
+    Schema --> LLM["chat_completion_stream<br>流式 JSON 输出"]
+    LLM --> Parse["PostTranslator.raw_text_to_post<br>边解析边更新 Post"]
+    Parse --> Validate["check_post_validity<br>检查 send_to、message、plan 三件套"]
+    Validate --> Good{"输出有效"}
+    Good -->|"有效"| Shared["SharedMemoryEntry<br>把 plan 写入共享记忆"]
+    Shared --> Route["send_to Worker 或 User<br>继续执行或结束本轮"]
+    Good -->|"无效"| Invalid["invalid_response<br>保留原始错误输出"]
+    Invalid --> Revise["revise_message<br>提示 Planner 一次性补齐缺失字段"]
+    Revise --> Self["send_to Planner<br>自我修正，最多重试"]
+    Self --> Prompt
+    Route --> Why["为什么这么设计<br>Planner 不是随口建议<br>而是受 schema 和校验约束的任务路由器"]

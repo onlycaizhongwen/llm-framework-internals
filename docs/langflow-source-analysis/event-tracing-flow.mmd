@@ -1,0 +1,11 @@
+flowchart TB
+    Run["Graph build / run<br>画布预览或 API 执行"] --> EventManager["EventManager<br>build_start、end_vertex、build_end、token"]
+    EventManager --> UI["前端 streaming parser<br>更新节点状态、日志、Playground 消息"]
+    Run --> Job["JobService<br>任务状态、耗时、失败原因"]
+    Run --> TraceStart["TracingService.start_tracers<br>开始 graph trace"]
+    TraceStart --> ComponentTrace["组件级 trace<br>vertex build、LangChain callbacks、tool 调用"]
+    ComponentTrace --> TraceEnd["TracingService.end_tracers<br>输出和异常收尾"]
+    Run --> Tx["TransactionService<br>记录 vertex 执行历史"]
+    Tx --> Writer["TelemetryWriter<br>后台批量写入、避免占用请求 DB pool"]
+    TraceEnd --> Redaction["敏感字段脱敏<br>api_key、password、server_url"]
+    UI --> Why["为什么这样设计<br>长耗时流程需要实时反馈<br>同时把调试记录从请求热路径拆出去"]

@@ -1,0 +1,11 @@
+flowchart TB
+    Open["打开 Flow 页面"] --> Fetch["useGetFlow / processFlows<br>加载并规范化节点和边"]
+    Fetch --> Canvas["React Flow 画布<br>CustomNodes / CustomEdges"]
+    Canvas --> Edit["拖节点、连线、改参数"]
+    Edit --> Store["flowStore<br>nodes、edges、currentFlow、viewport"]
+    Store --> Save["useSaveFlow<br>把 nodes / edges / viewport 写回 Flow.data"]
+    Save --> Patch["PATCH /api/v1/flows/{id}<br>后端持久化"]
+    Canvas --> Build["点击运行 / 预览<br>performStreamingRequest"]
+    Build --> Stream["后端 build/run 流式返回 JSON 事件"]
+    Stream --> UIUpdate["前端逐块解析事件<br>更新节点状态、Playground 消息和错误"]
+    UIUpdate --> Why["为什么这么设计<br>编辑态和运行态共享同一份 flow.data，但运行过程用事件避免页面阻塞"]

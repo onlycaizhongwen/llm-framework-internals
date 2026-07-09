@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TaskWeaver 源码分析</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --paper: #ffffff;
+      --ink: #1f2937;
+      --muted: #5f6b7a;
+      --line: #d8e0eb;
+      --accent: #2563eb;
+      --accent-soft: #e8f1ff;
+      --green: #0f766e;
+      --orange: #b45309;
+      --shadow: 0 10px 28px rgba(31, 41, 55, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.72;
+    }
+    header {
+      background: linear-gradient(135deg, #ffffff 0%, #edf5ff 58%, #eefaf5 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .hero {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 46px 24px 34px;
+    }
+    h1 {
+      margin: 0 0 14px;
+      font-size: clamp(32px, 5vw, 48px);
+      letter-spacing: 0;
+      line-height: 1.12;
+    }
+    .lead {
+      max-width: 960px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .meta div {
+      background: rgba(255,255,255,0.84);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 14px;
+      overflow-wrap: anywhere;
+    }
+    .meta strong { display: block; font-size: 13px; color: var(--muted); }
+    .layout {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 28px 24px 56px;
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 24px;
+    }
+    nav {
+      position: sticky;
+      top: 16px;
+      align-self: start;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+    nav a {
+      display: block;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 7px 8px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    nav a:hover { background: var(--accent-soft); color: var(--accent); }
+    main { min-width: 0; }
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+    }
+    h2 { margin: 0 0 14px; font-size: 24px; }
+    h3 { margin: 24px 0 8px; font-size: 18px; }
+    p { margin: 10px 0; }
+    code {
+      background: #eef2f7;
+      padding: 2px 5px;
+      border-radius: 5px;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 0.92em;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px;
+      vertical-align: top;
+    }
+    th { background: #f1f5fb; text-align: left; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfdff;
+    }
+    .card strong { color: var(--accent); }
+    .why {
+      border-left: 4px solid var(--green);
+      background: #ecfdf5;
+      padding: 10px 14px;
+      border-radius: 6px;
+      color: #064e3b;
+    }
+    .warn {
+      border-left: 4px solid var(--orange);
+      background: #fff7ed;
+      padding: 10px 14px;
+      border-radius: 6px;
+      color: #7c2d12;
+    }
+    .mermaid {
+      background: #fcfdff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      margin: 16px 0;
+      overflow: auto;
+    }
+    ul, ol { padding-left: 22px; }
+    @media (max-width: 880px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>TaskWeaver 源码分析</h1>
+      <p class="lead">从源码看 TaskWeaver：它是一个 code-first 数据分析 Agent 框架，把自然语言任务转成计划、Python 代码、执行反馈、artifact 和角色协作闭环。</p>
+      <div class="meta">
+        <div><strong>源码路径</strong><span>sources/TaskWeaver-main</span></div>
+        <div><strong>版本依据</strong><span>GitHub main.zip；version.json: prod 0.0.12, main a0</span></div>
+        <div><strong>分析重点</strong><span>Planner、CodeInterpreter、Code Execution Service、Plugin、Memory、Event</span></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav>
+      <a href="#position">定位</a>
+      <a href="#architecture">总体架构</a>
+      <a href="#main-flow">主流程</a>
+      <a href="#code-first">CodeInterpreter</a>
+      <a href="#execution">执行服务</a>
+      <a href="#plugin-memory-event">插件/记忆/事件</a>
+      <a href="#planner-detail">Planner 细节</a>
+      <a href="#prompt-detail">Prompt 细节</a>
+      <a href="#safety-boundary">安全边界</a>
+      <a href="#plugin-case">插件案例</a>
+      <a href="#case">真实例子</a>
+      <a href="#compare">横向对比</a>
+      <a href="#patterns">设计思想</a>
+      <a href="#limits">局限性</a>
+      <a href="#reading">阅读顺序</a>
+      <a href="#share">分享口径</a>
+    </nav>
+
+    <main>
+      <section id="position">
+        <h2>1. 一句话定位</h2>
+        <p>TaskWeaver 是微软开源的 code-first Agent 框架，主场景是数据分析、表格处理、可视化、算法插件编排。它不只保存聊天历史，还把 LLM 生成的 Python 代码、执行结果、内存对象、artifact、插件调用和计划状态都纳入会话。</p>
+        <p class="why">推荐分享口径：TaskWeaver 的核心不是“让模型直接调用工具”，而是让模型写 Python，并在有状态执行环境里运行 Python。</p>
+      </section>
+
+      <section id="architecture">
+        <h2>2. 总体架构</h2>
+        <div class="mermaid">
+flowchart TB
+    User["用户 / Web UI / CLI"] --> App["TaskWeaverApp<br>装配配置、SessionManager、Plugin、Role、ExecutionService"]
+    App --> Session["Session<br>round、memory、workspace、event emitter"]
+    Session --> Planner["Planner 角色<br>拆任务、维护 plan、路由给 worker"]
+    Planner --> CodeInterpreter["CodeInterpreter 角色<br>生成代码、验证代码、执行代码、反馈结果"]
+    CodeInterpreter --> CodeGenerator["CodeGenerator<br>把计划、历史、插件说明拼成 prompt"]
+    CodeInterpreter --> Verifier["Code Verification<br>AST 检查 import、危险函数、magic command"]
+    CodeInterpreter --> Executor["CodeExecutor<br>加载插件、调用执行服务"]
+    Executor --> CES["Code Execution Service<br>Jupyter kernel / Docker container"]
+    CES --> Artifacts["stdout、变量、图表、文件 artifact"]
+    App --> PluginRegistry["PluginRegistry<br>读取 project/plugins/*.yaml"]
+    PluginRegistry --> CodeGenerator
+    PluginRegistry --> Executor
+    Session --> Event["SessionEventEmitter<br>round/post/status/message/attachment 事件"]
+    Session --> Memory["Memory<br>Round、Post、Attachment、SharedMemoryEntry"]
+    Planner --> Memory
+    CodeInterpreter --> Memory
+    Artifacts --> Memory
+        </div>
+        <table>
+          <tr><th>层级</th><th>关键源码</th><th>作用</th></tr>
+          <tr><td>App 装配层</td><td><code>taskweaver/app/app.py</code></td><td>装配 SessionManager、Plugin、Logging、ExecutionService、Role。</td></tr>
+          <tr><td>Session 层</td><td><code>taskweaver/session/session.py</code></td><td>创建 round、维护 memory、调度 Planner 和 worker。</td></tr>
+          <tr><td>Role 层</td><td><code>taskweaver/role</code>、<code>planner</code>、<code>code_interpreter</code></td><td>Planner / CodeInterpreter / ext_role 都是 role。</td></tr>
+          <tr><td>执行层</td><td><code>taskweaver/code_interpreter</code>、<code>taskweaver/ces</code></td><td>生成代码、验证代码、启动 Jupyter kernel 或 Docker 执行。</td></tr>
+          <tr><td>Plugin 层</td><td><code>taskweaver/memory/plugin.py</code>、<code>taskweaver/plugin</code></td><td>YAML 描述插件，Python 源码被注入执行环境。</td></tr>
+          <tr><td>Event / Tracing</td><td><code>taskweaver/module/event_emitter.py</code></td><td>把状态、消息、附件变化流式抛给 UI。</td></tr>
+        </table>
+        <p>源码证据：<code>taskweaver/app/app.py:15</code> 定义 <code>TaskWeaverApp</code>；<code>taskweaver/session/session.py:44</code> 定义 <code>Session</code>；<code>taskweaver/module/execution_service.py:18-22</code> 默认执行模式为 <code>container</code>。</p>
+      </section>
+
+      <section id="main-flow">
+        <h2>3. 主流程：一次请求怎么跑</h2>
+        <div class="mermaid">
+flowchart TB
+    User["用户输入<br>自然语言分析任务 + 可选文件"] --> Send["Session.send_message"]
+    Send --> Round["Memory.create_round<br>创建 Round 并发 round_start"]
+    Round --> UserPost["Post: User -> Planner"]
+    UserPost --> Planner["Planner.reply<br>读取历史、经验、worker 介绍"]
+    Planner --> Plan["输出 init_plan / plan / current_plan_step<br>send_to 指向 Worker 或 User"]
+    Plan --> Decision{"send_to 是谁"}
+    Decision -->|"CodeInterpreter"| WorkerPost["Post: Planner -> CodeInterpreter"]
+    WorkerPost --> CI["CodeInterpreter.reply"]
+    CI --> CodeGen["CodeGenerator.reply<br>生成结构化 JSON：thought、reply_type、reply_content"]
+    CodeGen --> Verify["可选代码验证<br>AST allowlist / blocklist"]
+    Verify --> Execute["CodeExecutor.execute_code<br>启动 kernel、加载插件、运行 Python"]
+    Execute --> Result["execution_status / execution_result / artifact_paths"]
+    Result --> Back["Post: CodeInterpreter -> Planner"]
+    Back --> Planner
+    Decision -->|"User"| Final["Post: Planner -> User<br>结束本轮 Round"]
+    Final --> End["round_end<br>写 session / round 日志"]
+    Verify -->|"失败"| Retry["send_to CodeInterpreter<br>附 revise_message 自我修正"]
+    Execute -->|"失败且可重试"| Retry
+    Retry --> CI
+        </div>
+        <p>角色之间不是直接函数返回，而是通过 <code>Post</code> 通信。Planner 输出 plan、current_plan_step 和 send_to；CodeInterpreter 输出 thought、reply_type、reply_content、verification、execution_status、execution_result、artifact_paths。</p>
+        <ul>
+          <li><code>taskweaver/session/session.py:162</code>：<code>_send_text_message</code> 创建 round 并启动内部对话。</li>
+          <li><code>taskweaver/session/session.py:175</code>：<code>_send_message</code> 根据 recipient 调用 Planner 或 worker。</li>
+          <li><code>taskweaver/session/session.py:205-219</code>：Planner 和 worker 循环，且有最大内部轮数保护。</li>
+          <li><code>taskweaver/planner/planner.py:77-80</code>：Planner 把输出 JSON schema 的 <code>send_to</code> 限制为 worker alias 或 User。</li>
+        </ul>
+      </section>
+
+      <section id="code-first">
+        <h2>4. CodeInterpreter：为什么是 code-first</h2>
+        <p>TaskWeaver 的 CodeInterpreter 分四步：CodeGenerator 组装 prompt，LLM 生成结构化 JSON，代码验证检查风险，再由 CodeExecutor 执行 Python 并回填结果。</p>
+        <p class="why">为什么这么设计：数据分析任务经常依赖 DataFrame、numpy array、模型对象、图表对象。Python 代码比单个 tool call 更适合表达清洗、聚合、建模和可视化组合。</p>
+        <ul>
+          <li><code>taskweaver/code_interpreter/code_interpreter/code_interpreter.py:94</code>：定义 <code>CodeInterpreter</code>。</li>
+          <li><code>taskweaver/code_interpreter/code_interpreter/code_interpreter.py:113-126</code>：local 模式会自动开启代码验证。</li>
+          <li><code>taskweaver/code_interpreter/code_interpreter/code_interpreter.py:209-245</code>：验证失败时写入错误，并通过 <code>revise_message</code> 自我修正。</li>
+          <li><code>taskweaver/code_interpreter/code_interpreter/code_interpreter.py:269</code>：调用 <code>executor.execute_code</code>。</li>
+          <li><code>taskweaver/code_interpreter/code_interpreter/code_interpreter.py:310-313</code>：执行失败且可重试时回到 CodeInterpreter。</li>
+        </ul>
+      </section>
+
+      <section id="execution">
+        <h2>5. Code Execution Service：执行隔离和 artifact</h2>
+        <div class="mermaid">
+flowchart TB
+    Code["LLM 生成 Python 代码"] --> LocalMode{"执行模式"}
+    LocalMode -->|"local"| AutoVerify["本地模式自动开启验证<br>降低同机执行风险"]
+    LocalMode -->|"container 默认"| Container["Docker container<br>taskweaver executor image"]
+    AutoVerify --> AST["AST 验证<br>限制 import、函数调用、dunder、magic command"]
+    Container --> Kernel["TaskWeaver Jupyter kernel<br>会话独立 kernel"]
+    AST --> Kernel
+    Kernel --> Pre["%_taskweaver_exec_pre_check<br>执行前控制检查"]
+    Pre --> Run["执行用户代码<br>捕获 stdout、stderr、display_data、error"]
+    Run --> Post["%_taskweaver_exec_post_check<br>收集 log 和 artifact"]
+    Post --> Parse["Environment._parse_exec_result<br>转 ExecutionResult"]
+    Parse --> Save["CodeExecutor 保存 artifact<br>生成本地 uri / artifact-ref"]
+    Save --> Feedback["格式化为可读反馈<br>代码、成功失败、变量、图表、错误"]
+    Feedback --> Why["为什么这么设计<br>数据分析任务需要保留可执行状态和中间对象<br>不能只保留聊天文本"]
+        </div>
+        <p>执行服务本质是一个可被 Agent 驱动的 Jupyter 环境。container 模式运行 <code>taskweavercontainers/taskweaver-executor:latest</code>，挂载 session 的 <code>ces</code> 和 <code>cwd</code>，再通过 Jupyter connection file 通信。</p>
+        <ul>
+          <li><code>taskweaver/ces/environment.py:108-114</code>：定义 <code>EnvMode</code> 和默认 Docker image。</li>
+          <li><code>taskweaver/ces/environment.py:237-313</code>：container 模式启动 Docker container。</li>
+          <li><code>taskweaver/ces/environment.py:273-276</code>：屏蔽部分 host magic domain，降低容器访问宿主机风险。</li>
+          <li><code>taskweaver/ces/environment.py:319</code>：执行代码前后分别跑 pre/post control magic。</li>
+          <li><code>taskweaver/ces/environment.py:584-591</code>：捕获 <code>display_data</code> / <code>update_display_data</code>。</li>
+        </ul>
+      </section>
+
+      <section id="plugin-memory-event">
+        <h2>6. Plugin + Memory + Event</h2>
+        <div class="mermaid">
+flowchart TB
+    PluginYaml["插件 YAML<br>name、description、parameters、returns、code、config"] --> Registry["PluginRegistry<br>扫描 project/plugins/*.yaml"]
+    Registry --> Prompt["PluginSpec.format_prompt<br>变成 Python 函数签名给 CodeGenerator"]
+    Registry --> Load["CodeExecutor.load_plugin<br>读取插件 Python 源码并注入执行环境"]
+    Prompt --> Code["生成代码时可直接调用插件函数"]
+    Load --> Runtime["Plugin runtime<br>PluginContext 提供 artifact、session var、env、log"]
+    Runtime --> Artifact["ctx.add_artifact / create_artifact_path<br>图表、文件、HTML、DataFrame"]
+    Code --> Memory["Post Attachment<br>reply_content、verification、execution_result、artifact_paths"]
+    Artifact --> Memory
+    Memory --> Shared["SharedMemoryEntry<br>Planner 把 plan 共享给 CodeGenerator"]
+    Memory --> Event["SessionEventEmitter<br>post_status_update、message_update、attachment_update"]
+    Event --> UI["CLI / Web UI<br>流式显示生成、验证、执行状态"]
+    Shared --> Prompt
+    UI --> Why["为什么这么设计<br>插件是可调用能力<br>Memory 是角色协作协议<br>Event 是前端可观察接口"]
+        </div>
+        <p>插件更像“可被生成代码调用的函数库”。YAML 声明名称、参数、返回值和配置；Python 文件负责实现；CodeGenerator 把插件格式化成 Python 函数签名，CodeExecutor 在执行前把插件源码加载到 kernel。</p>
+        <ul>
+          <li><code>taskweaver/memory/plugin.py:83-171</code>：<code>PluginSpec</code> 把 YAML 参数/返回值格式化成 Python 函数签名。</li>
+          <li><code>taskweaver/code_interpreter/code_executor.py:132-144</code>：<code>load_plugin</code> 读取插件 Python 源码并加载到执行客户端。</li>
+          <li><code>taskweaver/plugin/context.py:9-80</code>：<code>PluginContext</code> 定义 artifact、session var、env、log 接口。</li>
+          <li><code>taskweaver/module/event_emitter.py:126-220</code>：<code>PostEventProxy</code> 在状态、消息、附件更新时发事件。</li>
+        </ul>
+      </section>
+
+      <section id="planner-detail">
+        <h2>7. 专题一：Planner 细节</h2>
+        <div class="mermaid">
+flowchart TB
+    UserPost["User -> Planner<br>用户请求进入 Planner"] --> Prompt["compose_prompt<br>系统指令、worker 介绍、历史 round、经验"]
+    Prompt --> Schema["response_json_schema<br>约束 init_plan、plan、current_plan_step、send_to、message"]
+    Schema --> LLM["chat_completion_stream<br>流式 JSON 输出"]
+    LLM --> Parse["PostTranslator.raw_text_to_post<br>边解析边更新 Post"]
+    Parse --> Validate["check_post_validity<br>检查 send_to、message、plan 三件套"]
+    Validate --> Good{"输出有效"}
+    Good -->|"有效"| Shared["SharedMemoryEntry<br>把 plan 写入共享记忆"]
+    Shared --> Route["send_to Worker 或 User<br>继续执行或结束本轮"]
+    Good -->|"无效"| Invalid["invalid_response<br>保留原始错误输出"]
+    Invalid --> Revise["revise_message<br>提示 Planner 一次性补齐缺失字段"]
+    Revise --> Self["send_to Planner<br>自我修正，最多重试"]
+    Self --> Prompt
+    Route --> Why["为什么这么设计<br>Planner 不是随口建议<br>而是受 schema 和校验约束的任务路由器"]
+        </div>
+        <p>Planner 在 TaskWeaver 里不是一个简单“规划提示词”，它更像任务路由器。它需要输出结构化 JSON，并且 JSON schema 会约束 <code>send_to</code> 只能是 worker alias 或 <code>User</code>。</p>
+        <p><code>taskweaver/planner/planner.py:77-80</code> 会把 <code>response_json_schema</code> 的 <code>send_to</code> 枚举收窄到可用 worker 和 <code>User</code>。<code>planner.py:260</code> 内部的 <code>check_post_validity</code> 会检查 <code>send_to</code>、<code>message</code>，并要求 attachment 中必须有 <code>init_plan</code>、<code>plan</code>、<code>current_plan_step</code>。</p>
+        <p class="why">为什么这么设计：TaskWeaver 的 Planner 不只是 ReAct 里的 thought，而是通过 schema、attachment 和 send_to 共同约束出来的调度层。</p>
+      </section>
+
+      <section id="prompt-detail">
+        <h2>8. 专题二：CodeGenerator Prompt 细节</h2>
+        <div class="mermaid">
+flowchart TB
+    LastTask["Planner 当前步骤<br>Post: Planner -> CodeInterpreter"] --> Compose["CodeGenerator.compose_prompt"]
+    Memory["Memory.get_role_rounds<br>只取和 CodeInterpreter 相关的 round"] --> Compose
+    Examples["role_load_example<br>少样例对话"] --> Compose
+    Experience["role_load_experience<br>可检索经验"] --> Compose
+    Plugins["PluginSpec.format_prompt<br>YAML 变 Python 函数签名"] --> Compose
+    Plan["SharedMemoryEntry plan<br>Planner 的全局计划"] --> Compose
+    Feedback["format_code_feedback<br>上一轮验证/执行结果"] --> Compose
+    VerifyReq["compose_verification_requirements<br>允许模块、禁止函数、安全要求"] --> Compose
+    Compose --> Prompt["最终 LLM prompt<br>环境、历史、插件、计划、反馈、代码要求"]
+    Prompt --> JSON["结构化输出 JSON<br>thought、reply_type、reply_content"]
+    JSON --> EarlyStop["reply_content early_stop<br>拿到代码即可进入验证/执行"]
+    EarlyStop --> Why["为什么这么设计<br>代码生成不是孤立补全<br>而是吸收计划、插件、错误反馈和安全约束的闭环"]
+        </div>
+        <p>CodeGenerator 的 prompt 不是“把用户问题丢给模型”。它会拼接当前 Planner 步骤、当前角色相关的历史 round、插件函数签名、共享计划、上一次代码验证/执行反馈、经验和示例。</p>
+        <ul>
+          <li><code>taskweaver/code_interpreter/code_interpreter/code_generator.py:147</code>：<code>compose_prompt</code> 是总入口。</li>
+          <li><code>code_generator.py:196</code>：<code>compose_conversation</code> 组织当前任务、执行反馈和修正消息。</li>
+          <li><code>code_generator.py:225</code>：把 <code>PLUGINS</code> 填入 conversation head；<code>code_generator.py:418</code> 来自 <code>PluginSpec.format_prompt</code>。</li>
+          <li><code>code_generator.py:245</code>、<code>254</code>、<code>271</code>：通过 <code>format_code_feedback</code> 把验证/执行状态放回下一次生成。</li>
+        </ul>
+        <p class="why">这解释了 TaskWeaver 的闭环：失败信息不是给用户看的终点，而是下一次代码生成的输入。</p>
+      </section>
+
+      <section id="safety-boundary">
+        <h2>9. 专题三：代码验证与安全边界</h2>
+        <div class="mermaid">
+flowchart TB
+    Code["生成的 Python 代码"] --> Mode{"kernel mode"}
+    Mode -->|"local"| ForceVerify["本地模式自动开启 verification<br>同机执行风险更高"]
+    Mode -->|"container"| Container["Docker container<br>默认隔离执行环境"]
+    ForceVerify --> Split["separate_magics_and_code<br>拆出 magic、shell、pip/conda install"]
+    Container --> Split
+    Split --> Magic{"是否有非安装 magic / shell"}
+    Magic -->|"有"| RejectMagic["拒绝<br>magic command 不允许"]
+    Magic -->|"无"| AST["ast.parse + FunctionCallValidator"]
+    AST --> Imports["Import allowlist / blocklist<br>例如只允许 pandas、numpy、sklearn"]
+    AST --> Calls["函数 allowlist / blocklist<br>eval、exec、open、input 等可禁"]
+    AST --> Dunder["危险动态访问<br>getattr、__class__、__subclasses__、__dict__"]
+    Imports --> Verdict{"是否有错误"}
+    Calls --> Verdict
+    Dunder --> Verdict
+    Verdict -->|"有"| Revise["verification INCORRECT<br>带 code_error 和 revise_message 重写"]
+    Verdict -->|"无"| Execute["执行代码<br>进入 Jupyter kernel / container"]
+    Execute --> Why["为什么这么设计<br>安全边界是验证 + 容器隔离<br>不是完整权限/人审系统"]
+        </div>
+        <p>TaskWeaver 的安全边界主要由两层组成：代码执行隔离和代码验证。默认执行服务是 container 模式；如果切到 local 模式，<code>CodeInterpreter</code> 会自动打开 verification，因为本机执行风险更高。</p>
+        <p><code>taskweaver/code_interpreter/code_verification.py:217</code> 的 <code>separate_magics_and_code</code> 会拆出 magic、shell command 和 pip/conda install；非安装类 magic / shell command 会被拒绝。<code>code_verification.py:253</code> 的 <code>code_snippet_verification</code> 再用 <code>ast.parse</code> 和 <code>FunctionCallValidator</code> 检查 import、函数调用、变量赋值和危险属性访问。</p>
+        <p class="why">边界要讲清楚：TaskWeaver 更像“代码检查 + 容器隔离”，不是 AgentScope 那种工具级权限、人审、workspace policy。</p>
+      </section>
+
+      <section id="plugin-case">
+        <h2>10. 专题四：Plugin 真实例子</h2>
+        <div class="mermaid">
+flowchart TB
+    User["用户：从数据库拉时序数据并检测异常"] --> Plan["Planner 计划<br>先拉数据，再检测异常，再画图解释"]
+    Plan --> PluginYaml["sql_pull_data.yaml / anomaly_detection.yaml<br>声明参数、返回值、示例和配置"]
+    PluginYaml --> PromptSig["format_prompt<br>变成 Python 函数签名给 CodeGenerator"]
+    PromptSig --> Code["生成代码<br>df, desc = sql_pull_data(...); result_df, desc2 = anomaly_detection(...)"]
+    PluginYaml --> Load["CodeExecutor.load_plugin<br>加载 sql_pull_data.py / anomaly_detection.py"]
+    Load --> Kernel["执行环境注册插件函数"]
+    Code --> Kernel
+    Kernel --> SQL["sql_pull_data<br>根据自然语言生成 SQL 并返回 DataFrame"]
+    SQL --> AD["anomaly_detection<br>IQR 检测异常并新增 Is_Anomaly 列"]
+    AD --> Artifact["ctx.add_artifact<br>保存 anomaly_detection_results.csv"]
+    Artifact --> Result["execution_result + artifact_paths<br>回到 Planner 汇总"]
+    Result --> Why["为什么这么设计<br>插件封装专业能力<br>LLM 负责编排代码和解释结果"]
+        </div>
+        <p><code>project/plugins/sql_pull_data.yaml</code> 声明插件名、描述、参数 <code>query</code>，返回 <code>df</code> 和 <code>description</code>，并配置 SQLite 数据库路径。对应实现 <code>sql_pull_data.py</code> 里，<code>SqlPullData.__call__</code> 借助 LangChain 的 SQLDatabase 和 LLM，把自然语言问题转成 SQL，再返回 DataFrame 和描述。</p>
+        <p><code>project/plugins/anomaly_detection.yaml</code> 声明输入 DataFrame、时间列、数值列，返回带 <code>Is_Anomaly</code> 列的新 DataFrame 和描述。实现 <code>anomaly_detection.py</code> 里，<code>AnomalyDetectionPlugin.__call__</code> 用 IQR 规则计算异常，并通过 <code>self.ctx.add_artifact</code> 保存 <code>anomaly_detection_results.csv</code>。</p>
+        <p>模型生成的代码可以很直接：</p>
+        <pre><code class="language-python">df, desc = sql_pull_data("pull data from time_series table")
+result_df, desc2 = anomaly_detection(df, "datetime", "value")</code></pre>
+        <p class="why">插件封装专业能力，CodeGenerator 负责编排调用顺序，CodeExecutor 负责把插件加载到执行环境，artifact 再回到 Post / Memory 中。</p>
+      </section>
+
+      <section id="case">
+        <h2>11. 真实例子：销售数据异常分析</h2>
+        <ol>
+          <li>用户上传销售 CSV，提问“最近 30 天销售额为什么下滑？帮我找异常并画图”。</li>
+          <li><code>Session.send_message</code> 把文件放入 session 的 <code>execution_cwd</code>。</li>
+          <li>Planner 生成计划：读 CSV、做缺失值/异常检查、按日期聚合、画趋势图、解释原因。</li>
+          <li>CodeGenerator 生成 Python：<code>pandas.read_csv</code>、groupby、rolling、matplotlib/seaborn 绘图。</li>
+          <li>CodeInterpreter 验证代码，通过后交给 Jupyter / container 执行。</li>
+          <li>执行结果、图表 artifact、错误日志进入 Post Attachment，Planner 再汇总给用户。</li>
+        </ol>
+        <p class="why">这个例子解释了 TaskWeaver 的核心价值：它适合“需要实际算一遍”的任务，而不是只靠语言模型猜答案。</p>
+      </section>
+
+      <section id="compare">
+        <h2>12. 横向对比</h2>
+        <div class="mermaid">
+flowchart LR
+    Need["任务类型"] --> TW["TaskWeaver<br>代码优先数据分析 Agent"]
+    Need --> LG["LangGraph<br>显式状态图和 checkpoint"]
+    Need --> AS["AgentScope<br>生产级 Agent runtime 和权限工作区"]
+    Need --> OAI["OpenAI Agents Python<br>轻量 OpenAI-native Agent SDK"]
+    Need --> Agno["Agno<br>AgentOS / API 平台化"]
+    Need --> LI["LlamaIndex / Haystack<br>重 RAG 数据层"]
+    TW --> TW1["强项<br>把数据分析表达成 Python<br>保留代码执行历史和内存对象"]
+    LG --> LG1["强项<br>复杂确定性工作流、恢复和节点测试"]
+    AS --> AS1["强项<br>权限、人审、workspace、服务会话"]
+    OAI --> OAI1["强项<br>OpenAI Responses、handoff、guardrail、tracing 原生"]
+    Agno --> Agno1["强项<br>产品化 Agent / Team / Workflow API"]
+    LI --> LI1["强项<br>ingestion、索引、retrieval、rerank、eval"]
+    TW1 --> Combo["组合建议<br>TaskWeaver 做数据分析 worker<br>LangGraph 做外层流程<br>AgentScope 管权限执行<br>RAG 框架管知识检索"]
+        </div>
+        <table>
+          <tr><th>对比对象</th><th>TaskWeaver 更强的点</th><th>对方更强的点</th></tr>
+          <tr><td>LangGraph</td><td>内置 Planner + CodeInterpreter + 有状态代码执行，更适合数据分析 worker。</td><td>显式状态图、checkpoint、恢复、复杂业务流程编排。</td></tr>
+          <tr><td>AgentScope</td><td>code-first 数据分析闭环更突出。</td><td>权限、人审、workspace/sandbox、服务会话更系统。</td></tr>
+          <tr><td>OpenAI Agents Python</td><td>对 Python 数据分析、插件注入、artifact 输出更专门。</td><td>OpenAI 原生 Responses、handoff、guardrail、tracing 更轻。</td></tr>
+          <tr><td>Agno</td><td>更像数据分析专用 Agent runtime。</td><td>AgentOS、API、session/run 管理和产品化入口更完整。</td></tr>
+          <tr><td>LlamaIndex / Haystack</td><td>可把检索结果拿来继续计算和可视化。</td><td>大规模 ingestion、索引、检索、rerank、评测更专业。</td></tr>
+        </table>
+      </section>
+
+      <section id="patterns">
+        <h2>13. 核心设计思想和范式</h2>
+        <div class="grid">
+          <div class="card"><strong>Code-first Agent</strong><p>把 Python 代码作为主要行动语言，适合数据清洗、建模和可视化。</p></div>
+          <div class="card"><strong>Role-based Collaboration</strong><p>Planner、CodeInterpreter、ext_role 都是 role，可通过 role YAML 扩展。</p></div>
+          <div class="card"><strong>Structured Post / Attachment</strong><p>复杂输出不混在文本里，而是 plan、code、execution_result 等结构化附件。</p></div>
+          <div class="card"><strong>Reflective Execution</strong><p>格式、验证、执行失败都能通过 revise_message 回到 CodeInterpreter 修正。</p></div>
+          <div class="card"><strong>Registry / Adapter</strong><p>LLM、Role、Plugin、ExecutionService 都通过适配或注册表解耦。</p></div>
+          <div class="card"><strong>Event-driven UI</strong><p>状态、消息、附件变化以事件形式推给 CLI/Web UI。</p></div>
+        </div>
+      </section>
+
+      <section id="limits">
+        <h2>14. 局限性</h2>
+        <ul>
+          <li>更适合数据分析和代码执行任务，不是通用企业 Agent 服务框架。</li>
+          <li>默认 container 执行比纯 SDK 更重，需要 Docker、镜像、依赖和运行环境管理。</li>
+          <li>权限治理不像 AgentScope 那样细化到人审、工具策略和 workspace 操作模式。</li>
+          <li>复杂确定性流程不如 LangGraph 清晰。</li>
+          <li>业务人员低代码配置、发布、运营不如 Dify / Agno 完整。</li>
+        </ul>
+      </section>
+
+      <section id="reading">
+        <h2>15. 推荐源码阅读顺序</h2>
+        <ol>
+          <li><code>taskweaver/app/app.py</code>：应用如何装配模块。</li>
+          <li><code>taskweaver/session/session.py</code>：消息如何变成 Round / Post 并在角色间循环。</li>
+          <li><code>taskweaver/planner/planner.py</code>：Planner prompt、JSON schema、计划输出和 shared memory。</li>
+          <li><code>taskweaver/code_interpreter/code_interpreter/code_interpreter.py</code>：生成、验证、执行、重试闭环。</li>
+          <li><code>taskweaver/code_interpreter/code_interpreter/code_generator.py</code>：prompt 如何包含插件、历史、计划、经验。</li>
+          <li><code>taskweaver/code_interpreter/code_executor.py</code> 和 <code>taskweaver/ces/environment.py</code>：Jupyter / container 执行服务。</li>
+          <li><code>taskweaver/memory</code>、<code>taskweaver/memory/plugin.py</code>、<code>taskweaver/module/event_emitter.py</code>：协议、插件和事件。</li>
+        </ol>
+      </section>
+
+      <section id="share">
+        <h2>16. 分享口径</h2>
+        <p class="warn">TaskWeaver 是一个典型的 code-first Agent。它不是让模型直接回答数据问题，而是让模型先规划，再写 Python，再在有状态执行环境里运行代码，最后把代码、结果、图表和错误反馈纳入下一步推理。</p>
+        <h3>三条主线</h3>
+        <ul>
+          <li>架构主线：App 装配 Session，Session 调度 Planner 和 CodeInterpreter，Memory 用 Round/Post/Attachment 串起角色协作。</li>
+          <li>执行主线：CodeGenerator 生成代码，CodeInterpreter 验证和重试，CodeExecutor 在 Jupyter / Docker 中执行并回收 artifact。</li>
+          <li>扩展主线：Plugin YAML 变成 prompt 里的函数签名，Python 实现被注入执行环境，EventEmitter 把状态变化推给 UI。</li>
+        </ul>
+        <p>结尾可以强调：TaskWeaver 适合做数据分析 worker，不一定适合替代 LangGraph、AgentScope、Dify 这类流程、生产、平台框架。</p>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "default",
+      flowchart: { htmlLabels: true, curve: "basis", nodeSpacing: 34, rankSpacing: 46 }
+    });
+  </script>
+</body>
+</html>

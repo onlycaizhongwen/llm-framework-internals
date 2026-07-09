@@ -1,0 +1,10 @@
+flowchart TB
+    Code["组件 Python 类<br>继承 Component"] --> Contract["声明 inputs / outputs<br>Input 控制 UI 表单，Output 指向方法"]
+    Contract --> FrontendNode["to_frontend_node / build_custom_component_template<br>生成前端节点模板"]
+    FrontendNode --> Canvas["画布编辑<br>用户填写字段、连边、开启 tool_mode"]
+    Canvas --> FlowData["flow.data<br>节点 template 保存值、类型、展示信息"]
+    FlowData --> Vertex["Vertex.parse_data<br>恢复组件参数和边"]
+    Vertex --> SetAttrs["Component.set_attributes<br>把模板值注入实例属性"]
+    SetAttrs --> Build["Component.build_results<br>遍历输出并调用 output.method"]
+    Build --> Artifacts["results + artifacts<br>消息、DataFrame、Tool、图表、文件等"]
+    Artifacts --> Why["为什么这么设计<br>组件类同时是运行单元和 UI schema 来源，减少前后端双写"]

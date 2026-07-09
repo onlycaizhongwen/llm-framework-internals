@@ -1,0 +1,12 @@
+flowchart TB
+    Client["Web / API Client"] --> FastAPI["create_app<br>AgentScope FastAPI 应用"]
+    FastAPI --> Routers["Routers<br>agent、chat、credential、knowledge_base、session、workspace、model、schedule"]
+    Routers --> Storage["StorageBase<br>持久化 agent、session、credential、知识库记录"]
+    Routers --> Bus["MessageBus<br>queue、replay log、pub/sub"]
+    Bus --> Session["Session 运行控制<br>会话锁、事件回放、取消、唤醒、inbox"]
+    Routers --> WorkspaceManager["WorkspaceManager<br>为每个会话/用户装配 workspace"]
+    Routers --> KBManager["KnowledgeBaseManager<br>知识库生命周期和索引 worker"]
+    Routers --> AgentFactory["Agent assembly<br>按 user_id / agent_id / session_id 注入工具和 middleware"]
+    AgentFactory --> Agent["Agent runtime<br>事件流、工具、人审、外部执行"]
+    Agent --> Bus
+    Agent --> Storage

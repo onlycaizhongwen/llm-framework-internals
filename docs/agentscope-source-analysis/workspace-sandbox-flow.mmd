@@ -1,0 +1,14 @@
+flowchart TB
+    Agent["Agent / Toolkit"] --> Workspace["WorkspaceBase<br>资源、工具、MCP、offload 统一入口"]
+    Workspace --> Local["LocalWorkspace<br>本地文件系统和本地 backend"]
+    Workspace --> Docker["DockerWorkspace<br>容器后端"]
+    Workspace --> E2B["E2BWorkspace<br>云沙箱"]
+    Workspace --> K8s["K8sWorkspace<br>Kubernetes 沙箱"]
+    Docker --> Gateway["SandboxedWorkspaceBase<br>启动沙箱内 MCP gateway"]
+    E2B --> Gateway
+    K8s --> Gateway
+    Gateway --> Backend["BackendBase<br>exec_shell / read_file / write_file"]
+    Gateway --> MCP["GatewayMCPClient<br>沙箱内 MCP 工具注册和调用"]
+    Workspace --> Offload["offload_context / offload_tool_result<br>长上下文和大工具结果落盘"]
+    Workspace --> Skills["skills/ 目录<br>可动态添加技能资源"]
+    Workspace --> McpFile[".mcp 配置<br>持久化 MCP client 配置"]

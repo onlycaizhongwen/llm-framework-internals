@@ -1,0 +1,13 @@
+flowchart TB
+    LastTask["Planner 当前步骤<br>Post: Planner -> CodeInterpreter"] --> Compose["CodeGenerator.compose_prompt"]
+    Memory["Memory.get_role_rounds<br>只取和 CodeInterpreter 相关的 round"] --> Compose
+    Examples["role_load_example<br>少样例对话"] --> Compose
+    Experience["role_load_experience<br>可检索经验"] --> Compose
+    Plugins["PluginSpec.format_prompt<br>YAML 变 Python 函数签名"] --> Compose
+    Plan["SharedMemoryEntry plan<br>Planner 的全局计划"] --> Compose
+    Feedback["format_code_feedback<br>上一轮验证/执行结果"] --> Compose
+    VerifyReq["compose_verification_requirements<br>允许模块、禁止函数、安全要求"] --> Compose
+    Compose --> Prompt["最终 LLM prompt<br>环境、历史、插件、计划、反馈、代码要求"]
+    Prompt --> JSON["结构化输出 JSON<br>thought、reply_type、reply_content"]
+    JSON --> EarlyStop["reply_content early_stop<br>拿到代码即可进入验证/执行"]
+    EarlyStop --> Why["为什么这么设计<br>代码生成不是孤立补全<br>而是吸收计划、插件、错误反馈和安全约束的闭环"]

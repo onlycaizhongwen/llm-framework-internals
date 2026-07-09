@@ -1,0 +1,16 @@
+flowchart TB
+    Client["Web / API Client"] --> Session["Session API<br>创建、运行、查看、恢复会话"]
+    Session --> Lock["session run lock<br>同一会话避免并发乱序执行"]
+    Session --> EventLog["session events log<br>历史事件可 replay"]
+    Session --> PubSub["pubsub broadcast<br>在线客户端实时订阅"]
+    ToolOffload["长耗时工具 offload"] --> Inbox["session inbox<br>后台结果先投递到收件箱"]
+    Inbox --> Wakeup["wakeup queue / signal<br>空闲会话被唤醒继续推理"]
+    Client --> Interrupt["cancel / interrupt channel<br>用户可以打断运行中或挂起的会话"]
+    Interrupt --> Session
+    Lock --> AgentRun["Agent run<br>消费消息、执行工具、写回事件"]
+    EventLog --> Replay["断线重连 / 页面刷新<br>从日志恢复可见状态"]
+    PubSub --> LiveUI["实时 UI<br>边跑边看"]
+    Wakeup --> AgentRun
+    AgentRun --> EventLog
+    AgentRun --> PubSub
+    AgentRun --> Why["为什么这么设计<br>Storage 负责存事实<br>MessageBus 负责协调活进程、队列、广播和恢复"]

@@ -1,0 +1,20 @@
+flowchart TB
+    User["用户输入<br>自然语言分析任务 + 可选文件"] --> Send["Session.send_message"]
+    Send --> Round["Memory.create_round<br>创建 Round 并发 round_start"]
+    Round --> UserPost["Post: User -> Planner"]
+    UserPost --> Planner["Planner.reply<br>读取历史、经验、worker 介绍"]
+    Planner --> Plan["输出 init_plan / plan / current_plan_step<br>send_to 指向 Worker 或 User"]
+    Plan --> Decision{"send_to 是谁"}
+    Decision -->|"CodeInterpreter"| WorkerPost["Post: Planner -> CodeInterpreter"]
+    WorkerPost --> CI["CodeInterpreter.reply"]
+    CI --> CodeGen["CodeGenerator.reply<br>生成结构化 JSON：thought、reply_type、reply_content"]
+    CodeGen --> Verify["可选代码验证<br>AST allowlist / blocklist"]
+    Verify --> Execute["CodeExecutor.execute_code<br>启动 kernel、加载插件、运行 Python"]
+    Execute --> Result["execution_status / execution_result / artifact_paths"]
+    Result --> Back["Post: CodeInterpreter -> Planner"]
+    Back --> Planner
+    Decision -->|"User"| Final["Post: Planner -> User<br>结束本轮 Round"]
+    Final --> End["round_end<br>写 session / round 日志"]
+    Verify -->|"失败"| Retry["send_to CodeInterpreter<br>附 revise_message 自我修正"]
+    Execute -->|"失败且可重试"| Retry
+    Retry --> CI

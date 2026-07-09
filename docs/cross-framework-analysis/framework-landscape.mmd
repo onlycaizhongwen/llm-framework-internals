@@ -4,6 +4,7 @@ flowchart TB
     App --> Dify["Dify<br/>LLM 应用平台：Workflow、RAG、Agent、Plugin、模型、观测"]
     App --> N8N["n8n<br/>通用自动化平台：触发器、节点、凭证、队列、可视化流程"]
     App --> Agno["Agno<br/>代码优先 Agent platform SDK：AgentOS、API、MCP、审批、调度、接口"]
+    App --> AgentScope["AgentScope<br/>生产级 Agent runtime / 服务框架：事件流、权限、workspace、多会话"]
     Goal --> Runtime["Agent / Workflow 运行时层<br/>解决复杂任务如何可靠推进"]
     Runtime --> LangGraph["LangGraph<br/>代码级状态图、checkpoint、中断恢复、Pregel 模型"]
     Runtime --> GoogleADK["Google ADK Python<br/>Agent + Workflow + Task API + ADK Web / Eval / Google Cloud"]

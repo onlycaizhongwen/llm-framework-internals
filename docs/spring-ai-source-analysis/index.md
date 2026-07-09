@@ -245,7 +245,7 @@ flowchart TB
   End["ChatModelStreamAdvisor<br/>链路末端调用 ChatModel.stream"]
   Provider["OpenAiChatModel.internalStream<br/>OpenAI stream chunks"]
   Merge["ChunkMerger<br/>合并 delta / tool call arguments / metadata"]
-  Flux["Flux<ChatResponse><br/>持续输出增量响应"]
+  Flux["Flux&lt;ChatResponse&gt;<br/>持续输出增量响应"]
   Aggregate["ChatClientMessageAggregator<br/>需要 after/日志/记忆时聚合完整响应"]
   Obs["Observation<br/>doOnError / doFinally 停止观测"]
   Request --> Chain --> End --> Provider --> Merge --> Flux

@@ -1,0 +1,14 @@
+flowchart TB
+    Code["LLM 生成 Python 代码"] --> LocalMode{"执行模式"}
+    LocalMode -->|"local"| AutoVerify["本地模式自动开启验证<br>降低同机执行风险"]
+    LocalMode -->|"container 默认"| Container["Docker container<br>taskweaver executor image"]
+    AutoVerify --> AST["AST 验证<br>限制 import、函数调用、dunder、magic command"]
+    Container --> Kernel["TaskWeaver Jupyter kernel<br>会话独立 kernel"]
+    AST --> Kernel
+    Kernel --> Pre["%_taskweaver_exec_pre_check<br>执行前控制检查"]
+    Pre --> Run["执行用户代码<br>捕获 stdout、stderr、display_data、error"]
+    Run --> Post["%_taskweaver_exec_post_check<br>收集 log 和 artifact"]
+    Post --> Parse["Environment._parse_exec_result<br>转 ExecutionResult"]
+    Parse --> Save["CodeExecutor 保存 artifact<br>生成本地 uri / artifact-ref"]
+    Save --> Feedback["格式化为可读反馈<br>代码、成功失败、变量、图表、错误"]
+    Feedback --> Why["为什么这么设计<br>数据分析任务需要保留可执行状态和中间对象<br>不能只保留聊天文本"]

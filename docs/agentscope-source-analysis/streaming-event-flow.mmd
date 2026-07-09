@@ -1,0 +1,13 @@
+flowchart TB
+    ModelChunk["模型流式片段<br>文本、thinking、tool call、tool result"] --> Convert["Agent._convert_chat_response_to_event<br>把 provider chunk 转成语义事件"]
+    Convert --> TextEvt["TextBlockStart / Delta / End<br>UI 可以逐字显示"]
+    Convert --> ThinkEvt["ThinkingBlockStart / Delta / End<br>保留推理阶段证据"]
+    Convert --> ToolEvt["ToolCallStart / Delta / End<br>前端知道正在准备调用哪个工具"]
+    Convert --> ResultEvt["ToolResultStart / Delta / End<br>工具结果也能流式返回"]
+    Convert --> HitlEvt["RequireUserConfirm / ExternalExecution<br>人审和外部执行变成可恢复事件"]
+    TextEvt --> Msg["Msg / Block 上下文<br>事件最终沉淀为消息块"]
+    ToolEvt --> Msg
+    ResultEvt --> Msg
+    HitlEvt --> Replay["事件日志和服务回放<br>刷新页面或恢复 session 仍能看到过程"]
+    Msg --> Replay
+    Replay --> Why["为什么这么设计<br>Agent 不只是返回字符串<br>而是暴露可观察、可审计、可恢复的执行过程"]

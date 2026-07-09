@@ -126,7 +126,7 @@
   <header>
     <div class="hero">
       <h1>LLM / Agent 开源框架源码横向分析与选型指南</h1>
-      <p class="lead">这份横向材料把 LangChain、LangGraph、Google ADK Python、Microsoft Agent Framework、Semantic Kernel、Spring AI Alibaba、Dify、n8n、OpenAI Agents Python、OpenAI Swarm、Agno、PydanticAI、Haystack、LlamaIndex、AutoGen、CrewAI、Letta、mem0、Zep、Graphiti、Headroom 等源码分析串起来。它不按“谁更火”排序，而是按问题域、架构范式、真实组合方式来讲，方便做技术分享和选型判断。</p>
+      <p class="lead">这份横向材料把 LangChain、LangGraph、Google ADK Python、Microsoft Agent Framework、Semantic Kernel、Spring AI Alibaba、Dify、n8n、OpenAI Agents Python、OpenAI Swarm、Agno、AgentScope、PydanticAI、Haystack、LlamaIndex、AutoGen、CrewAI、Letta、mem0、Zep、Graphiti、Headroom 等源码分析串起来。它不按“谁更火”排序，而是按问题域、架构范式、真实组合方式来讲，方便做技术分享和选型判断。</p>
       <div class="summary">
         <div class="metric"><strong>第 1 部分</strong><span>总览对比矩阵</span></div>
         <div class="metric"><strong>第 2 部分</strong><span>框架选型指南</span></div>
@@ -156,6 +156,7 @@ flowchart TB
     App --> Dify["Dify<br/>LLM 应用平台：Workflow、RAG、Agent、Plugin、模型、观测"]
     App --> N8N["n8n<br/>通用自动化平台：触发器、节点、凭证、队列、可视化流程"]
     App --> Agno["Agno<br/>代码优先 Agent platform SDK：AgentOS、API、MCP、审批、调度、接口"]
+    App --> AgentScope["AgentScope<br/>生产级 Agent runtime / 服务框架：事件流、权限、workspace、多会话"]
     Goal --> Runtime["Agent / Workflow 运行时层<br/>解决复杂任务如何可靠推进"]
     Runtime --> LangGraph["LangGraph<br/>代码级状态图、checkpoint、中断恢复、Pregel 模型"]
     Runtime --> GoogleADK["Google ADK Python<br/>Agent + Workflow + Task API + ADK Web / Eval / Google Cloud"]
@@ -184,6 +185,7 @@ flowchart TB
         <tr><td>OpenAI Swarm</td><td>OpenAI experimental / educational 多 Agent 原型</td><td>Agent、functions、Result、Response、handoff、context_variables</td><td>源码极短，适合讲清 handoff、tool call、stateless loop 和可测试路由</td><td>README 明确建议生产用例迁移到 OpenAI Agents SDK；缺少 session、tracing、guardrails、MCP、checkpoint</td><td>Swarm.run loop、function_to_json、handle_tool_calls、Agent return handoff、execute_tools=False evals</td></tr>
         <tr><td>PydanticAI</td><td>Pydantic 风格 typed Agent framework</td><td>Agent、RunContext、Tool、OutputSchema、Model、Provider</td><td>typed deps、Pydantic 结构化输出、tool schema、evals、Logfire/OTel</td><td>不是低代码平台，也不是完整 RAG 数据管线或 checkpoint-first runtime</td><td>Agent graph、tool/function schema、structured output、provider adapter、pydantic_evals</td></tr>
         <tr><td>Agno</td><td>代码优先 Agent platform SDK</td><td>Agent、Team、Workflow、AgentOS、Approval、Memory、Knowledge</td><td>生产 API、WebSocket、MCP、HITL 审批、调度、接口、session/run 治理</td><td>不是低代码运营平台，复杂 checkpoint-first 状态图不如 LangGraph 专注，重 RAG ingestion 需组合 Haystack/LlamaIndex</td><td>Agent run、TeamMode、Workflow Step、AgentOS routers、approval decorator</td></tr>
+        <tr><td>AgentScope</td><td>生产级 Agent runtime / 服务框架</td><td>Agent、Event、Middleware、Toolkit、PermissionEngine、Workspace、KnowledgeBase、MessageBus</td><td>事件流、权限/HITL、workspace/sandbox、RAG、长期记忆、多会话服务和服务化路由较完整</td><td>复杂 checkpoint-first 状态图不如 LangGraph；低代码运营入口不如 Dify；重 RAG ingestion 需组合 Haystack/LlamaIndex</td><td>_reply_impl、_reasoning_impl、_execute_tool_call、MiddlewareBase、PermissionEngine、WorkspaceBase、create_app、MessageBus</td></tr>
         <tr><td>LangGraph</td><td>代码级 Agent 状态图运行时</td><td>StateGraph、Pregel、checkpoint、interrupt</td><td>复杂状态机、可恢复、人类中断、可测试</td><td>需要自己做 UI、权限、运营平台</td><td>Pregel 执行、checkpoint、中断恢复</td></tr>
         <tr><td>Google ADK Python</td><td>Google 生态 Agent 应用开发框架</td><td>Agent、Workflow、Runner、Event、Task API、Eval</td><td>Gemini / Vertex / Google Cloud 生态、ADK Web、API Server、Workflow、HITL、评测闭环</td><td>checkpoint-first 状态图纯度不如 LangGraph，非 Google 生态场景优势会弱一些</td><td>Runner、Workflow rehydration、RequestInput、AgentTool、Evaluation</td></tr>
         <tr><td>Microsoft Agent Framework</td><td>Microsoft 生态生产级 Agent / Workflow 框架</td><td>Python Agent、.NET AIAgent、ChatClient、Middleware、Workflow、Durable Agent</td><td>Python + .NET 双语、provider adapter、middleware 治理、durable hosting、Azure Functions、OTel / Eval</td><td>比轻量 SDK 更重；纯 checkpoint-first 状态图和 LangGraph 相比不够专注</td><td>AIAgent / AgentResponse、ChatClient、middleware、WorkflowBuilder、Durable Agents</td></tr>
@@ -219,6 +221,7 @@ flowchart TB
     Code -->|"Python typed 业务 Agent / 结构化输出"| PydanticAI["优先 PydanticAI<br/>deps_type、RunContext、Pydantic output、tool schema、evals"]
     Code -->|"轻量多 Agent SDK / OpenAI 原生能力 / realtime / sandbox"| OpenAIAgents["优先 OpenAI Agents Python<br/>Agent、Runner、handoff、guardrail、MCP、tracing"]
     Code -->|"代码优先 Agent 平台 / API / MCP / 审批 / 调度"| Agno["优先 Agno<br/>Agent、Team、Workflow、AgentOS、approval、memory、knowledge"]
+    Code -->|"生产级 Agent 服务 / 事件流 / 权限 / workspace / 多会话"| AgentScope["优先 AgentScope<br/>Agent loop、middleware、permission、workspace、RAG、MessageBus"]
     Code -->|"模型/工具生态适配"| LangChain["优先 LangChain<br/>provider adapter、tool、middleware、Runnable"]
     Code -->|"长期记忆 / 用户画像"| Memory["mem0 / Zep / Graphiti / Letta<br/>按记忆形态选择"]
     Code -->|"上下文成本与代理网关"| Headroom["Headroom<br/>压缩上下文、代理网关、MCP/CCR 适配"]
@@ -234,6 +237,7 @@ flowchart TB
         <div class="card"><h3>OpenAI 原生轻量 Agent</h3><p>优先 OpenAI Agents Python。用 Agent / Runner / handoff / guardrail / MCP / tracing 快速写多 Agent SDK 内核，复杂状态机再组合 LangGraph。</p></div>
         <div class="card"><h3>OpenAI Swarm</h3><p>更适合作为学习材料或迁移前历史背景。它用 Agent + Python functions + Result.agent 讲清 handoff 原理，生产用例应迁到 OpenAI Agents SDK。</p></div>
         <div class="card"><h3>代码优先 Agent 平台</h3><p>优先 Agno。用 Agent / Team / Workflow 定义运行组件，用 AgentOS 提供 API、WebSocket、MCP、审批、调度、接口和 session/run 治理。</p></div>
+        <div class="card"><h3>生产级 Agent 服务后端</h3><p>优先 AgentScope。用 Agent loop、事件流、middleware、权限/HITL、workspace/sandbox、RAG、长期记忆和 MessageBus 承载多会话 Agent 服务。</p></div>
       </div>
     </section>
 
@@ -242,11 +246,11 @@ flowchart TB
       <p>成熟项目通常不会只选一个框架，而是按边界组合：外层负责产品入口和运营，中层负责任务编排，内层负责 RAG、记忆、工具和模型适配。</p>
       <div class="mermaid">
 flowchart LR
-    UI["产品入口<br/>Dify / n8n / Agno AgentOS / ADK Web / MAF Azure Functions / Spring Boot / 自研 Web"] --> Orchestrator["编排核心<br/>LangGraph / Google ADK Workflow / Microsoft Agent Framework Workflow / OpenAI Agents Runner / Agno Workflow / Spring AI Alibaba Graph / Dify Workflow / n8n WorkflowExecute"]
+    UI["产品入口<br/>Dify / n8n / Agno AgentOS / AgentScope App / ADK Web / MAF Azure Functions / Spring Boot / 自研 Web"] --> Orchestrator["编排核心<br/>LangGraph / Google ADK Workflow / Microsoft Agent Framework Workflow / OpenAI Agents Runner / AgentScope Agent / Agno Workflow / Spring AI Alibaba Graph / Dify Workflow / n8n WorkflowExecute"]
     Orchestrator --> RAG["RAG 数据层<br/>Haystack Pipeline / LlamaIndex / Dify Dataset / LangChain retriever"]
     Orchestrator --> Memory["记忆层<br/>mem0 / Zep / Graphiti / Letta memory"]
     Orchestrator --> Tools["工具与系统集成<br/>MAF Tools / ADK Tools / OpenAI Agents Tools / Agno Tools / PydanticAI Tools / Spring AI ToolCallback / LangChain Tools / n8n Nodes / Dify Plugin / 自研 API"]
-    Orchestrator --> Agent["多 Agent 协作<br/>MAF Handoff / ADK AgentTool / OpenAI Agents handoff / Agno Team / AutoGen / CrewAI / Letta / LangGraph subgraph / Spring AI Alibaba FlowAgent"]
+    Orchestrator --> Agent["多 Agent 协作<br/>MAF Handoff / ADK AgentTool / OpenAI Agents handoff / AgentScope Agent service / Agno Team / AutoGen / CrewAI / Letta / LangGraph subgraph / Spring AI Alibaba FlowAgent"]
     RAG --> LLM["模型适配层<br/>MAF ChatClient / Gemini / Vertex / OpenAI Responses / Agno Model / Haystack Generator / LangChain provider adapter / Spring AI ChatClient / Dify model provider / 直接 SDK"]
     Memory --> LLM
     Tools --> Audit["生产治理<br/>权限、凭证、日志、观测、回放、人工审批"]
@@ -284,6 +288,7 @@ flowchart TB
     AgentLoop --> PAI["PydanticAI：typed deps + tool schema + structured output"]
     AgentLoop --> OAI["OpenAI Agents：Runner + handoff + guardrail + tracing"]
     AgentLoop --> AgnoA["Agno：Agent + Team + Workflow + AgentOS 平台化运行"]
+    AgentLoop --> AS["AgentScope：Agent loop + event + permission + workspace + service runtime"]
     AgentLoop --> Auto["AutoGen：消息驱动、多 Agent runtime"]
     AgentLoop --> Crew["CrewAI：角色、任务、流程、工具"]
     AgentLoop --> LettaP["Letta：AgentState、Memory、tool-first loop"]
@@ -301,7 +306,7 @@ flowchart TB
       </div>
       <div class="grid2">
         <div class="card"><h3>图运行时范式</h3><p>图运行时不是为了“画图好看”，而是为了让复杂任务可拆分、可追踪、可恢复、可局部重跑。LangGraph 偏 Python/JS 代码级状态图；Google ADK Python 偏 Google 生态 Agent Workflow、事件回放和本地到云部署链路；Microsoft Agent Framework 偏 Microsoft / Azure 生态生产级 Agent runtime；Semantic Kernel 更偏应用内 AI Kernel 和插件函数体系，生产级后继方向是 MAF；Spring AI Alibaba 偏 Java / Spring Boot 状态图和 Agent 服务化；Dify 偏产品画布；n8n 偏自动化流程图。</p></div>
-        <div class="card"><h3>Agent Loop 范式</h3><p>核心循环是模型读取状态、决定动作、工具执行、结果写回状态。OpenAI Agents Python 用 Runner、handoff、guardrail、MCP 和 tracing 标准化轻量 Agent loop；OpenAI Swarm 用 Swarm.run 演示最小 handoff loop；PydanticAI 用 typed deps、ToolDefinition 和 OutputSchema 约束输入、动作和输出。</p></div>
+        <div class="card"><h3>Agent Loop 范式</h3><p>核心循环是模型读取状态、决定动作、工具执行、结果写回状态。OpenAI Agents Python 用 Runner、handoff、guardrail、MCP 和 tracing 标准化轻量 Agent loop；AgentScope 把事件流、权限、middleware、workspace 和服务化围在 Agent loop 周围；PydanticAI 用 typed deps、ToolDefinition 和 OutputSchema 约束输入、动作和输出。</p></div>
         <div class="card"><h3>RAG Pipeline 范式</h3><p>完整 RAG 至少包括数据接入、切分、metadata、embedding、索引、检索、rerank、上下文注入、引用来源、评估和更新。Haystack 更强调 typed pipeline、debug 和观测。</p></div>
         <div class="card"><h3>Memory 范式</h3><p>记忆分短期上下文、长期事实、图谱关系、时序事实。mem0 管生命周期，Zep 管会话上下文，Graphiti 管时序图谱，Letta 管状态化 Agent 记忆。</p></div>
       </div>
@@ -316,6 +321,7 @@ flowchart TB
     Cases --> KBRAG["企业知识库 RAG 内核<br/>Haystack Pipeline + DocumentStore + rerank/tracing"]
     Cases --> AgnoCase["代码优先 Agent 平台<br/>Agno AgentOS + Agent/Team/Workflow + 审批/MCP"]
     Cases --> OpenAICase["轻量多 Agent SDK<br/>OpenAI Agents Runner + handoff + guardrail + tracing"]
+    Cases --> AgentScopeCase["生产级 Agent 服务后端<br/>AgentScope App + Permission + Workspace + RAG/Memory"]
     Cases --> ADKCase["Google 生态 Agent 应用<br/>ADK Workflow + Task API + HITL + Eval"]
     Cases --> MAFCase["Microsoft 生产级 Agent 服务<br/>MAF Durable Agents + Azure Functions + Workflow"]
     Cases --> TypedAgent["强类型业务 Agent<br/>PydanticAI + LangGraph 或 Haystack"]
@@ -330,6 +336,7 @@ flowchart TB
       <div class="case"><strong>企业知识库 RAG 内核：</strong>Haystack 用 Component Pipeline 串起 converter、preprocessor、embedder、BM25/embedding retriever、joiner、ranker、prompt builder 和 generator；DocumentStore 负责替换不同检索后端；snapshot/tracing 用于定位召回、重排和生成问题。</div>
       <div class="case"><strong>代码优先 Agent 平台：</strong>Agno 用 Agent / Team / Workflow 定义运行组件，用 AgentOS 暴露 REST、WebSocket、MCP、接口、审批、调度和 session/run 治理，适合工程团队把 Agent 能力服务化。</div>
       <div class="case"><strong>轻量多 Agent SDK：</strong>OpenAI Agents Python 用 Agent / Runner / handoff / guardrail / MCP / tracing 快速搭多 Agent 执行单元，适合嵌入 LangGraph 节点、Dify/Agno 产品入口或自研后端服务。</div>
+      <div class="case"><strong>生产级 Agent 服务后端：</strong>AgentScope 用 App、MessageBus、Permission、Workspace、RAG 和 Memory middleware 承载多会话 Agent 服务，适合做企业研发助手、可审计工具执行和沙箱任务后端。</div>
       <div class="case"><strong>Google 生态 Agent 应用：</strong>Google ADK Python 用 Runner 推进 LlmAgent / Workflow，用 Event / Session 支撑恢复和审计，用 RequestInput 做 HITL，用 Task API / AgentTool 包装子 Agent；适合 Gemini / Vertex / Google Cloud 体系内从调试走到 API Server、评测和部署。</div>
       <div class="case"><strong>强类型业务 Agent：</strong>PydanticAI 用 deps_type 注入客户、订单、权限上下文，用 ToolDefinition 约束工具入参，用 Pydantic output 固定最终结果；复杂审批流程交给 LangGraph，复杂检索交给 Haystack 或 LlamaIndex。</div>
       <div class="case"><strong>企业 Java Agent 服务：</strong>Spring Boot 服务中运行 Spring AI Alibaba ReactAgent / FlowAgent；Nacos 管 Prompt、模型、MCP 工具和 Agent 配置；财务、IT、HR 子 Agent 通过 A2A 注册到 Nacos；主 Agent 按任务路由，checkpoint saver 保证人工中断后能恢复。</div>

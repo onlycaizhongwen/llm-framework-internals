@@ -1,0 +1,14 @@
+flowchart TB
+    PluginYaml["插件 YAML<br>name、description、parameters、returns、code、config"] --> Registry["PluginRegistry<br>扫描 project/plugins/*.yaml"]
+    Registry --> Prompt["PluginSpec.format_prompt<br>变成 Python 函数签名给 CodeGenerator"]
+    Registry --> Load["CodeExecutor.load_plugin<br>读取插件 Python 源码并注入执行环境"]
+    Prompt --> Code["生成代码时可直接调用插件函数"]
+    Load --> Runtime["Plugin runtime<br>PluginContext 提供 artifact、session var、env、log"]
+    Runtime --> Artifact["ctx.add_artifact / create_artifact_path<br>图表、文件、HTML、DataFrame"]
+    Code --> Memory["Post Attachment<br>reply_content、verification、execution_result、artifact_paths"]
+    Artifact --> Memory
+    Memory --> Shared["SharedMemoryEntry<br>Planner 把 plan 共享给 CodeGenerator"]
+    Memory --> Event["SessionEventEmitter<br>post_status_update、message_update、attachment_update"]
+    Event --> UI["CLI / Web UI<br>流式显示生成、验证、执行状态"]
+    Shared --> Prompt
+    UI --> Why["为什么这么设计<br>插件是可调用能力<br>Memory 是角色协作协议<br>Event 是前端可观察接口"]

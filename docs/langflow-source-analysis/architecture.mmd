@@ -1,0 +1,13 @@
+flowchart TB
+    User["用户 / API / Playground / MCP 客户端"] --> Frontend["React Flow 前端<br>画布、节点、边、参数面板、Playground"]
+    Frontend --> API["FastAPI 后端 langflow.api<br>flows、run、build、mcp、files、kb、memories"]
+    API --> FlowDB["Flow / Folder / Job / File DB<br>保存 flow.data、项目、任务和文件"]
+    API --> Graph["lfx.graph.Graph<br>把 ReactFlow JSON 变成可执行图"]
+    Graph --> Vertex["Vertex<br>包住一个 Component 实例、输入输出、缓存、状态"]
+    Vertex --> Component["lfx Component<br>inputs / outputs / build_results / artifacts"]
+    Component --> Integrations["组件生态<br>LLM、Embeddings、VectorStore、Agent、Tool、Input/Output、Bundles"]
+    API --> Services["Services<br>auth、settings、chat cache、job、tracing、telemetry、memory base"]
+    API --> MCP["MCP 层<br>把 flow 暴露成 tool 或连接外部 MCP server"]
+    Graph --> Events["EventManager / streaming<br>构建事件、agent 事件、日志和 tracing"]
+    Events --> Frontend
+    Graph --> Why["为什么这么设计<br>前端负责可视化编辑；后端负责权限、运行、缓存和服务化；lfx 承载可复用组件内核"]

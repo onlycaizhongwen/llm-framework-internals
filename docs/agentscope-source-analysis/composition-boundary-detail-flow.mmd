@@ -1,0 +1,12 @@
+flowchart LR
+    Product["产品入口<br>Dify / Agno / 自研控制台"] --> Workflow["外层流程<br>LangGraph 状态图、checkpoint、审批流"]
+    Workflow --> Inner["内层 Agent 服务<br>AgentScope"]
+    Inner --> Runtime["AgentScope 负责<br>event stream、permission、workspace、memory、RAG 接入、session"]
+    Inner --> RAG["重 RAG 引擎<br>Haystack / LlamaIndex<br>ingestion、hybrid search、rerank、eval"]
+    Inner --> Provider["模型 provider<br>OpenAI、Anthropic、Gemini、本地模型"]
+    Workflow --> Store["流程状态<br>checkpoint、任务队列、业务数据库"]
+    Product --> Ops["运营和权限 UI<br>用户、租户、发布、监控"]
+    Runtime --> WhyAS["AgentScope 边界<br>适合做可控执行内核"]
+    Workflow --> WhyLG["LangGraph 边界<br>适合做确定性编排和恢复"]
+    RAG --> WhyRAG["RAG 边界<br>复杂数据处理不要塞进 Agent loop"]
+    Product --> WhyProduct["产品边界<br>面向业务人员的配置和运营不要只靠 SDK"]

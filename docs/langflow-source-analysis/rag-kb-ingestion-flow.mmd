@@ -1,0 +1,11 @@
+flowchart TB
+    Source["数据来源<br>上传文件、文件夹、Connector、Memory Base 消息"] --> API["Knowledge Base API<br>ingest / connector / memories flush"]
+    API --> Job["JobService.execute_with_status<br>异步任务、状态、取消、失败原因"]
+    Job --> Ingestion["KBIngestionHelper.perform_ingestion<br>统一 ingestion 主流程"]
+    Ingestion --> Chunk["chunk_text_for_ingestion<br>chunk_size、chunk_overlap"]
+    Chunk --> Embed["Embedding 配置<br>embedding_metadata 与模型配置"]
+    Embed --> Backend["Vector backend<br>Chroma 或其他后端"]
+    Backend --> Metadata["chunks metadata<br>file_name、source、job_id、user metadata"]
+    Metadata --> Query["chunks / runs API<br>分页查看、按 source/job 追踪"]
+    Backend --> Flow["Retriever / KB 组件<br>在 Flow 中做 RAG 召回"]
+    Flow --> Why["为什么这样设计<br>摄取、检索和可观测状态拆开<br>长任务可追踪，RAG 节点可复用"]
