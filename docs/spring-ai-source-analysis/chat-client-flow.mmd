@@ -1,0 +1,15 @@
+flowchart LR
+  A["业务代码<br/>chatClient.prompt()"]
+  B["RequestSpec<br/>user/system/messages/options"]
+  C["附加能力<br/>tools / toolContext / advisors"]
+  D{"执行方式"}
+  E["call()<br/>阻塞请求"]
+  F["stream()<br/>Flux 流式请求"]
+  G["DefaultAroundAdvisorChain<br/>按 Order 排序逐个执行"]
+  H["ChatModelCallAdvisor / StreamAdvisor<br/>链路末端真正调用模型"]
+  I["ChatModel.call / stream<br/>provider adapter"]
+  J["ChatResponse<br/>content / metadata / tool calls"]
+  A --> B --> C --> D
+  D --> E --> G
+  D --> F --> G
+  G --> H --> I --> J

@@ -1,0 +1,10 @@
+flowchart LR
+  Entity["chatClient.call().entity(MyDto.class)<br/>Java 类型作为目标"]
+  Converter["BeanOutputConverter<br/>从 Class/ParameterizedTypeReference 生成 JSON Schema"]
+  Advisor["StructuredOutputValidationAdvisor<br/>可选择校验 schema / provider structured output"]
+  Prompt["Prompt 增强<br/>格式指令或 provider 原生 response format"]
+  Model["模型返回 JSON 文本<br/>或原生结构化响应"]
+  Parse["converter.convert<br/>JSON -> Java DTO / record / List"]
+  Result["类型化结果<br/>业务代码拿到强类型对象"]
+
+  Entity --> Converter --> Advisor --> Prompt --> Model --> Parse --> Result

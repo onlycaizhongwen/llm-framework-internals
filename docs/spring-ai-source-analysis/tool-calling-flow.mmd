@@ -1,0 +1,11 @@
+flowchart TB
+  JavaTool["Java 工具来源<br/>@Tool 对象 / Function / Method"]
+  Callback["ToolCallbackProvider<br/>统一成 ToolCallback"]
+  Schema["ToolDefinition<br/>name + description + inputSchema"]
+  Options["ToolCallingChatOptions<br/>随 Prompt 传给模型"]
+  ModelCall["模型首轮响应<br/>AssistantMessage.toolCalls"]
+  Manager["DefaultToolCallingManager<br/>解析 tool call 并执行"]
+  Execute["ToolCallback.call<br/>带 ToolContext 执行业务逻辑"]
+  ToolResp["ToolResponseMessage<br/>把工具结果写回 conversation history"]
+  Next["二次模型调用<br/>或 returnDirect 直接返回"]
+  JavaTool --> Callback --> Schema --> Options --> ModelCall --> Manager --> Execute --> ToolResp --> Next

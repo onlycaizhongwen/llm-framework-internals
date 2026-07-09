@@ -1,0 +1,10 @@
+flowchart LR
+  Dep["引入 starter<br/>spring-ai-starter-*"]
+  Imports["AutoConfiguration.imports<br/>Spring Boot 发现配置类"]
+  Cond["条件装配<br/>@ConditionalOnClass / Bean / Property"]
+  Props["Properties<br/>api-key / base-url / model / options"]
+  Beans["Bean 输出<br/>ChatModel / EmbeddingModel / VectorStore / ChatClient.Builder"]
+  Obs["ObservationRegistry<br/>模型、工具、Advisor、ChatClient 观测"]
+  App["业务代码注入 Bean<br/>低样板代码接入 AI 能力"]
+  Dep --> Imports --> Cond --> Props --> Beans --> App
+  Beans --> Obs

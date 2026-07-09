@@ -1,0 +1,14 @@
+flowchart LR
+  Docs["业务文档<br/>PDF / HTML / DB / API"]
+  Reader["Document Reader / ETL<br/>读取、切分、清洗"]
+  Embed["EmbeddingModel<br/>文本向量化"]
+  Store["VectorStore.add<br/>写入向量库"]
+  Query["用户问题"]
+  Transform["QueryTransformer / Expander<br/>改写或扩展查询"]
+  Retrieve["DocumentRetriever / VectorStore.similaritySearch<br/>相似文档召回"]
+  Post["DocumentPostProcessor / Joiner<br/>过滤、合并、排序"]
+  Augment["QueryAugmenter<br/>把上下文塞回 prompt"]
+  Chat["ChatModel<br/>基于上下文回答"]
+  Docs --> Reader --> Embed --> Store
+  Query --> Transform --> Retrieve --> Post --> Augment --> Chat
+  Store --> Retrieve

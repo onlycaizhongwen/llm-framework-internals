@@ -1,0 +1,14 @@
+flowchart TB
+  Prompt["Spring AI Prompt<br/>messages + options + tool callbacks"]
+  Merge["合并默认配置和请求配置<br/>OpenAiChatOptions / ToolCallingChatOptions"]
+  Convert["消息转换<br/>User/System/Assistant/ToolMessage -> OpenAI message params"]
+  Tools["工具定义转换<br/>ToolDefinition -> OpenAI function/tool schema"]
+  Native["OpenAI SDK 请求<br/>ChatCompletionCreateParams"]
+  Response["OpenAI 响应<br/>choices / usage / finishReason / toolCalls"]
+  SpringResp["Spring AI ChatResponse<br/>Generation + metadata"]
+  Observe["ChatModel Observation<br/>记录 provider/model/token/错误"]
+
+  Prompt --> Merge --> Convert --> Native --> Response --> SpringResp
+  Prompt --> Tools --> Native
+  Native --> Observe
+  Response --> Observe

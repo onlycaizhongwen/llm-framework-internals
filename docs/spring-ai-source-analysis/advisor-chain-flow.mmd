@@ -1,0 +1,12 @@
+flowchart TB
+  Req["ChatClientRequest<br/>原始 prompt + context"]
+  Sort["OrderComparator 排序<br/>保证 memory / RAG / tool 等顺序可控"]
+  A1["Advisor 1 before<br/>例如读取会话记忆"]
+  A2["Advisor 2 before<br/>例如 RAG 检索并增强 prompt"]
+  A3["Advisor 3 before<br/>例如工具调用注册或策略处理"]
+  Model["ChatModel Advisor<br/>链路终点调用模型"]
+  After3["Advisor 3 after<br/>后处理响应"]
+  After2["Advisor 2 after<br/>写回上下文或文档"]
+  After1["Advisor 1 after<br/>保存会话记忆"]
+  Resp["ChatClientResponse"]
+  Req --> Sort --> A1 --> A2 --> A3 --> Model --> After3 --> After2 --> After1 --> Resp

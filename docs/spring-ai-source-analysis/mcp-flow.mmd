@@ -1,0 +1,13 @@
+flowchart TB
+  subgraph Expose["把 Spring AI 工具暴露给外部 MCP Client"]
+    ToolCallback["Spring AI ToolCallback<br/>Java 方法/函数"]
+    Spec["McpToolUtils.toSync/AsyncToolSpecification<br/>转成 MCP Tool Specification"]
+    Server["MCP Server<br/>WebMVC / WebFlux / STDIO / SSE / Streamable HTTP"]
+  end
+  subgraph Consume["把外部 MCP 工具接回 Spring AI"]
+    McpClient["MCP Client<br/>连接远端工具服务"]
+    Provider["Sync/AsyncMcpToolCallbackProvider<br/>拉取工具清单"]
+    SpringTool["Spring AI ToolCallback<br/>进入 ChatClient tools"]
+  end
+  ToolCallback --> Spec --> Server
+  McpClient --> Provider --> SpringTool

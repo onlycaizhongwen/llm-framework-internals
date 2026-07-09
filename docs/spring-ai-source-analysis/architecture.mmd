@@ -1,0 +1,21 @@
+flowchart TB
+  App["Spring Boot 应用<br/>Controller / Service / Scheduler"]
+  Starter["starter 依赖 + AutoConfiguration<br/>按 classpath 和 properties 自动装配 Bean"]
+  ChatClient["ChatClient 门面<br/>fluent API 组织 prompt / option / tool / advisor"]
+  Advisor["Advisor Chain<br/>把记忆、RAG、工具调用、观测作为可排序拦截链"]
+  Model["ChatModel / EmbeddingModel 抽象<br/>统一模型调用合同"]
+  Provider["Provider Adapter 模块<br/>OpenAI / Anthropic / Ollama / Vertex / Bedrock 等"]
+  Tool["Tool Calling<br/>@Tool / Function / Method / ToolCallback"]
+  MCP["MCP 集成<br/>Spring 工具暴露为 MCP，MCP 工具接回 Spring AI"]
+  RAG["RAG 模块<br/>Query transform / expand / retrieve / augment"]
+  Vector["VectorStore<br/>PGVector / Milvus / Redis / Qdrant / Elasticsearch 等"]
+  Memory["ChatMemory<br/>窗口记忆 + Repository 持久化"]
+  Obs["Observation<br/>Micrometer traces / metrics / logging"]
+  App --> Starter --> ChatClient --> Advisor --> Model --> Provider
+  Advisor --> RAG --> Vector
+  Advisor --> Memory
+  ChatClient --> Tool
+  Tool --> MCP
+  Advisor --> Obs
+  Model --> Obs
+  Tool --> Obs

@@ -1,0 +1,15 @@
+flowchart TB
+  Need["业务诉求"]
+  SpringAI["Spring AI<br/>Spring Boot 内 AI 抽象和自动装配"]
+  LangChain["LangChain<br/>Python/JS 组件生态与 Agent/RAG 快速组合"]
+  LangGraph["LangGraph<br/>显式状态图、checkpoint、复杂工作流"]
+  Dify["Dify / Langflow / n8n<br/>可视化平台和运营入口"]
+  Mem["mem0 / Zep / Graphiti<br/>长期记忆和知识图谱"]
+  Need -->|"Java 服务内嵌、企业 Spring 生态"| SpringAI
+  Need -->|"Python 原型、丰富集成"| LangChain
+  Need -->|"复杂多步骤状态机"| LangGraph
+  Need -->|"低代码编排、产品运营"| Dify
+  Need -->|"跨会话长期记忆"| Mem
+  SpringAI -->|"可组合"| LangGraph
+  SpringAI -->|"可通过 API / MCP 接入"| Dify
+  SpringAI -->|"可用外部记忆服务补强"| Mem

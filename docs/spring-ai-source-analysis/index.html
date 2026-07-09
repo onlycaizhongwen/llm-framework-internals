@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spring AI 源码分析</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default", flowchart: { htmlLabels: true, curve: "basis" } });
+  </script>
+  <style>
+    :root { color-scheme: light; --bg:#f6f8fb; --panel:#fff; --ink:#172033; --muted:#5b6472; --line:#d9e2ee; --brand:#0f766e; --brand2:#2563eb; --soft:#eff6ff; --warm:#fff7ed; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); line-height:1.75; }
+    header { background:linear-gradient(180deg,#fff 0%,#eef8f6 100%); border-bottom:1px solid var(--line); padding:42px 24px 30px; }
+    main,.hero { max-width:1180px; margin:0 auto; }
+    main { padding:26px 20px 64px; }
+    h1 { margin:0 0 12px; font-size:clamp(32px,5vw,52px); line-height:1.12; letter-spacing:0; }
+    h2 { margin:36px 0 14px; font-size:26px; border-left:5px solid var(--brand); padding-left:12px; }
+    h3 { margin:22px 0 8px; font-size:20px; }
+    p { margin:10px 0; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:24px; margin:18px 0; }
+    .lead { max-width:960px; color:var(--muted); font-size:18px; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:22px; }
+    .metric { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px; min-height:108px; }
+    .metric strong { display:block; color:var(--muted); font-size:14px; }
+    .metric span { display:block; margin-top:8px; font-weight:800; font-size:17px; }
+    .toc { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:14px; }
+    .toc a { display:block; background:#f8fafc; border:1px solid var(--line); border-radius:6px; padding:8px 10px; text-decoration:none; color:var(--ink); }
+    .note { background:var(--soft); border-left:5px solid var(--brand2); border-radius:6px; padding:14px 16px; margin:16px 0; }
+    .case { background:var(--warm); border-left:5px solid #f59e0b; border-radius:6px; padding:14px 16px; margin:16px 0; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; font-size:14px; }
+    th,td { border:1px solid var(--line); padding:10px 12px; vertical-align:top; text-align:left; }
+    th { background:#ecfdf5; color:#0f766e; }
+    code { background:#f3f6fb; border:1px solid #e4eaf3; border-radius:5px; padding:1px 5px; font-family:Consolas,"SFMono-Regular",monospace; font-size:.92em; }
+    pre { background:#172033; color:#edf4ff; border-radius:8px; padding:14px; overflow-x:auto; }
+    pre code { background:transparent; border:0; color:inherit; padding:0; }
+    .diagram-wrap { overflow-x:auto; }
+    .mermaid { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px; margin:16px 0; overflow-x:auto; min-width:760px; }
+    .grid2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .card { border:1px solid var(--line); border-radius:8px; padding:14px; background:#fbfdff; }
+    .card h3 { margin-top:0; }
+    ul,ol { padding-left:22px; }
+    li { margin:6px 0; }
+    @media (max-width:960px){ .summary,.toc,.grid2{grid-template-columns:1fr 1fr;} }
+    @media (max-width:640px){ .summary,.toc,.grid2{grid-template-columns:1fr;} section{padding:18px;} .mermaid{min-width:640px;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <h1>Spring AI 源码分析</h1>
+      <p class="lead">面向 Java / Spring Boot 团队的 AI 应用抽象层：把模型调用、工具调用、RAG、记忆、MCP、观测和自动装配放回 Spring 工程体系里。</p>
+      <div class="summary">
+        <div class="metric"><strong>源码目录</strong><span>sources/spring-ai-main</span></div>
+        <div class="metric"><strong>版本</strong><span>2.0.1-SNAPSHOT</span></div>
+        <div class="metric"><strong>技术栈</strong><span>Java / Spring Boot / Reactor / Micrometer</span></div>
+        <div class="metric"><strong>主线</strong><span>ChatClient + Advisor + Model Adapter</span></div>
+      </div>
+      <div class="toc">
+        <a href="#position">一句话定位</a><a href="#architecture">总体架构</a><a href="#flow">主流程</a><a href="#advisor">Advisor 链</a>
+        <a href="#provider">Provider Adapter</a><a href="#tool">Tool Calling</a><a href="#rag">RAG / Memory</a><a href="#mcp">MCP</a>
+        <a href="#provider-deep">Provider 精读</a><a href="#structured">结构化输出</a><a href="#streaming">Streaming</a><a href="#governance">生产治理</a>
+        <a href="#boot">自动装配</a><a href="#compare">横向对比</a><a href="#ideas">设计思想</a><a href="#talk">分享口径</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="position">
+      <h2>1. 一句话定位</h2>
+      <p>Spring AI 不是单个 Agent 框架，而是 Spring 生态里的 AI 应用抽象层。它把 <code>ChatModel</code>、<code>EmbeddingModel</code>、<code>VectorStore</code>、<code>ChatClient</code>、<code>Advisor</code>、Tool Calling、RAG、MCP、Observation 和 Boot Starter 拆成可替换模块，让 Java / Spring Boot 项目用熟悉的 Bean、Properties、AutoConfiguration 方式接入大模型能力。</p>
+      <div class="note">一句分享话术：Spring AI 的价值不是“封装一个模型 API”，而是把 AI 能力变成 Spring Boot 可装配、可观测、可替换、可治理的工程组件。</div>
+    </section>
+
+    <section id="architecture">
+      <h2>2. 总体架构</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+  App["Spring Boot 应用<br/>Controller / Service / Scheduler"]
+  Starter["starter 依赖 + AutoConfiguration<br/>按 classpath 和 properties 自动装配 Bean"]
+  ChatClient["ChatClient 门面<br/>fluent API 组织 prompt / option / tool / advisor"]
+  Advisor["Advisor Chain<br/>把记忆、RAG、工具调用、观测作为可排序拦截链"]
+  Model["ChatModel / EmbeddingModel 抽象<br/>统一模型调用合同"]
+  Provider["Provider Adapter 模块<br/>OpenAI / Anthropic / Ollama / Vertex / Bedrock 等"]
+  Tool["Tool Calling<br/>@Tool / Function / Method / ToolCallback"]
+  MCP["MCP 集成<br/>Spring 工具暴露为 MCP，MCP 工具接回 Spring AI"]
+  RAG["RAG 模块<br/>Query transform / expand / retrieve / augment"]
+  Vector["VectorStore<br/>PGVector / Milvus / Redis / Qdrant / Elasticsearch 等"]
+  Memory["ChatMemory<br/>窗口记忆 + Repository 持久化"]
+  Obs["Observation<br/>Micrometer traces / metrics / logging"]
+  App --> Starter --> ChatClient --> Advisor --> Model --> Provider
+  Advisor --> RAG --> Vector
+  Advisor --> Memory
+  ChatClient --> Tool
+  Tool --> MCP
+  Advisor --> Obs
+  Model --> Obs
+  Tool --> Obs
+      </div></div>
+      <p>为什么这样设计：模型厂商变化快，业务能力又常常需要 RAG、记忆、工具和观测一起上。Spring AI 用 <code>ChatClient</code> 做门面，用 <code>Advisor</code> 做请求前后处理链，用 <code>ChatModel</code> 做 provider adapter，用 starter 和 auto configuration 降低接入成本。</p>
+      <table>
+        <tr><th>层次</th><th>主要模块</th><th>职责</th></tr>
+        <tr><td>应用门面</td><td><code>spring-ai-client-chat</code></td><td><code>ChatClient</code> fluent API、Advisor 链、请求/响应规格。</td></tr>
+        <tr><td>核心模型抽象</td><td><code>spring-ai-model</code></td><td><code>ChatModel</code>、Tool Calling、ChatMemory、Observation。</td></tr>
+        <tr><td>RAG</td><td><code>spring-ai-rag</code>、<code>spring-ai-vector-store</code></td><td>检索增强流水线、向量库统一接口。</td></tr>
+        <tr><td>Provider</td><td><code>models/*</code></td><td>OpenAI、Anthropic、Ollama、Vertex、Bedrock 等模型适配。</td></tr>
+        <tr><td>Boot 集成</td><td><code>auto-configurations/*</code>、<code>starters/*</code></td><td>按依赖和配置自动创建 Bean。</td></tr>
+        <tr><td>MCP</td><td><code>mcp/common</code>、<code>mcp/transport/*</code></td><td>MCP server/client 工具互通。</td></tr>
+      </table>
+    </section>
+
+    <section id="flow">
+      <h2>3. 主流程：一次 ChatClient 请求</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart LR
+  A["业务代码<br/>chatClient.prompt()"]
+  B["RequestSpec<br/>user/system/messages/options"]
+  C["附加能力<br/>tools / toolContext / advisors"]
+  D{"执行方式"}
+  E["call()<br/>阻塞请求"]
+  F["stream()<br/>Flux 流式请求"]
+  G["DefaultAroundAdvisorChain<br/>按 Order 排序逐个执行"]
+  H["ChatModelCallAdvisor / StreamAdvisor<br/>链路末端真正调用模型"]
+  I["ChatModel.call / stream<br/>provider adapter"]
+  J["ChatResponse<br/>content / metadata / tool calls"]
+  A --> B --> C --> D
+  D --> E --> G
+  D --> F --> G
+  G --> H --> I --> J
+      </div></div>
+      <p>源码证据：<code>ChatClient.java</code> 声明 <code>prompt()</code>、<code>call()</code>、<code>stream()</code>、<code>defaultAdvisors()</code>、<code>defaultTools()</code>；<code>ChatModel.java</code> 中 <code>ChatModel extends Model&lt;Prompt, ChatResponse&gt;, StreamingChatModel</code>，同步合同是 <code>ChatResponse call(Prompt prompt)</code>。</p>
+      <pre><code class="language-java">String answer = chatClient.prompt()
+    .system("你是一个企业知识库助手")
+    .user("请解释报销政策里的发票要求")
+    .advisors(retrievalAugmentationAdvisor)
+    .call()
+    .content();</code></pre>
+    </section>
+
+    <section id="advisor">
+      <h2>4. Advisor 链：Spring AI 的中间件</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+  Req["ChatClientRequest<br/>原始 prompt + context"]
+  Sort["OrderComparator 排序<br/>保证 memory / RAG / tool 等顺序可控"]
+  A1["Advisor 1 before<br/>例如读取会话记忆"]
+  A2["Advisor 2 before<br/>例如 RAG 检索并增强 prompt"]
+  A3["Advisor 3 before<br/>例如工具调用注册或策略处理"]
+  Model["ChatModel Advisor<br/>链路终点调用模型"]
+  After3["Advisor 3 after<br/>后处理响应"]
+  After2["Advisor 2 after<br/>写回上下文或文档"]
+  After1["Advisor 1 after<br/>保存会话记忆"]
+  Resp["ChatClientResponse"]
+  Req --> Sort --> A1 --> A2 --> A3 --> Model --> After3 --> After2 --> After1 --> Resp
+      </div></div>
+      <p><code>DefaultAroundAdvisorChain</code> 内部维护 <code>Deque&lt;CallAdvisor&gt;</code> 和 <code>Deque&lt;StreamAdvisor&gt;</code>。构建链时筛选 advisor 类型，并用 <code>OrderComparator.sort(...)</code> 排序；执行时 <code>nextCall()</code> / <code>nextStream()</code> 从队列里取出当前 advisor。</p>
+      <div class="note">这就是 Chain of Responsibility / around middleware：RAG、记忆、工具调用、观测可以独立扩展，不需要侵入每个 provider adapter。</div>
+    </section>
+
+    <section id="provider">
+      <h2>5. Provider Adapter</h2>
+      <p><code>ChatModel</code> 是所有聊天模型 provider 的共同合同。Provider 模块负责把 Spring AI 的 <code>Prompt</code>、<code>ChatOptions</code>、Tool Definition、Observation 映射成 OpenAI、Anthropic、Ollama、Vertex、Bedrock 等厂商各自的 HTTP/API 格式。</p>
+      <table>
+        <tr><th>设计收益</th><th>说明</th></tr>
+        <tr><td>业务代码稳定</td><td>上层依赖 <code>ChatClient</code> / <code>ChatModel</code>，而不是直接依赖某个厂商 SDK。</td></tr>
+        <tr><td>能力复用</td><td>Tool Calling、RAG、Memory、Observation 可以围绕统一模型接口工作。</td></tr>
+        <tr><td>自动装配</td><td>Boot starter 根据 classpath 和 properties 创建具体 provider Bean。</td></tr>
+      </table>
+      <div class="case">局限：不同 provider 对工具调用、结构化输出、流式响应和 metadata 的支持差异仍然存在。Spring AI 统一入口，但生产上仍要按 provider 做兼容性测试。</div>
+    </section>
+
+    <section id="tool">
+      <h2>6. Tool Calling</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+  JavaTool["Java 工具来源<br/>@Tool 对象 / Function / Method"]
+  Callback["ToolCallbackProvider<br/>统一成 ToolCallback"]
+  Schema["ToolDefinition<br/>name + description + inputSchema"]
+  Options["ToolCallingChatOptions<br/>随 Prompt 传给模型"]
+  ModelCall["模型首轮响应<br/>AssistantMessage.toolCalls"]
+  Manager["DefaultToolCallingManager<br/>解析 tool call 并执行"]
+  Execute["ToolCallback.call<br/>带 ToolContext 执行业务逻辑"]
+  ToolResp["ToolResponseMessage<br/>把工具结果写回 conversation history"]
+  Next["二次模型调用<br/>或 returnDirect 直接返回"]
+  JavaTool --> Callback --> Schema --> Options --> ModelCall --> Manager --> Execute --> ToolResp --> Next
+      </div></div>
+      <p><code>DefaultToolCallingManager.executeToolCalls(...)</code> 会从 <code>ChatResponse</code> 找到 <code>AssistantMessage.toolCalls</code>，执行 <code>ToolCallback.call(...)</code>，再构造 <code>ToolResponseMessage</code> 并合成新的 conversation history。工具执行过程也包在 Micrometer Observation 里。</p>
+      <pre><code class="language-java">class OrderTools {
+  @Tool(description = "查询订单物流状态")
+  String trackOrder(String orderId) {
+    return logisticsClient.query(orderId);
+  }
+}
+
+String answer = chatClient.prompt()
+    .user("帮我查一下订单 A10086 到哪里了")
+    .tools(new OrderTools())
+    .call()
+    .content();</code></pre>
+    </section>
+
+    <section id="provider-deep">
+      <h2>7. Provider Adapter 精读：以 OpenAI 为例</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+  Prompt["Spring AI Prompt<br/>messages + options + tool callbacks"]
+  Merge["合并默认配置和请求配置<br/>OpenAiChatOptions / ToolCallingChatOptions"]
+  Convert["消息转换<br/>User/System/Assistant/ToolMessage -> OpenAI message params"]
+  Tools["工具定义转换<br/>ToolDefinition -> OpenAI function/tool schema"]
+  Native["OpenAI SDK 请求<br/>ChatCompletionCreateParams"]
+  Response["OpenAI 响应<br/>choices / usage / finishReason / toolCalls"]
+  SpringResp["Spring AI ChatResponse<br/>Generation + metadata"]
+  Observe["ChatModel Observation<br/>记录 provider/model/token/错误"]
+  Prompt --> Merge --> Convert --> Native --> Response --> SpringResp
+  Prompt --> Tools --> Native
+  Native --> Observe
+  Response --> Observe
+      </div></div>
+      <p><code>OpenAiChatModel</code> 是理解 provider adapter 的好入口。它 <code>implements ChatModel</code>，但内部不把 OpenAI 类型暴露给业务层，而是把 Spring AI 的 <code>Prompt</code>、<code>Message</code>、<code>ChatOptions</code>、<code>ToolDefinition</code> 转成 OpenAI SDK 请求，再把 choices、usage、finish reason、tool calls 转回 <code>ChatResponse</code> / <code>Generation</code> / metadata。</p>
+      <table>
+        <tr><th>源码点</th><th>说明</th></tr>
+        <tr><td><code>OpenAiChatModel implements ChatModel</code></td><td>说明 OpenAI 只是统一模型接口的一个适配实现。</td></tr>
+        <tr><td><code>call(Prompt) -> internalCall(...)</code></td><td>同步模型调用入口。</td></tr>
+        <tr><td><code>stream(Prompt) -> internalStream(...)</code></td><td>流式模型调用入口。</td></tr>
+        <tr><td>构造器注入 <code>OpenAIClient</code>、<code>OpenAiChatOptions</code>、<code>ObservationRegistry</code>、<code>ToolCallingManager</code></td><td>provider 适配层同时接模型客户端、默认选项、观测和统一工具调用管理。</td></tr>
+      </table>
+      <div class="note">为什么这样拆：业务层只依赖 <code>ChatModel</code>，provider adapter 负责协议翻译。这样 OpenAI、Anthropic、Ollama、Vertex AI 可以共享 ChatClient、Advisor、RAG、Tool Calling、Observation 等上层能力。</div>
+    </section>
+
+    <section id="structured">
+      <h2>8. Structured Output：Java 强类型输出链路</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart LR
+  Entity["chatClient.call().entity(MyDto.class)<br/>Java 类型作为目标"]
+  Converter["BeanOutputConverter<br/>从 Class/ParameterizedTypeReference 生成 JSON Schema"]
+  Advisor["StructuredOutputValidationAdvisor<br/>可选择校验 schema / provider structured output"]
+  Prompt["Prompt 增强<br/>格式指令或 provider 原生 response format"]
+  Model["模型返回 JSON 文本<br/>或原生结构化响应"]
+  Parse["converter.convert<br/>JSON -> Java DTO / record / List"]
+  Result["类型化结果<br/>业务代码拿到强类型对象"]
+  Entity --> Converter --> Advisor --> Prompt --> Model --> Parse --> Result
+      </div></div>
+      <p>这块很适合 Java / Spring 场景，因为业务系统通常希望拿到 DTO、record、List，而不是裸字符串。<code>DefaultChatClient</code> 的 <code>entity(Class&lt;T&gt;)</code>、<code>entity(ParameterizedTypeReference&lt;T&gt;)</code>、<code>responseEntity(...)</code> 会创建 <code>BeanOutputConverter</code>；<code>BeanOutputConverter</code> 实现 <code>StructuredOutputConverter&lt;T&gt;</code>，负责从 Java 类型生成 JSON schema，并把模型输出转换成 Java 对象。</p>
+      <pre><code class="language-java">record TicketSummary(String category, int priority, String reason) {}
+
+TicketSummary summary = chatClient.prompt()
+    .user("用户说：我要退款，已经等了三天没人处理")
+    .call()
+    .entity(TicketSummary.class);</code></pre>
+      <div class="case">源码测试覆盖了 <code>entity(MyBean.class, spec -> spec.useProviderStructuredOutput())</code> 和 <code>validateSchema()</code>，说明 Spring AI 同时支持“框架侧解析”和“provider 原生结构化输出”两种路线。生产上仍建议配合 schema validation、重试、异常兜底和样本评测。</div>
+    </section>
+
+    <section id="streaming">
+      <h2>9. Streaming 细节</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+  Request["ChatClient.stream()<br/>构造 stream=true 的 request"]
+  Chain["StreamAdvisorChain<br/>Memory/RAG/Tool/SafeGuard 均可参与"]
+  End["ChatModelStreamAdvisor<br/>链路末端调用 ChatModel.stream"]
+  Provider["OpenAiChatModel.internalStream<br/>OpenAI stream chunks"]
+  Merge["ChunkMerger<br/>合并 delta / tool call arguments / metadata"]
+  Flux["Flux<ChatResponse><br/>持续输出增量响应"]
+  Aggregate["ChatClientMessageAggregator<br/>需要 after/日志/记忆时聚合完整响应"]
+  Obs["Observation<br/>doOnError / doFinally 停止观测"]
+  Request --> Chain --> End --> Provider --> Merge --> Flux
+  Flux --> Aggregate
+  Flux --> Obs
+      </div></div>
+      <p>Spring AI 的流式不是绕开主链路，而是有独立的 <code>StreamAdvisor</code> 体系。<code>DefaultChatClient.stream()</code> 构建 stream request 后调用 <code>advisorChain.nextStream(...)</code>；<code>ChatModelStreamAdvisor</code> 是链路终点，调用 <code>chatModel.stream(prompt)</code>；OpenAI 适配器再把 provider chunk merge 成 Spring AI <code>ChatResponse</code>。</p>
+      <div class="note">设计取舍：流式链路要同时满足“前端尽快看到 token”和“后处理需要完整响应”。所以 Spring AI 一边返回 <code>Flux&lt;ChatResponse&gt;</code>，一边在需要时用 <code>ChatClientMessageAggregator</code> 聚合完整消息给 Advisor 使用。</div>
+    </section>
+
+    <section id="governance">
+      <h2>10. 生产治理专题</h2>
+      <p>Spring AI 的生产治理不只靠一层代码，而是分散在 AutoConfiguration、Observation、Advisor 和 Tool 边界里。</p>
+      <table>
+        <tr><th>治理点</th><th>源码/设计依据</th><th>分享时怎么讲</th></tr>
+        <tr><td>敏感日志</td><td><code>ChatClientAutoConfiguration</code> 和 chat observation auto configuration 在开启 prompt/completion 日志时打印 warning。</td><td>内容日志要默认关闭，排障时限时、脱敏、受控开启。</td></tr>
+        <tr><td>工具权限</td><td>Tool Calling 通过 <code>ToolCallback</code> / <code>ToolContext</code> 执行业务方法。</td><td>工具不是“模型权限”，而是服务端明确暴露的 Java 能力；要做租户、鉴权、参数校验。</td></tr>
+        <tr><td>观测追踪</td><td>ChatClient、ChatModel、Advisor、ToolCalling 都接入 <code>ObservationRegistry</code>。</td><td>生产排障应看一次请求经过哪些 advisor、调用哪个模型、用了多少 token、哪个工具失败。</td></tr>
+        <tr><td>Provider 切换</td><td><code>ChatModel</code> 抽象 + starter auto configuration。</td><td>可替换 provider，但不能忽略 tool calling、streaming、structured output 的能力差异。</td></tr>
+        <tr><td>RAG 质量</td><td>RAG pipeline 拆成 retriever、post processor、augmenter 等策略。</td><td>框架只提供管线，效果要靠切分、召回、过滤、评测闭环。</td></tr>
+        <tr><td>数据隔离</td><td><code>ChatMemoryRepository</code>、<code>VectorStore</code>、<code>ToolContext</code> 都进入业务数据边界。</td><td>多租户场景要把 tenantId 放进 filter / memory conversationId / toolContext。</td></tr>
+      </table>
+      <ol>
+        <li><code>ChatClient</code> 只作为应用层入口，业务服务仍负责鉴权、限流、审计。</li>
+        <li><code>Advisor</code> 做 RAG、Memory、日志和安全策略，但不要把复杂状态机硬塞进 Advisor。</li>
+        <li><code>ToolCallback</code> 只暴露白名单能力，并对参数做服务端校验。</li>
+        <li><code>ObservationRegistry</code> 打通 trace / metrics，prompt 内容日志默认关闭。</li>
+        <li>RAG 和 structured output 必须有评测样本，否则“能跑”不代表“可靠”。</li>
+      </ol>
+    </section>
+
+    <section id="rag">
+      <h2>11. RAG / VectorStore / Memory</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart LR
+  Docs["业务文档<br/>PDF / HTML / DB / API"]
+  Reader["Document Reader / ETL<br/>读取、切分、清洗"]
+  Embed["EmbeddingModel<br/>文本向量化"]
+  Store["VectorStore.add<br/>写入向量库"]
+  Query["用户问题"]
+  Transform["QueryTransformer / Expander<br/>改写或扩展查询"]
+  Retrieve["DocumentRetriever / VectorStore.similaritySearch<br/>相似文档召回"]
+  Post["DocumentPostProcessor / Joiner<br/>过滤、合并、排序"]
+  Augment["QueryAugmenter<br/>把上下文塞回 prompt"]
+  Chat["ChatModel<br/>基于上下文回答"]
+  Docs --> Reader --> Embed --> Store
+  Query --> Transform --> Retrieve --> Post --> Augment --> Chat
+  Store --> Retrieve
+      </div></div>
+      <p>源码证据：<code>RetrievalAugmentationAdvisor.before(...)</code> 按 0-7 步执行：创建 Query、transform、expand、retrieve、join、post-process、augment、更新 <code>ChatClientRequest</code>。<code>VectorStore</code> 提供 <code>add</code>、<code>delete</code> 并继承检索接口。<code>MessageWindowChatMemory</code> 使用 <code>ChatMemoryRepository</code> 保存消息，默认窗口大小 20，并按完整 turn 裁剪。</p>
+      <div class="case">真实例子：企业制度问答可以离线把制度 PDF 写入 VectorStore；在线用 RAG 召回制度段落；追问时用 ChatMemory 保留“刚才问的是差旅报销”这个上下文。</div>
+    </section>
+
+    <section id="mcp">
+      <h2>12. MCP 双向工具边界</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+  subgraph Expose["把 Spring AI 工具暴露给外部 MCP Client"]
+    ToolCallback["Spring AI ToolCallback<br/>Java 方法/函数"]
+    Spec["McpToolUtils.toSync/AsyncToolSpecification<br/>转成 MCP Tool Specification"]
+    Server["MCP Server<br/>WebMVC / WebFlux / STDIO / SSE / Streamable HTTP"]
+  end
+  subgraph Consume["把外部 MCP 工具接回 Spring AI"]
+    McpClient["MCP Client<br/>连接远端工具服务"]
+    Provider["Sync/AsyncMcpToolCallbackProvider<br/>拉取工具清单"]
+    SpringTool["Spring AI ToolCallback<br/>进入 ChatClient tools"]
+  end
+  ToolCallback --> Spec --> Server
+  McpClient --> Provider --> SpringTool
+      </div></div>
+      <p><code>McpToolUtils</code> 是边界转换点：<code>toSyncToolSpecification</code> / <code>toAsyncToolSpecification</code> 把 Spring AI 工具暴露为 MCP；<code>getToolCallbacksFromSyncClients</code> / <code>getToolCallbacksFromAsyncClients</code> 把远端 MCP 工具接回 Spring AI。</p>
+    </section>
+
+    <section id="boot">
+      <h2>13. AutoConfiguration / Starters / Observation</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart LR
+  Dep["引入 starter<br/>spring-ai-starter-*"]
+  Imports["AutoConfiguration.imports<br/>Spring Boot 发现配置类"]
+  Cond["条件装配<br/>@ConditionalOnClass / Bean / Property"]
+  Props["Properties<br/>api-key / base-url / model / options"]
+  Beans["Bean 输出<br/>ChatModel / EmbeddingModel / VectorStore / ChatClient.Builder"]
+  Obs["ObservationRegistry<br/>模型、工具、Advisor、ChatClient 观测"]
+  App["业务代码注入 Bean<br/>低样板代码接入 AI 能力"]
+  Dep --> Imports --> Cond --> Props --> Beans --> App
+  Beans --> Obs
+      </div></div>
+      <p><code>ChatClientAutoConfiguration</code> 使用 <code>@AutoConfiguration(after = ToolCallingAutoConfiguration.class)</code>、<code>@ConditionalOnClass</code>、<code>@ConditionalOnProperty</code> 装配 <code>ChatClient.Builder</code>。Builder 是 prototype scope，每个注入点拿到独立 builder，避免共享可变配置互相影响。</p>
+      <div class="note">源码里对 prompt/completion 日志观测有明确 warning：打开内容日志可能暴露敏感信息。这说明 Spring AI 把生产可观测和数据风险一起纳入设计。</div>
+    </section>
+
+    <section id="compare">
+      <h2>14. 横向对比</h2>
+      <div class="diagram-wrap"><div class="mermaid">
+flowchart TB
+  Need["业务诉求"]
+  SpringAI["Spring AI<br/>Spring Boot 内 AI 抽象和自动装配"]
+  LangChain["LangChain<br/>Python/JS 组件生态与 Agent/RAG 快速组合"]
+  LangGraph["LangGraph<br/>显式状态图、checkpoint、复杂工作流"]
+  Dify["Dify / Langflow / n8n<br/>可视化平台和运营入口"]
+  Mem["mem0 / Zep / Graphiti<br/>长期记忆和知识图谱"]
+  Need -->|"Java 服务内嵌、企业 Spring 生态"| SpringAI
+  Need -->|"Python 原型、丰富集成"| LangChain
+  Need -->|"复杂多步骤状态机"| LangGraph
+  Need -->|"低代码编排、产品运营"| Dify
+  Need -->|"跨会话长期记忆"| Mem
+  SpringAI -->|"可组合"| LangGraph
+  SpringAI -->|"可通过 API / MCP 接入"| Dify
+  SpringAI -->|"可用外部记忆服务补强"| Mem
+      </div></div>
+      <table>
+        <tr><th>框架</th><th>更适合</th><th>不太适合</th></tr>
+        <tr><td>Spring AI</td><td>Java / Spring Boot 服务内嵌 AI 能力，重视 Bean、配置、观测和企业治理。</td><td>复杂长任务状态图和 checkpoint 编排。</td></tr>
+        <tr><td>LangGraph</td><td>显式状态机、多步骤、可恢复 Agent workflow。</td><td>单纯 Java 服务内模型调用。</td></tr>
+        <tr><td>LangChain</td><td>快速组合 RAG / Agent / integrations。</td><td>强 Spring Boot 企业工程约束。</td></tr>
+        <tr><td>Dify / Langflow / n8n</td><td>可视化搭建、运营配置、非研发参与。</td><td>深度嵌入 Java 代码和内部事务边界。</td></tr>
+        <tr><td>mem0 / Zep / Graphiti</td><td>长期记忆、跨会话用户画像、知识图谱检索。</td><td>替代模型调用框架。</td></tr>
+      </table>
+    </section>
+
+    <section id="ideas">
+      <h2>15. 核心设计思想</h2>
+      <div class="grid2">
+        <div class="card"><h3>门面模式</h3><p><code>ChatClient</code> 把 prompt、options、tools、advisors、call/stream 收到一个 fluent API 里。</p></div>
+        <div class="card"><h3>Adapter 模式</h3><p><code>ChatModel</code>、<code>EmbeddingModel</code>、<code>VectorStore</code> 接住不同 provider。</p></div>
+        <div class="card"><h3>中间件链</h3><p><code>Advisor</code> 链把记忆、RAG、工具、观测变成请求前后处理能力。</p></div>
+        <div class="card"><h3>Builder 模式</h3><p><code>ChatClient.Builder</code>、<code>RetrievalAugmentationAdvisor.Builder</code> 降低组合复杂度。</p></div>
+        <div class="card"><h3>Strategy / Pipeline</h3><p>RAG 的 transformer、expander、retriever、post processor、augmenter 都可替换。</p></div>
+        <div class="card"><h3>Convention over Configuration</h3><p>starter + auto configuration + properties 是 Spring AI 接入体验的核心。</p></div>
+      </div>
+    </section>
+
+    <section id="limits">
+      <h2>16. 局限性</h2>
+      <ul>
+        <li>它不是 LangGraph 那样的显式状态图 runtime，复杂分支、人工中断、checkpoint 恢复通常要组合外部 workflow。</li>
+        <li>Provider 能力差异仍然存在，尤其是 tool calling、structured output、stream metadata。</li>
+        <li>RAG 质量不只由框架决定，还依赖文档切分、embedding、向量库、过滤条件和评测闭环。</li>
+        <li>生产上要特别处理 prompt/completion 日志、工具权限、API key、租户隔离和数据合规。</li>
+      </ul>
+    </section>
+
+    <section id="talk">
+      <h2>17. 分享口径</h2>
+      <p>开场：Spring AI 的核心价值不是“又封装了一个模型 API”，而是把 AI 应用开发拉回 Spring Boot 的工程体系：Bean、Properties、AutoConfiguration、Observation、Starter、Adapter、Advisor 链。</p>
+      <ol>
+        <li>调用主线：<code>ChatClient -> AdvisorChain -> ChatModel -> Provider</code>。</li>
+        <li>能力主线：Tool Calling / RAG / Memory / MCP 都作为可插拔能力挂到主流程上。</li>
+        <li>工程主线：Starter / AutoConfiguration / Observation 把 AI 能力变成可治理的 Spring Boot 组件。</li>
+      </ol>
+      <div class="case">真实案例：企业知识库助手可以用 Spring AI 内嵌在现有 Java 服务中。RAG 负责制度检索，ChatMemory 负责追问上下文，Tool Calling 查询订单或报销状态，Observation 追踪每次模型和工具调用。如果后续需要复杂审批流或长任务恢复，可以把外层流程交给 LangGraph、n8n 或企业工作流平台，Spring AI 继续做 Java 服务内的 typed AI 能力层。</div>
+    </section>
+  </main>
+</body>
+</html>
